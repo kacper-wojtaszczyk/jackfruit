@@ -1,0 +1,19 @@
+version: "3"
+services:
+  minio:
+    image: minio/minio
+    container_name: minio
+    environment:
+      - MINIO_ROOT_USER=root
+      - MINIO_ROOT_PASSWORD=root
+    volumes:
+      - minio_data:/data
+    networks:
+      jackfruit:
+    ports:
+      - "9099:9000"
+      - "9098:9001"
+networks:
+    jackfruit:
+volumes:
+  minio_data:
