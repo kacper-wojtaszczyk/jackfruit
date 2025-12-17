@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/adapters/cds"
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/config"
 )
 
@@ -45,6 +49,31 @@ func main() {
 
 func run(ctx context.Context, cfg *config.Config) error {
 	slog.DebugContext(ctx, "running application", "config", cfg)
+
+	client := cds.NewClient(cfg.CDSBaseURL, cfg.CDSAPIKey)
+
+	slog.DebugContext(ctx, "client created", "client", client)
+
+	data, err := client.Fetch(ctx, &cds.CAMSForecastRequest{Date: time.Now()})
+
+	if err != nil {
+		return fmt.Errorf("fetch from CDS: %w", err)
+	}
+	defer data.Close()
+
+	// Create output file
+	file, err := os.Create("zip.zip")
+	if err != nil {
+		return fmt.Errorf("create file: %w", err)
+	}
+	defer file.Close()
+
+	// Copy stream directly to file
+	if _, err := io.Copy(file, data); err != nil {
+		return fmt.Errorf("write to file: %w", err)
+	}
+
+	slog.DebugContext(ctx, "fetched data and saved to file")
 
 	return nil
 }
