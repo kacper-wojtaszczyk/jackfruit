@@ -1,19 +1,19 @@
-.PHONY: build run test lint clean
+.PHONY: build run test clean
 
 # Default target
-all: build
+all: build test
 
 # Build the ingestion binary
 build:
 	go build -o bin/ingestion ./cmd/ingestion
 
-# Run with hot reload (optional, requires 'air' or similar)
+# Run
 run:
 	go run ./cmd/ingestion ${ARGS}
 
 # Run tests
 test:
-	go test ./...
+	go test -cover ./...
 
 # Clean build artifacts
 clean:

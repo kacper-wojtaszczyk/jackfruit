@@ -1,45 +1,60 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"testing"
 )
 
-func TestLoad_RequiredVarsMissing(t *testing.T) {
-	os.Unsetenv("CDS_API_KEY")
+var configVars = []string{"CDS_API_KEY", "CDS_BASE_URL", "MINIO_URL"}
 
-	_, err := Load()
-	if err == nil {
-		t.Fatal("expected error")
+func TestLoad_RequiredVarsMissing(t *testing.T) {
+
+	for _, configVar := range configVars {
+		os.Setenv(configVar, "test-value")
 	}
-	if y, ok := err.(*ErrMissingRequiredEnvVar); !ok {
-		t.Fatalf("expected ErrMissingRequiredEnvVar, got %s", y)
+	for _, configVar := range configVars {
+		t.Run(configVar, func(t *testing.T) {
+			os.Unsetenv(configVar)
+			defer os.Setenv(configVar, "test-value")
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if y, ok := err.(*ErrMissingRequiredEnvVar); !ok {
+				t.Fatalf("expected ErrMissingRequiredEnvVar, got %s", y)
+			}
+			var varName string
+			c, _ := fmt.Sscanf(
+				err.Error(),
+				"required environment variable %q is not set",
+				&varName,
+			)
+			if c != 1 || varName != configVar {
+				t.Fatalf("expected ErrMissingRequiredEnvVar to be set to %q, got %q", configVar, varName)
+			}
+		})
 	}
 }
 
 func TestLoad_ValidConfig(t *testing.T) {
-	csdKey := "test-key"
-	os.Setenv("CDS_API_KEY", csdKey)
-	defer os.Unsetenv("CDS_API_KEY")
-	csdUrl := "test-url"
-	os.Setenv("CDS_BASE_URL", csdUrl)
-	defer os.Unsetenv("CDS_BASE_URL")
-	minioUrl := "test-url"
-	os.Setenv("MINIO_URL", minioUrl)
-	defer os.Unsetenv("MINIO_URL")
+	testValue := "test-value"
+	for _, configVar := range configVars {
+		os.Setenv(configVar, testValue)
+	}
 
 	config, err := Load()
 
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
-	if config.CDSAPIKey != csdKey {
+	if config.CDSAPIKey != testValue {
 		t.Fatal()
 	}
-	if config.CDSBaseURL != csdUrl {
+	if config.CDSBaseURL != testValue {
 		t.Fatal()
 	}
-	if config.MinIOURL != minioUrl {
+	if config.MinIOURL != testValue {
 		t.Fatal()
 	}
 }
