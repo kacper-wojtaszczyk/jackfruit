@@ -2,12 +2,17 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/adapters/cds"
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/config"
 )
 
@@ -15,10 +20,36 @@ func main() {
 	// Configure the global logger
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})))
 
-	// Ensure environment variables are loaded
-	err := godotenv.Load()
+	// Parse CLI flags
+	dateStr := flag.String("date", time.Now().Format("2006-01-02"), "Date for data request (YYYY-MM-DD)")
+	analysisForecast := flag.String("type", "analysis", "Type of data: 'analysis' or 'forecast'")
+	flag.Parse()
+
+	// Parse and validate date
+	date, err := time.Parse("2006-01-02", *dateStr)
 	if err != nil {
-		slog.Error("failed to load anv vars", "error", err)
+		slog.Error("invalid date format", "date", *dateStr, "error", err)
+		fmt.Fprintf(os.Stderr, "Usage: date must be in YYYY-MM-DD format\n")
+		os.Exit(1)
+	}
+
+	// Validate and convert analysis_forecast
+	var afType cds.AnalysisForecast
+	switch *analysisForecast {
+	case "analysis":
+		afType = cds.AnalysisForecastAnalysis
+	case "forecast":
+		afType = cds.AnalysisForecastForecast
+	default:
+		slog.Error("invalid analysis_forecast type", "type", *analysisForecast)
+		fmt.Fprintf(os.Stderr, "Usage: type must be 'analysis' or 'forecast'\n")
+		os.Exit(1)
+	}
+
+	// Ensure environment variables are loaded
+	err = godotenv.Load()
+	if err != nil {
+		slog.Error("failed to load env vars", "error", err)
 		os.Exit(1)
 	}
 
@@ -35,7 +66,7 @@ func main() {
 	defer cancel()
 
 	// Run the application
-	if err := run(ctx, cfg); err != nil {
+	if err := run(ctx, cfg, date, afType); err != nil {
 		slog.Error("application error", "error", err)
 		os.Exit(1)
 	}
@@ -43,8 +74,28 @@ func main() {
 	slog.Info("shutdown complete")
 }
 
-func run(ctx context.Context, cfg *config.Config) error {
-	slog.DebugContext(ctx, "running application", "config", cfg)
+func run(ctx context.Context, cfg *config.Config, date time.Time, afType cds.AnalysisForecast) error {
+	slog.DebugContext(ctx, "running application", "config", cfg, "date", date.Format("2006-01-02"), "type", afType)
+
+	client := cds.NewClient(cfg.CDSBaseURL, cfg.CDSAPIKey)
+
+	slog.DebugContext(ctx, "client created", "client", client)
+
+	data, err := client.Fetch(ctx, &cds.CAMSRequest{Date: date, AnalysisForecast: afType})
+
+	if err != nil {
+		return fmt.Errorf("fetch from CDS: %w", err)
+	}
+	defer data.Close()
+
+	// TODO: Stream to MinIO (next tutorial)
+	// For now, just discard the data to verify it works
+	n, err := io.Copy(io.Discard, data)
+	if err != nil {
+		return fmt.Errorf("read data: %w", err)
+	}
+
+	slog.Info("ingestion complete", "bytes", n)
 
 	return nil
 }
