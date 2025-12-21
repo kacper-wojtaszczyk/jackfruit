@@ -275,9 +275,9 @@ func TestClient_Fetch_StatusCheckNon200(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	// Should get error with unexpected status code
-	if !strings.Contains(err.Error(), "unexpected status code") {
-		t.Errorf("expected error message to contain 'unexpected status code', got: %v", err)
+	// Should get error with status code
+	if !strings.Contains(err.Error(), "failed to get job status") {
+		t.Errorf("expected error message to contain 'failed to get job status', got: %v", err)
 	}
 	if !strings.Contains(err.Error(), "503") {
 		t.Errorf("expected error message to contain status code 503, got: %v", err)
@@ -315,9 +315,9 @@ func TestClient_Fetch_ResultsNon200(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	// Should get error with unexpected status code when fetching results
-	if !strings.Contains(err.Error(), "unexpected status code") {
-		t.Errorf("expected error message to contain 'unexpected status code', got: %v", err)
+	// Should get error when fetching results
+	if !strings.Contains(err.Error(), "failed to get job results") {
+		t.Errorf("expected error message to contain 'failed to get job results', got: %v", err)
 	}
 	if !strings.Contains(err.Error(), "404") {
 		t.Errorf("expected error message to contain status code 404, got: %v", err)
@@ -367,9 +367,9 @@ func TestClient_Fetch_AssetDownloadNon200(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	// Should get error with unexpected status code when downloading asset
-	if !strings.Contains(err.Error(), "unexpected status code") {
-		t.Errorf("expected error message to contain 'unexpected status code', got: %v", err)
+	// Should get error when downloading asset
+	if !strings.Contains(err.Error(), "failed to download asset") {
+		t.Errorf("expected error message to contain 'failed to download asset', got: %v", err)
 	}
 	if !strings.Contains(err.Error(), "403") {
 		t.Errorf("expected error message to contain status code 403, got: %v", err)

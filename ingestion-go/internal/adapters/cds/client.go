@@ -51,55 +51,44 @@ func (c *Client) Fetch(ctx context.Context, req Request) (io.ReadCloser, error) 
 	slog.InfoContext(ctx, "submitting execute request", "dataset", req.Dataset())
 	job, err := c.apiPostExecute(ctx, req)
 	if err != nil {
-		return nil, err
+		return nil, c.toClientError(err, "failed to submit execute request")
 	}
 
 	slog.InfoContext(ctx, "execute request submitted", "job_id", job.JobID, "status", job.Status)
 
 	completedJob, err := c.waitForCompletion(ctx, job.JobID)
 	if err != nil {
-		return nil, err
+		return nil, c.toClientError(err, "failed to wait for job completion")
 	}
 
 	slog.InfoContext(ctx, "job completed", "job_id", completedJob.JobID, "status", completedJob.Status)
 
-	resp, err := c.doRequest(ctx, "GET", fmt.Sprintf("/jobs/%s/results", completedJob.JobID), nil)
+	resultResp, err := c.apiGetResults(ctx, completedJob.JobID)
 	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("unexpected status code when fetching results: %d", resp.StatusCode)
-	}
-	var resultResponse resultResponse
-	err = json.NewDecoder(resp.Body).Decode(&resultResponse)
-	defer resp.Body.Close()
-	if err != nil {
-		return nil, err
+		return nil, c.toClientError(err, "failed to get job results")
 	}
 
-	slog.InfoContext(ctx, "downloading result asset", "asset_url", resultResponse.Asset.Value.Href, "asset_type", resultResponse.Asset.Value.Type)
-	// Download the asset
-	assetRequest, err := http.NewRequestWithContext(ctx, "GET", resultResponse.Asset.Value.Href, nil)
+	slog.InfoContext(ctx, "downloading result asset", "asset_url", resultResp.Asset.Value.Href, "asset_type", resultResp.Asset.Value.Type)
+
+	assetBody, err := c.apiDownloadAsset(ctx, resultResp.Asset.Value.Href)
 	if err != nil {
-		return nil, err
-	}
-	resp2, err2 := c.httpClient.Do(assetRequest)
-	if err2 != nil {
-		return nil, err2
-	}
-	if resp2.StatusCode != 200 {
-		return nil, fmt.Errorf("unexpected status code when downloading asset: %d", resp2.StatusCode)
+		return nil, c.toClientError(err, "failed to download asset")
 	}
 
-	return resp2.Body, nil
+	return assetBody, nil
 }
 
-func (c *Client) doRequest(ctx context.Context, method string, path string, body io.Reader) (*http.Response, error) {
+func (c *Client) doRequest(ctx context.Context, method string, path string, body io.Reader, headers map[string]string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("PRIVATE-TOKEN", c.apiKey)
+
+	// Set optional headers
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
 
 	return c.httpClient.Do(req)
 }
@@ -115,10 +104,16 @@ func (c *Client) apiPostExecute(ctx context.Context, req Request) (*jobResponse,
 		"POST",
 		fmt.Sprintf("/processes/%s/execution", req.Dataset()),
 		bytes.NewBuffer(body),
+		map[string]string{
+			"Content-Type": "application/json",
+			"Accept":       "application/json",
+		},
 	)
 	if err != nil {
 		return nil, err
 	}
+	defer response.Body.Close()
+
 	if response.StatusCode != 201 {
 		return nil, &apiError{StatusCode: response.StatusCode, Message: "execute request failed"}
 	}
@@ -126,7 +121,6 @@ func (c *Client) apiPostExecute(ctx context.Context, req Request) (*jobResponse,
 	slog.InfoContext(ctx, "CDS request submitted", "response_length", response.ContentLength)
 	var job jobResponse
 	err = json.NewDecoder(response.Body).Decode(&job)
-	defer response.Body.Close()
 	if err != nil {
 		return nil, err
 	}
@@ -139,23 +133,75 @@ func (c *Client) apiGetJob(ctx context.Context, jobID string) (*jobResponse, err
 		ctx,
 		"GET",
 		fmt.Sprintf("/jobs/%s", jobID),
-		bytes.NewBuffer(nil),
+		nil,
+		map[string]string{
+			"Accept": "application/json",
+		},
 	)
 	if err != nil {
 		return nil, err
 	}
+	defer response.Body.Close()
+
 	if response.StatusCode != 200 {
-		return nil, fmt.Errorf("unexpected status code: %d", response.StatusCode)
+		return nil, &apiError{StatusCode: response.StatusCode, Message: "failed to get job status"}
 	}
 
 	var job jobResponse
 	err = json.NewDecoder(response.Body).Decode(&job)
-	defer response.Body.Close()
 	if err != nil {
 		return nil, err
 	}
 
 	return &job, nil
+}
+
+func (c *Client) apiGetResults(ctx context.Context, jobID string) (*resultResponse, error) {
+	response, err := c.doRequest(
+		ctx,
+		"GET",
+		fmt.Sprintf("/jobs/%s/results", jobID),
+		nil,
+		map[string]string{
+			"Accept": "application/json",
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != 200 {
+		return nil, &apiError{StatusCode: response.StatusCode, Message: "failed to get job results"}
+	}
+
+	var resultResp resultResponse
+	err = json.NewDecoder(response.Body).Decode(&resultResp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resultResp, nil
+}
+
+func (c *Client) apiDownloadAsset(ctx context.Context, assetURL string) (io.ReadCloser, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", assetURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != 200 {
+		resp.Body.Close() // Cleanup on error
+		return nil, &apiError{StatusCode: resp.StatusCode, Message: "failed to download asset"}
+	}
+
+	// Caller must close this body
+	return resp.Body, nil
 }
 
 // waitForCompletion polls until the job completes or fails.
@@ -187,5 +233,15 @@ func (c *Client) waitForCompletion(ctx context.Context, requestID string) (*jobR
 		default:
 			slog.InfoContext(ctx, "job not completed yet", "job_id", job.JobID, "status", job.Status)
 		}
+	}
+}
+
+// toClientError wraps an internal error into a ClientError for external consumers.
+func (c *Client) toClientError(err error, context string) error {
+	if err == nil {
+		return nil
+	}
+	return &ClientError{
+		Message: fmt.Sprintf("%s: %v", context, err),
 	}
 }

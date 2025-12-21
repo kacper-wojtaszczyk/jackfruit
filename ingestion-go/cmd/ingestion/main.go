@@ -49,7 +49,7 @@ func main() {
 	// Ensure environment variables are loaded
 	err = godotenv.Load()
 	if err != nil {
-		slog.Error("failed to load anv vars", "error", err)
+		slog.Error("failed to load env vars", "error", err)
 		os.Exit(1)
 	}
 
