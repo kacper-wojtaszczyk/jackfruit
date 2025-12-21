@@ -25,9 +25,9 @@ func (e *ErrMissingRequiredEnvVar) Error() string {
 // Returns an error if required variables are missing.
 func Load() (*Config, error) {
 	config := Config{}
-	config.CDSBaseURL = os.Getenv("CDS_ADS_BASE_URL")
+	config.CDSBaseURL = os.Getenv("ADS_BASE_URL")
 	if config.CDSBaseURL == "" {
-		return nil, &ErrMissingRequiredEnvVar{Name: "CDS_ADS_BASE_URL"}
+		return nil, &ErrMissingRequiredEnvVar{Name: "ADS_BASE_URL"}
 	}
 	config.CDSAPIKey = os.Getenv("CDS_API_KEY")
 	if config.CDSAPIKey == "" {

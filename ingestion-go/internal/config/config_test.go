@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-var configVars = []string{"CDS_API_KEY", "CDS_ADS_BASE_URL", "MINIO_URL"}
+var configVars = []string{"CDS_API_KEY", "ADS_BASE_URL", "MINIO_URL"}
 
 func TestLoad_RequiredVarsMissing(t *testing.T) {
 
