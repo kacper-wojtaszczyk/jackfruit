@@ -19,9 +19,9 @@ Five-layer pipeline:
 | 2 | Raw Storage | MinIO/S3 | Active |
 | 3 | Transformation/ETL | Python + Dagster | Active |
 | 4 | Warehouse | ClickHouse | On-hold |
-| 5 | Serving API | Go | On-hold |
+| 5 | Serving API | Go | Active |
 
-MVP target: Layers 1–3 only. The `jackfruit-curated` bucket is the primary output. Design for future ClickHouse loading, but don't require it now.
+MVP target: Layers 1–3 + 5. Serving queries `jackfruit-curated` bucket directly (via DuckDB). ClickHouse deferred until needed for performance.
 </architecture>
 
 <storage_rules>
