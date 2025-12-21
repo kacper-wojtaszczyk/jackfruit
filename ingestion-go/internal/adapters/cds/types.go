@@ -19,50 +19,46 @@ const (
 	AnalysisForecastForecast AnalysisForecast = "forecast"
 )
 
-// CAMSAnalysisRequest represents a CAMS data request.
-type CAMSAnalysisRequest struct {
-	Date time.Time
+// CAMSRequest represents a CAMS data request.
+type CAMSRequest struct {
+	Date             time.Time
+	AnalysisForecast AnalysisForecast
 }
 
-func (r *CAMSAnalysisRequest) Dataset() Dataset {
+func (r *CAMSRequest) Dataset() Dataset {
 	return DatasetCAMS
 }
 
-func (r *CAMSAnalysisRequest) Payload() any {
-	return camsRequest{
-		Inputs: camsInputs{
-			[]string{"particulate_matter_2.5um", "particulate_matter_10um"},
-			[]string{"ensemble"},
-			[]string{"0"},
-			[]string{r.Date.Format("2006-01-02/2006-01-02")},
-			[]string{string(AnalysisForecastAnalysis)},
-			[]string{"00:00", "04:00", "08:00", "12:00", "16:00", "20:00"},
-			[]string{"0"},
-			"netcdf_zip",
-		},
-	}
-}
-
-type CAMSForecastRequest struct {
-	Date time.Time
-}
-
-func (r *CAMSForecastRequest) Dataset() Dataset {
-	return DatasetCAMS
-}
-
-func (r *CAMSForecastRequest) Payload() any {
-	return camsRequest{
-		Inputs: camsInputs{
-			[]string{"particulate_matter_2.5um", "particulate_matter_10um"},
-			[]string{"ensemble"},
-			[]string{"0"},
-			[]string{r.Date.Format("2006-01-02/2006-01-02")},
-			[]string{string(AnalysisForecastForecast)},
-			[]string{"00:00"},
-			[]string{"0", "4", "8", "12", "16", "20", "24", "28", "32", "36", "40", "44", "48"},
-			"netcdf_zip",
-		},
+func (r *CAMSRequest) Payload() any {
+	switch r.AnalysisForecast {
+	case AnalysisForecastAnalysis:
+		return camsRequest{
+			Inputs: camsInputs{
+				[]string{"particulate_matter_2.5um", "particulate_matter_10um"},
+				[]string{"ensemble"},
+				[]string{"0"},
+				[]string{r.Date.Format("2006-01-02/2006-01-02")},
+				[]string{string(AnalysisForecastAnalysis)},
+				[]string{"00:00", "04:00", "08:00", "12:00", "16:00", "20:00"},
+				[]string{"0"},
+				"netcdf_zip",
+			},
+		}
+	case AnalysisForecastForecast:
+		return camsRequest{
+			Inputs: camsInputs{
+				[]string{"particulate_matter_2.5um", "particulate_matter_10um"},
+				[]string{"ensemble"},
+				[]string{"0"},
+				[]string{r.Date.Format("2006-01-02/2006-01-02")},
+				[]string{string(AnalysisForecastForecast)},
+				[]string{"00:00"},
+				[]string{"0", "4", "8", "12", "16", "20", "24", "28", "32", "36", "40", "44", "48"},
+				"netcdf_zip",
+			},
+		}
+	default:
+		return nil
 	}
 }
 

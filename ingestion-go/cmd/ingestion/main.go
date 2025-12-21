@@ -54,26 +54,21 @@ func run(ctx context.Context, cfg *config.Config) error {
 
 	slog.DebugContext(ctx, "client created", "client", client)
 
-	data, err := client.Fetch(ctx, &cds.CAMSForecastRequest{Date: time.Now()})
+	data, err := client.Fetch(ctx, &cds.CAMSRequest{time.Now(), cds.AnalysisForecastAnalysis})
 
 	if err != nil {
 		return fmt.Errorf("fetch from CDS: %w", err)
 	}
 	defer data.Close()
 
-	// Create output file
-	file, err := os.Create("zip.zip")
+	// TODO: Stream to MinIO (next tutorial)
+	// For now, just discard the data to verify it works
+	n, err := io.Copy(io.Discard, data)
 	if err != nil {
-		return fmt.Errorf("create file: %w", err)
-	}
-	defer file.Close()
-
-	// Copy stream directly to file
-	if _, err := io.Copy(file, data); err != nil {
-		return fmt.Errorf("write to file: %w", err)
+		return fmt.Errorf("read data: %w", err)
 	}
 
-	slog.DebugContext(ctx, "fetched data and saved to file")
+	slog.Info("ingestion complete", "bytes", n)
 
 	return nil
 }

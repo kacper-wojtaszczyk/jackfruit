@@ -87,8 +87,8 @@ func (c *Client) Fetch(ctx context.Context, req Request) (io.ReadCloser, error) 
 	if err2 != nil {
 		return nil, err2
 	}
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("unexpected status code when downloading asset: %d", resp.StatusCode)
+	if resp2.StatusCode != 200 {
+		return nil, fmt.Errorf("unexpected status code when downloading asset: %d", resp2.StatusCode)
 	}
 
 	return resp2.Body, nil
@@ -120,7 +120,7 @@ func (c *Client) apiPostExecute(ctx context.Context, req Request) (*jobResponse,
 		return nil, err
 	}
 	if response.StatusCode != 201 {
-		return nil, fmt.Errorf("unexpected status code: %d", response.StatusCode)
+		return nil, &apiError{StatusCode: response.StatusCode, Message: "execute request failed"}
 	}
 
 	slog.InfoContext(ctx, "CDS request submitted", "response_length", response.ContentLength)
@@ -167,6 +167,13 @@ func (c *Client) waitForCompletion(ctx context.Context, requestID string) (*jobR
 	defer ticker.Stop()
 
 	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+			// continue polling
+		}
+
 		job, err := c.apiGetJob(ctx, requestID)
 		if err != nil {
 			return nil, err
@@ -179,13 +186,6 @@ func (c *Client) waitForCompletion(ctx context.Context, requestID string) (*jobR
 			return nil, fmt.Errorf("job %s failed with status: %s", requestID, job.Status)
 		default:
 			slog.InfoContext(ctx, "job not completed yet", "job_id", job.JobID, "status", job.Status)
-		}
-
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-ticker.C:
-			// continue polling
 		}
 	}
 }
