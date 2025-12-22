@@ -18,10 +18,6 @@ import (
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/storage"
 )
 
-type dataFetcher interface {
-	Fetch(ctx context.Context, req cds.Request) (io.ReadCloser, error)
-}
-
 func main() {
 	// Configure the global logger
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})))
@@ -82,7 +78,7 @@ func main() {
 	slog.Info("shutdown complete")
 }
 
-func run(ctx context.Context, date time.Time, datasetName model.Dataset, runID model.RunID, fetcher dataFetcher) error {
+func run(ctx context.Context, date time.Time, datasetName model.Dataset, runID model.RunID, client *cds.Client) error {
 	slog.DebugContext(ctx, "running application", "date", date.Format("2006-01-02"), "dataset", datasetName, "run_id", runID)
 
 	if runID == "" {
@@ -103,7 +99,7 @@ func run(ctx context.Context, date time.Time, datasetName model.Dataset, runID m
 
 	slog.DebugContext(ctx, "object key constructed", "key", key.Key())
 
-	data, err := fetcher.Fetch(ctx, &cds.CAMSRequest{Date: date, Dataset: datasetName})
+	data, err := client.Fetch(ctx, &cds.CAMSRequest{Date: date, Dataset: datasetName})
 
 	if err != nil {
 		return fmt.Errorf("fetch from CDS: %w", err)
