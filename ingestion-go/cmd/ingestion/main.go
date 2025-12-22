@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -14,6 +13,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/adapters/cds"
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/config"
+	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/ingestion"
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/model"
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/storage"
 )
@@ -68,52 +68,30 @@ func main() {
 		syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	// Run the application
 	client := cds.NewClient(cfg.ADSBaseURL, cfg.ADSAPIKey)
-	if err := run(ctx, date, datasetName, model.RunID(*runID), client); err != nil {
+
+	// Initialize MinIO client
+	minioCfg := storage.MinIOConfig{
+		Endpoint:  cfg.MinIOEndpoint,
+		AccessKey: cfg.MinIOAccessKey,
+		SecretKey: cfg.MinIOSecretKey,
+		Bucket:    cfg.MinIOBucket,
+		UseSSL:    cfg.MinIOUseSSL,
+	}
+	minioClient, err := storage.NewMinIOClient(ctx, minioCfg)
+	if err != nil {
+		slog.Error("failed to initialize minio client", "error", err)
+		os.Exit(1)
+	}
+
+	svc := ingestion.NewService(client, minioClient, cfg.MinIOBucket)
+
+	req := ingestion.FetchRequest{Dataset: datasetName, Date: date}
+
+	if err := svc.Ingest(ctx, req, model.RunID(*runID)); err != nil {
 		slog.Error("application error", "error", err)
 		os.Exit(1)
 	}
 
 	slog.Info("shutdown complete")
-}
-
-func run(ctx context.Context, date time.Time, datasetName model.Dataset, runID model.RunID, client *cds.Client) error {
-	slog.DebugContext(ctx, "running application", "date", date.Format("2006-01-02"), "dataset", datasetName, "run_id", runID)
-
-	if runID == "" {
-		return fmt.Errorf("run-id cannot be empty")
-	}
-
-	if err := runID.Validate(); err != nil {
-		return err
-	}
-
-	key := storage.ObjectKey{
-		Source:    "ads",
-		Dataset:   datasetName,
-		Date:      date.Format("2006-01-02"),
-		RunID:     runID,
-		Extension: "nc", // TODO: detect extension after download/unzip
-	}
-
-	slog.DebugContext(ctx, "object key constructed", "key", key.Key())
-
-	data, err := client.Fetch(ctx, &cds.CAMSRequest{Date: date, Dataset: datasetName})
-
-	if err != nil {
-		return fmt.Errorf("fetch from CDS: %w", err)
-	}
-	defer data.Close()
-
-	// TODO: Stream to MinIO (next tutorial)
-	// For now, just discard the data to verify it works
-	n, err := io.Copy(io.Discard, data)
-	if err != nil {
-		return fmt.Errorf("read data: %w", err)
-	}
-
-	slog.Info("ingestion complete", "bytes", n, "run_id", runID)
-
-	return nil
 }

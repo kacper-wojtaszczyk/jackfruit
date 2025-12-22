@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/ingestion"
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/model"
 )
 
@@ -70,22 +71,22 @@ func TestClient_Fetch(t *testing.T) {
 	client.pollTimeout = 1 * time.Second
 
 	ctx := context.Background()
-	req := &CAMSRequest{
+	req := ingestion.FetchRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
 		Dataset: model.CAMSEuropeAirQualityForecastsAnalysis,
 	}
 
 	// 1. Call client.Fetch(ctx, req)
-	body, err := client.Fetch(ctx, req)
+	result, err := client.Fetch(ctx, req)
 
 	// 2. Assert no error
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
-	defer body.Close()
+	defer result.Body.Close()
 
 	// 3. Read the response body and verify content
-	data, err := io.ReadAll(body)
+	data, err := io.ReadAll(result.Body)
 	if err != nil {
 		t.Fatalf("failed to read response body: %v", err)
 	}
@@ -127,7 +128,7 @@ func TestClient_Fetch_JobFailed(t *testing.T) {
 	client.pollTimeout = 1 * time.Second
 
 	ctx := context.Background()
-	req := &CAMSRequest{
+	req := ingestion.FetchRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
 		Dataset: model.CAMSEuropeAirQualityForecastsAnalysis,
 	}
@@ -164,7 +165,7 @@ func TestClient_Fetch_Timeout(t *testing.T) {
 	client.pollTimeout = 100 * time.Millisecond // Very short timeout for test
 
 	ctx := context.Background()
-	req := &CAMSRequest{
+	req := ingestion.FetchRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
 		Dataset: model.CAMSEuropeAirQualityForecastsAnalysis,
 	}
@@ -199,7 +200,7 @@ func TestClient_Fetch_JobRejected(t *testing.T) {
 	client.pollTimeout = 1 * time.Second
 
 	ctx := context.Background()
-	req := &CAMSRequest{
+	req := ingestion.FetchRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
 		Dataset: model.CAMSEuropeAirQualityForecastsAnalysis,
 	}
@@ -229,7 +230,7 @@ func TestClient_Fetch_SubmitNon201(t *testing.T) {
 
 	client := NewClient(server.URL, "key")
 	ctx := context.Background()
-	req := &CAMSRequest{
+	req := ingestion.FetchRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
 		Dataset: model.CAMSEuropeAirQualityForecastsAnalysis,
 	}
@@ -266,7 +267,7 @@ func TestClient_Fetch_StatusCheckNon200(t *testing.T) {
 	client.pollInterval = 10 * time.Millisecond
 	client.pollTimeout = 100 * time.Millisecond
 	ctx := context.Background()
-	req := &CAMSRequest{
+	req := ingestion.FetchRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
 		Dataset: model.CAMSEuropeAirQualityForecastsAnalysis,
 	}
@@ -306,7 +307,7 @@ func TestClient_Fetch_ResultsNon200(t *testing.T) {
 	client.pollInterval = 10 * time.Millisecond
 	client.pollTimeout = 1 * time.Second
 	ctx := context.Background()
-	req := &CAMSRequest{
+	req := ingestion.FetchRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
 		Dataset: model.CAMSEuropeAirQualityForecastsAnalysis,
 	}
@@ -358,7 +359,7 @@ func TestClient_Fetch_AssetDownloadNon200(t *testing.T) {
 	client.pollInterval = 10 * time.Millisecond
 	client.pollTimeout = 1 * time.Second
 	ctx := context.Background()
-	req := &CAMSRequest{
+	req := ingestion.FetchRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
 		Dataset: model.CAMSEuropeAirQualityForecastsAnalysis,
 	}
