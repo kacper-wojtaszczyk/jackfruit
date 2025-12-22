@@ -8,50 +8,44 @@ import (
 type Dataset string
 
 const (
-	DatasetCAMS Dataset = "cams-europe-air-quality-forecasts"
-	// Add more as needed
-)
-
-type AnalysisForecast string
-
-const (
-	AnalysisForecastAnalysis AnalysisForecast = "analysis"
-	AnalysisForecastForecast AnalysisForecast = "forecast"
+	DatasetCAMSAnalysis Dataset = "cams-europe-air-quality-forecasts-analysis"
+	DatasetCAMSForecast Dataset = "cams-europe-air-quality-forecasts-forecast"
+	// Add more as needed (e.g., DatasetGloFAS)
 )
 
 // CAMSRequest represents a CAMS data request.
 type CAMSRequest struct {
-	Date             time.Time
-	AnalysisForecast AnalysisForecast
+	Date    time.Time
+	Dataset Dataset
 }
 
-func (r *CAMSRequest) Dataset() Dataset {
-	return DatasetCAMS
+func (r *CAMSRequest) APIDataset() string {
+	return "cams-europe-air-quality-forecasts"
 }
 
 func (r *CAMSRequest) Payload() any {
-	switch r.AnalysisForecast {
-	case AnalysisForecastAnalysis:
+	switch r.Dataset {
+	case DatasetCAMSAnalysis:
 		return camsRequest{
 			Inputs: camsInputs{
 				[]string{"particulate_matter_2.5um", "particulate_matter_10um"},
 				[]string{"ensemble"},
 				[]string{"0"},
 				[]string{r.Date.Format("2006-01-02/2006-01-02")},
-				[]string{string(r.AnalysisForecast)},
+				[]string{"analysis"},
 				[]string{"00:00", "04:00", "08:00", "12:00", "16:00", "20:00"},
 				[]string{"0"},
 				"netcdf_zip",
 			},
 		}
-	case AnalysisForecastForecast:
+	case DatasetCAMSForecast:
 		return camsRequest{
 			Inputs: camsInputs{
 				[]string{"particulate_matter_2.5um", "particulate_matter_10um"},
 				[]string{"ensemble"},
 				[]string{"0"},
 				[]string{r.Date.Format("2006-01-02/2006-01-02")},
-				[]string{string(r.AnalysisForecast)},
+				[]string{"forecast"},
 				[]string{"00:00"},
 				[]string{"0", "4", "8", "12", "16", "20", "24", "28", "32", "36", "40", "44", "48"},
 				"netcdf_zip",

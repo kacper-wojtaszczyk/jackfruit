@@ -69,8 +69,8 @@ func TestClient_Fetch(t *testing.T) {
 
 	ctx := context.Background()
 	req := &CAMSRequest{
-		Date:             time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		AnalysisForecast: AnalysisForecastAnalysis,
+		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
+		Dataset: DatasetCAMSAnalysis,
 	}
 
 	// 1. Call client.Fetch(ctx, req)
@@ -126,8 +126,8 @@ func TestClient_Fetch_JobFailed(t *testing.T) {
 
 	ctx := context.Background()
 	req := &CAMSRequest{
-		Date:             time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		AnalysisForecast: AnalysisForecastAnalysis,
+		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
+		Dataset: DatasetCAMSAnalysis,
 	}
 
 	// 1. Call Fetch
@@ -163,8 +163,8 @@ func TestClient_Fetch_Timeout(t *testing.T) {
 
 	ctx := context.Background()
 	req := &CAMSRequest{
-		Date:             time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		AnalysisForecast: AnalysisForecastAnalysis,
+		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
+		Dataset: DatasetCAMSAnalysis,
 	}
 
 	// 1. Call Fetch
@@ -198,8 +198,8 @@ func TestClient_Fetch_JobRejected(t *testing.T) {
 
 	ctx := context.Background()
 	req := &CAMSRequest{
-		Date:             time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		AnalysisForecast: AnalysisForecastAnalysis,
+		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
+		Dataset: DatasetCAMSAnalysis,
 	}
 
 	// 1. Call Fetch
@@ -228,8 +228,8 @@ func TestClient_Fetch_SubmitNon201(t *testing.T) {
 	client := NewClient(server.URL, "key")
 	ctx := context.Background()
 	req := &CAMSRequest{
-		Date:             time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		AnalysisForecast: AnalysisForecastAnalysis,
+		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
+		Dataset: DatasetCAMSAnalysis,
 	}
 
 	_, err := client.Fetch(ctx, req)
@@ -265,8 +265,8 @@ func TestClient_Fetch_StatusCheckNon200(t *testing.T) {
 	client.pollTimeout = 100 * time.Millisecond
 	ctx := context.Background()
 	req := &CAMSRequest{
-		Date:             time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		AnalysisForecast: AnalysisForecastAnalysis,
+		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
+		Dataset: DatasetCAMSAnalysis,
 	}
 
 	_, err := client.Fetch(ctx, req)
@@ -305,8 +305,8 @@ func TestClient_Fetch_ResultsNon200(t *testing.T) {
 	client.pollTimeout = 1 * time.Second
 	ctx := context.Background()
 	req := &CAMSRequest{
-		Date:             time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		AnalysisForecast: AnalysisForecastAnalysis,
+		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
+		Dataset: DatasetCAMSAnalysis,
 	}
 
 	_, err := client.Fetch(ctx, req)
@@ -357,8 +357,8 @@ func TestClient_Fetch_AssetDownloadNon200(t *testing.T) {
 	client.pollTimeout = 1 * time.Second
 	ctx := context.Background()
 	req := &CAMSRequest{
-		Date:             time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		AnalysisForecast: AnalysisForecastAnalysis,
+		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
+		Dataset: DatasetCAMSAnalysis,
 	}
 
 	_, err := client.Fetch(ctx, req)

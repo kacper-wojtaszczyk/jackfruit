@@ -22,7 +22,7 @@ func main() {
 
 	// Parse CLI flags
 	dateStr := flag.String("date", time.Now().Format("2006-01-02"), "Date for data request (YYYY-MM-DD)")
-	analysisForecast := flag.String("type", "analysis", "Type of data: 'analysis' or 'forecast'")
+	dataset := cds.Dataset(*flag.String("dataset", "cams-europe-air-quality-forecasts-analysis", "Dataset name"))
 	flag.Parse()
 
 	// Parse and validate date
@@ -30,19 +30,6 @@ func main() {
 	if err != nil {
 		slog.Error("invalid date format", "date", *dateStr, "error", err)
 		fmt.Fprintf(os.Stderr, "Usage: date must be in YYYY-MM-DD format\n")
-		os.Exit(1)
-	}
-
-	// Validate and convert analysis_forecast
-	var afType cds.AnalysisForecast
-	switch *analysisForecast {
-	case "analysis":
-		afType = cds.AnalysisForecastAnalysis
-	case "forecast":
-		afType = cds.AnalysisForecastForecast
-	default:
-		slog.Error("invalid analysis_forecast type", "type", *analysisForecast)
-		fmt.Fprintf(os.Stderr, "Usage: type must be 'analysis' or 'forecast'\n")
 		os.Exit(1)
 	}
 
@@ -66,7 +53,7 @@ func main() {
 	defer cancel()
 
 	// Run the application
-	if err := run(ctx, cfg, date, afType); err != nil {
+	if err := run(ctx, cfg, date, dataset); err != nil {
 		slog.Error("application error", "error", err)
 		os.Exit(1)
 	}
@@ -74,14 +61,14 @@ func main() {
 	slog.Info("shutdown complete")
 }
 
-func run(ctx context.Context, cfg *config.Config, date time.Time, afType cds.AnalysisForecast) error {
-	slog.DebugContext(ctx, "running application", "config", cfg, "date", date.Format("2006-01-02"), "type", afType)
+func run(ctx context.Context, cfg *config.Config, date time.Time, dataset cds.Dataset) error {
+	slog.DebugContext(ctx, "running application", "config", cfg, "date", date.Format("2006-01-02"), "dataset", dataset)
 
-	client := cds.NewClient(cfg.CDSBaseURL, cfg.CDSAPIKey)
+	client := cds.NewClient(cfg.ADSBaseURL, cfg.ADSAPIKey)
 
 	slog.DebugContext(ctx, "client created", "client", client)
 
-	data, err := client.Fetch(ctx, &cds.CAMSRequest{Date: date, AnalysisForecast: afType})
+	data, err := client.Fetch(ctx, &cds.CAMSRequest{Date: date, Dataset: dataset})
 
 	if err != nil {
 		return fmt.Errorf("fetch from CDS: %w", err)

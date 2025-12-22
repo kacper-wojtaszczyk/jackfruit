@@ -14,7 +14,7 @@ import (
 // Request represents a CDS data request.
 // This is the ONLY public type consumers need.
 type Request interface {
-	Dataset() Dataset
+	APIDataset() string // For CDS API endpoint (base dataset name)
 	Payload() any
 }
 
@@ -48,7 +48,7 @@ func NewClient(baseURL, apiKey string) *Client {
 // It handles the full async flow: submit → poll → download.
 // Returns an io.ReadCloser — caller must close it.
 func (c *Client) Fetch(ctx context.Context, req Request) (io.ReadCloser, error) {
-	slog.InfoContext(ctx, "submitting execute request", "dataset", req.Dataset())
+	slog.InfoContext(ctx, "submitting execute request", "dataset", req.APIDataset())
 	job, err := c.apiPostExecute(ctx, req)
 	if err != nil {
 		return nil, c.toClientError(err, "failed to submit execute request")
@@ -98,11 +98,11 @@ func (c *Client) apiPostExecute(ctx context.Context, req Request) (*jobResponse,
 	if err != nil {
 		return nil, err
 	}
-	slog.DebugContext(ctx, "gonna send it now", "dataset", req.Dataset())
+	slog.DebugContext(ctx, "gonna send it now", "dataset", req.APIDataset())
 	response, err := c.doRequest(
 		ctx,
 		"POST",
-		fmt.Sprintf("/processes/%s/execution", req.Dataset()),
+		fmt.Sprintf("/processes/%s/execution", req.APIDataset()),
 		bytes.NewBuffer(body),
 		map[string]string{
 			"Content-Type": "application/json",

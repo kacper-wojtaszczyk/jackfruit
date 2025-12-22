@@ -61,31 +61,31 @@ Think of raw as **evidence**, not data.
 
 **Pattern:**
 ```
-{source}/{dataset}/{type}/{YYYY-MM-DD}.{ext}
+{source}/{dataset}/{YYYY-MM-DD}.{ext}
 ```
 
 **Example:**
 ```
-cds/cams-europe-air-quality-forecasts/analysis/2025-03-12.nc
-cds/cams-europe-air-quality-forecasts/forecast/2025-03-12.nc
+ads/cams-europe-air-quality-forecasts-analysis/2025-03-12.nc
+ads/cams-europe-air-quality-forecasts-forecast/2025-03-12.nc
+ads/glofas-river-discharge/2025-03-12.nc
 ```
 
 **Key decisions:**
-- Date is **ingest date** (when we fetched it), not event date (which is inside the NetCDF)
-- `type` is request type: `analysis` or `forecast`
+- Date is **ingest date** (when we fetched), not event date (which is inside the NetCDF)
+- Dataset name encodes all request variants (e.g., `-analysis` vs `-forecast` for CAMS)
 - Static filename: always `{date}.{ext}` — path contains all metadata
 - Extension determined from actual format after unzipping (`.nc`, `.grib2`)
 - Re-ingesting same date overwrites previous file (idempotent)
 
 **Rationale:**
 - CDS API returns **multi-variable** NetCDF files (e.g., pm2.5 + pm10 together)
-- Splitting by variable doesn't make sense — parallel ingestion hits same queue anyway
-- Type-based organization reflects actual API request structure
-- ETL can discover files deterministically: construct path from known dataset/type/date
+- Dataset name captures the logical dataset including request type
+- Uniform path depth across all sources and datasets
+- ETL can discover files deterministically: construct path from known source/dataset/date
 
 ## Immutability
 
-- Raw storage is append-only
 - ETL reads from raw, writes to curated — **never mutates raw**
 - Can delete curated, re-run ETL, rebuild from raw
 

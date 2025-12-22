@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-var configVars = []string{"CDS_API_KEY", "ADS_BASE_URL", "MINIO_URL"}
+var configVars = []string{"ADS_API_KEY", "ADS_BASE_URL", "MINIO_URL"}
 
 func TestLoad_RequiredVarsMissing(t *testing.T) {
 
@@ -48,10 +48,10 @@ func TestLoad_ValidConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
-	if config.CDSAPIKey != testValue {
+	if config.ADSAPIKey != testValue {
 		t.Fatal()
 	}
-	if config.CDSBaseURL != testValue {
+	if config.ADSBaseURL != testValue {
 		t.Fatal()
 	}
 	if config.MinIOURL != testValue {
