@@ -35,6 +35,11 @@ Read raw data, normalize schemas, compute quality flags, and write to curated st
 
 ETL reads raw, writes curated. Never mutates raw.
 
+**Raw path pattern:** `{source}/{dataset}/{type}/{YYYY-MM-DD}.{ext}`
+- ETL constructs paths deterministically from known dataset/type/date
+- Multi-variable NetCDF files are introspected with `xarray` (`ds.data_vars`)
+- Each variable is split into separate curated partitions
+
 ## Curated Partitioning
 
 **Partition by event time first, then space.**

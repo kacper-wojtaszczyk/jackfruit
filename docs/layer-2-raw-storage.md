@@ -46,9 +46,14 @@ Raw does **not** mean "cleaned". Raw means:
 - No merging across sources
 
 **Allowed:**
-- Decompression (zip → NetCDF/GRIB)
+- Decompression (zip → NetCDF/GRIB) — happens at ingestion
 - Checksums
-- Deterministic file renaming
+- Format detection for extension (`.nc` vs `.grib2`)
+
+**Not allowed:**
+- Variable extraction or filtering
+- Unit conversion
+- Temporal/spatial subsetting
 
 Think of raw as **evidence**, not data.
 
@@ -56,18 +61,27 @@ Think of raw as **evidence**, not data.
 
 **Pattern:**
 ```
-{source}/{dataset}/{variable}/ingest_date=YYYY-MM-DD/{filename}
+{source}/{dataset}/{type}/{YYYY-MM-DD}.{ext}
 ```
 
 **Example:**
 ```
-cds/cams-europe-air-quality-forecasts/pm2p5/ingest_date=2025-03-12/pm2p5_20250311T1200.nc
+cds/cams-europe-air-quality-forecasts/analysis/2025-03-12.nc
+cds/cams-europe-air-quality-forecasts/forecast/2025-03-12.nc
 ```
 
 **Key decisions:**
-- `ingest_date` for traceability (curated layer partitions by event time)
-- Variable in path for filtering
-- Original filename or deterministic rename preserved
+- Date is **ingest date** (when we fetched it), not event date (which is inside the NetCDF)
+- `type` is request type: `analysis` or `forecast`
+- Static filename: always `{date}.{ext}` — path contains all metadata
+- Extension determined from actual format after unzipping (`.nc`, `.grib2`)
+- Re-ingesting same date overwrites previous file (idempotent)
+
+**Rationale:**
+- CDS API returns **multi-variable** NetCDF files (e.g., pm2.5 + pm10 together)
+- Splitting by variable doesn't make sense — parallel ingestion hits same queue anyway
+- Type-based organization reflects actual API request structure
+- ETL can discover files deterministically: construct path from known dataset/type/date
 
 ## Immutability
 
