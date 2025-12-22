@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-// Dataset identifies a CDS dataset.
+// Dataset identifies a dataset internally.
 type Dataset string
 
 const (
@@ -19,6 +19,7 @@ type CAMSRequest struct {
 	Dataset Dataset
 }
 
+// APIDataset returns the CDS API dataset name for the request.
 func (r *CAMSRequest) APIDataset() string {
 	return "cams-europe-air-quality-forecasts"
 }

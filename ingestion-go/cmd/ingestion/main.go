@@ -22,11 +22,12 @@ func main() {
 
 	// Parse CLI flags
 	dateStr := flag.String("date", time.Now().Format("2006-01-02"), "Date for data request (YYYY-MM-DD)")
-	dataset := cds.Dataset(*flag.String("dataset", "cams-europe-air-quality-forecasts-analysis", "Dataset name"))
+	datasetStr := flag.String("dataset", "cams-europe-air-quality-forecasts-analysis", "Dataset name")
 	flag.Parse()
 
 	// Parse and validate date
 	date, err := time.Parse("2006-01-02", *dateStr)
+	dataset := cds.Dataset(*datasetStr)
 	if err != nil {
 		slog.Error("invalid date format", "date", *dateStr, "error", err)
 		fmt.Fprintf(os.Stderr, "Usage: date must be in YYYY-MM-DD format\n")
