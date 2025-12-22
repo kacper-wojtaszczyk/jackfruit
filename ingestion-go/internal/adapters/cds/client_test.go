@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/dataset"
+	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/model"
 )
 
 func TestClient_Fetch(t *testing.T) {
@@ -72,7 +72,7 @@ func TestClient_Fetch(t *testing.T) {
 	ctx := context.Background()
 	req := &CAMSRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		Dataset: dataset.CAMSEuropeAirQualityForecastsAnalysis,
+		Dataset: model.CAMSEuropeAirQualityForecastsAnalysis,
 	}
 
 	// 1. Call client.Fetch(ctx, req)
@@ -129,7 +129,7 @@ func TestClient_Fetch_JobFailed(t *testing.T) {
 	ctx := context.Background()
 	req := &CAMSRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		Dataset: dataset.CAMSEuropeAirQualityForecastsAnalysis,
+		Dataset: model.CAMSEuropeAirQualityForecastsAnalysis,
 	}
 
 	// 1. Call Fetch
@@ -166,7 +166,7 @@ func TestClient_Fetch_Timeout(t *testing.T) {
 	ctx := context.Background()
 	req := &CAMSRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		Dataset: dataset.CAMSEuropeAirQualityForecastsAnalysis,
+		Dataset: model.CAMSEuropeAirQualityForecastsAnalysis,
 	}
 
 	// 1. Call Fetch
@@ -201,7 +201,7 @@ func TestClient_Fetch_JobRejected(t *testing.T) {
 	ctx := context.Background()
 	req := &CAMSRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		Dataset: dataset.CAMSEuropeAirQualityForecastsAnalysis,
+		Dataset: model.CAMSEuropeAirQualityForecastsAnalysis,
 	}
 
 	// 1. Call Fetch
@@ -231,7 +231,7 @@ func TestClient_Fetch_SubmitNon201(t *testing.T) {
 	ctx := context.Background()
 	req := &CAMSRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		Dataset: dataset.CAMSEuropeAirQualityForecastsAnalysis,
+		Dataset: model.CAMSEuropeAirQualityForecastsAnalysis,
 	}
 
 	_, err := client.Fetch(ctx, req)
@@ -268,7 +268,7 @@ func TestClient_Fetch_StatusCheckNon200(t *testing.T) {
 	ctx := context.Background()
 	req := &CAMSRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		Dataset: dataset.CAMSEuropeAirQualityForecastsAnalysis,
+		Dataset: model.CAMSEuropeAirQualityForecastsAnalysis,
 	}
 
 	_, err := client.Fetch(ctx, req)
@@ -308,7 +308,7 @@ func TestClient_Fetch_ResultsNon200(t *testing.T) {
 	ctx := context.Background()
 	req := &CAMSRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		Dataset: dataset.CAMSEuropeAirQualityForecastsAnalysis,
+		Dataset: model.CAMSEuropeAirQualityForecastsAnalysis,
 	}
 
 	_, err := client.Fetch(ctx, req)
@@ -360,7 +360,7 @@ func TestClient_Fetch_AssetDownloadNon200(t *testing.T) {
 	ctx := context.Background()
 	req := &CAMSRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		Dataset: dataset.CAMSEuropeAirQualityForecastsAnalysis,
+		Dataset: model.CAMSEuropeAirQualityForecastsAnalysis,
 	}
 
 	_, err := client.Fetch(ctx, req)

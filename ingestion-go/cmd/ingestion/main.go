@@ -11,26 +11,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/adapters/cds"
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/config"
-	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/dataset"
+	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/model"
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/storage"
 )
-
-type RunID string
-
-func (r RunID) Validate() error {
-	id, err := uuid.Parse(string(r))
-	if err != nil {
-		return fmt.Errorf("run-id must be a valid UUID: %w", err)
-	}
-	if id.Version() != uuid.Version(7) {
-		return fmt.Errorf("run-id must be a UUIDv7, got v%d", id.Version())
-	}
-	return nil
-}
 
 type dataFetcher interface {
 	Fetch(ctx context.Context, req cds.Request) (io.ReadCloser, error)
@@ -47,7 +33,7 @@ func main() {
 	flag.Parse()
 
 	// Parse and validate flags
-	datasetName := dataset.Dataset(*datasetStr)
+	datasetName := model.Dataset(*datasetStr)
 	date, err := time.Parse("2006-01-02", *dateStr)
 	if err != nil {
 		slog.Error("invalid date format", "date", *dateStr, "error", err)
@@ -61,7 +47,7 @@ func main() {
 	}
 
 	// Ensure run-id parses as UUIDv7 early
-	if err := RunID(*runID).Validate(); err != nil {
+	if err := model.RunID(*runID).Validate(); err != nil {
 		slog.Error("invalid run-id", "error", err)
 		fmt.Fprintf(os.Stderr, "Usage: run-id must be a UUIDv7\n")
 		os.Exit(1)
@@ -88,7 +74,7 @@ func main() {
 
 	// Run the application
 	client := cds.NewClient(cfg.ADSBaseURL, cfg.ADSAPIKey)
-	if err := run(ctx, date, datasetName, RunID(*runID), client); err != nil {
+	if err := run(ctx, date, datasetName, model.RunID(*runID), client); err != nil {
 		slog.Error("application error", "error", err)
 		os.Exit(1)
 	}
@@ -96,7 +82,7 @@ func main() {
 	slog.Info("shutdown complete")
 }
 
-func run(ctx context.Context, date time.Time, datasetName dataset.Dataset, runID RunID, fetcher dataFetcher) error {
+func run(ctx context.Context, date time.Time, datasetName model.Dataset, runID model.RunID, fetcher dataFetcher) error {
 	slog.DebugContext(ctx, "running application", "date", date.Format("2006-01-02"), "dataset", datasetName, "run_id", runID)
 
 	if runID == "" {
@@ -111,7 +97,7 @@ func run(ctx context.Context, date time.Time, datasetName dataset.Dataset, runID
 		Source:    "ads",
 		Dataset:   datasetName,
 		Date:      date.Format("2006-01-02"),
-		RunID:     string(runID),
+		RunID:     runID,
 		Extension: "nc", // TODO: detect extension after download/unzip
 	}
 

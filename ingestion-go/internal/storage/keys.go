@@ -3,14 +3,14 @@ package storage
 import (
 	"fmt"
 
-	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/dataset"
+	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/model"
 )
 
 type ObjectKey struct {
 	Source    string
-	Dataset   dataset.Dataset
-	Date      string // in YYYY-MM-DD format
-	RunID     string // ULID passed from orchestration
+	Dataset   model.Dataset
+	Date      string      // in YYYY-MM-DD format
+	RunID     model.RunID // UUIDv7 passed from orchestration
 	Extension string
 }
 

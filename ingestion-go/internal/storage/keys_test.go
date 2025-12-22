@@ -1,11 +1,15 @@
 package storage
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/model"
+)
 
 func TestObjectKey_Key(t *testing.T) {
 	key := ObjectKey{
 		Source:    "ads",
-		Dataset:   "cams-europe-air-quality-forecasts-analysis",
+		Dataset:   model.Dataset("cams-europe-air-quality-forecasts-analysis"),
 		Date:      "2025-03-12",
 		RunID:     "01890c24-905b-7122-b170-b60814e6ee06",
 		Extension: "nc",

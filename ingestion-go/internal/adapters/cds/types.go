@@ -3,13 +3,13 @@ package cds
 import (
 	"time"
 
-	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/dataset"
+	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/model"
 )
 
 // CAMSRequest represents a CAMS data request.
 type CAMSRequest struct {
 	Date    time.Time
-	Dataset dataset.Dataset
+	Dataset model.Dataset
 }
 
 // APIDataset returns the CDS API dataset name for the request.
@@ -19,7 +19,7 @@ func (r *CAMSRequest) APIDataset() string {
 
 func (r *CAMSRequest) Payload() any {
 	switch r.Dataset {
-	case dataset.CAMSEuropeAirQualityForecastsAnalysis:
+	case model.CAMSEuropeAirQualityForecastsAnalysis:
 		return camsRequest{
 			Inputs: camsInputs{
 				[]string{"particulate_matter_2.5um", "particulate_matter_10um"},
@@ -32,7 +32,7 @@ func (r *CAMSRequest) Payload() any {
 				"netcdf_zip",
 			},
 		}
-	case dataset.CAMSEuropeAirQualityForecastsForecast:
+	case model.CAMSEuropeAirQualityForecastsForecast:
 		return camsRequest{
 			Inputs: camsInputs{
 				[]string{"particulate_matter_2.5um", "particulate_matter_10um"},

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/dataset"
+	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/model"
 )
 
 // Unit tests for CAMSRequest payload generation
@@ -12,7 +12,7 @@ import (
 func TestCAMSRequest_Payload_Analysis(t *testing.T) {
 	req := &CAMSRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		Dataset: dataset.CAMSEuropeAirQualityForecastsAnalysis,
+		Dataset: model.CAMSEuropeAirQualityForecastsAnalysis,
 	}
 
 	payload := req.Payload()
@@ -54,7 +54,7 @@ func TestCAMSRequest_Payload_Analysis(t *testing.T) {
 func TestCAMSRequest_Payload_Forecast(t *testing.T) {
 	req := &CAMSRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		Dataset: dataset.CAMSEuropeAirQualityForecastsForecast,
+		Dataset: model.CAMSEuropeAirQualityForecastsForecast,
 	}
 
 	payload := req.Payload()
@@ -97,7 +97,7 @@ func TestCAMSRequest_Payload_Forecast(t *testing.T) {
 func TestCAMSRequest_Payload_InvalidDataset(t *testing.T) {
 	req := &CAMSRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		Dataset: dataset.Dataset("invalid"),
+		Dataset: model.Dataset("invalid"),
 	}
 
 	payload := req.Payload()
@@ -111,7 +111,7 @@ func TestCAMSRequest_Payload_InvalidDataset(t *testing.T) {
 func TestCAMSRequest_APIDataset(t *testing.T) {
 	req := &CAMSRequest{
 		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		Dataset: dataset.CAMSEuropeAirQualityForecastsAnalysis,
+		Dataset: model.CAMSEuropeAirQualityForecastsAnalysis,
 	}
 
 	apiDataset := req.APIDataset()
