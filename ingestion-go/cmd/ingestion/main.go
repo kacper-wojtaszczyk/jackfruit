@@ -11,10 +11,30 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/adapters/cds"
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/config"
+	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/dataset"
+	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/storage"
 )
+
+type RunID string
+
+func (r RunID) Validate() error {
+	id, err := uuid.Parse(string(r))
+	if err != nil {
+		return fmt.Errorf("run-id must be a valid UUID: %w", err)
+	}
+	if id.Version() != uuid.Version(7) {
+		return fmt.Errorf("run-id must be a UUIDv7, got v%d", id.Version())
+	}
+	return nil
+}
+
+type dataFetcher interface {
+	Fetch(ctx context.Context, req cds.Request) (io.ReadCloser, error)
+}
 
 func main() {
 	// Configure the global logger
@@ -23,14 +43,27 @@ func main() {
 	// Parse CLI flags
 	dateStr := flag.String("date", time.Now().Format("2006-01-02"), "Date for data request (YYYY-MM-DD)")
 	datasetStr := flag.String("dataset", "cams-europe-air-quality-forecasts-analysis", "Dataset name")
+	runID := flag.String("run-id", "", "Run identifier (ULID from orchestration)")
 	flag.Parse()
 
 	// Parse and validate flags
-	dataset := cds.Dataset(*datasetStr)
+	datasetName := dataset.Dataset(*datasetStr)
 	date, err := time.Parse("2006-01-02", *dateStr)
 	if err != nil {
 		slog.Error("invalid date format", "date", *dateStr, "error", err)
 		fmt.Fprintf(os.Stderr, "Usage: date must be in YYYY-MM-DD format\n")
+		os.Exit(1)
+	}
+	if *runID == "" {
+		slog.Error("run-id is required")
+		fmt.Fprintf(os.Stderr, "Usage: run-id must be provided (UUIDv7)\n")
+		os.Exit(1)
+	}
+
+	// Ensure run-id parses as UUIDv7 early
+	if err := RunID(*runID).Validate(); err != nil {
+		slog.Error("invalid run-id", "error", err)
+		fmt.Fprintf(os.Stderr, "Usage: run-id must be a UUIDv7\n")
 		os.Exit(1)
 	}
 
@@ -54,7 +87,8 @@ func main() {
 	defer cancel()
 
 	// Run the application
-	if err := run(ctx, cfg, date, dataset); err != nil {
+	client := cds.NewClient(cfg.ADSBaseURL, cfg.ADSAPIKey)
+	if err := run(ctx, date, datasetName, RunID(*runID), client); err != nil {
 		slog.Error("application error", "error", err)
 		os.Exit(1)
 	}
@@ -62,14 +96,28 @@ func main() {
 	slog.Info("shutdown complete")
 }
 
-func run(ctx context.Context, cfg *config.Config, date time.Time, dataset cds.Dataset) error {
-	slog.DebugContext(ctx, "running application", "config", cfg, "date", date.Format("2006-01-02"), "dataset", dataset)
+func run(ctx context.Context, date time.Time, datasetName dataset.Dataset, runID RunID, fetcher dataFetcher) error {
+	slog.DebugContext(ctx, "running application", "date", date.Format("2006-01-02"), "dataset", datasetName, "run_id", runID)
 
-	client := cds.NewClient(cfg.ADSBaseURL, cfg.ADSAPIKey)
+	if runID == "" {
+		return fmt.Errorf("run-id cannot be empty")
+	}
 
-	slog.DebugContext(ctx, "client created", "client", client)
+	if err := runID.Validate(); err != nil {
+		return err
+	}
 
-	data, err := client.Fetch(ctx, &cds.CAMSRequest{Date: date, Dataset: dataset})
+	key := storage.ObjectKey{
+		Source:    "ads",
+		Dataset:   datasetName,
+		Date:      date.Format("2006-01-02"),
+		RunID:     string(runID),
+		Extension: "nc", // TODO: detect extension after download/unzip
+	}
+
+	slog.DebugContext(ctx, "object key constructed", "key", key.Key())
+
+	data, err := fetcher.Fetch(ctx, &cds.CAMSRequest{Date: date, Dataset: datasetName})
 
 	if err != nil {
 		return fmt.Errorf("fetch from CDS: %w", err)
@@ -83,7 +131,7 @@ func run(ctx context.Context, cfg *config.Config, date time.Time, dataset cds.Da
 		return fmt.Errorf("read data: %w", err)
 	}
 
-	slog.Info("ingestion complete", "bytes", n)
+	slog.Info("ingestion complete", "bytes", n, "run_id", runID)
 
 	return nil
 }

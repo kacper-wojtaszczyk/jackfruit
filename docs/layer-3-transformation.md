@@ -35,8 +35,8 @@ Read raw data, normalize schemas, compute quality flags, and write to curated st
 
 ETL reads raw, writes curated. Never mutates raw.
 
-**Raw path pattern:** `{source}/{dataset}/{YYYY-MM-DD}.{ext}`
-- ETL constructs paths deterministically from known source/dataset/date
+**Raw path pattern:** `{source}/{dataset}/{YYYY-MM-DD}/{run_id}.{ext}`
+- ETL can list by date prefix and then by run_id
 - Dataset name includes variants (e.g., `cams-europe-air-quality-forecasts-analysis`)
 - Multi-variable NetCDF files are introspected with `xarray` (`ds.data_vars`)
 - Each variable is split into separate curated partitions
@@ -110,4 +110,3 @@ Transformation jobs must be idempotent:
 - [ ] Backfill strategy for historical data
 - [ ] Spatial chunking granularity (lat/lon grid? regions?)
 - [ ] Metadata format (JSON sidecar? Postgres+PostGIS?)
-
