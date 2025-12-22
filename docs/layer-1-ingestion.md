@@ -43,7 +43,7 @@ cds/cams-europe-air-quality-forecasts/forecast/2025-03-12.nc
 ```
 
 **Rules:**
-- Raw is append-only; re-ingesting same date overwrites (idempotent)
+- Fuck versioning, re-ingestion overwrites old raw
 - Unzip compressed responses (CDS returns `netcdf_zip`)
 - Detect format from content, use correct extension (`.nc`, `.grib2`)
 - Date in path is **ingest date** (when we fetched), not event date
