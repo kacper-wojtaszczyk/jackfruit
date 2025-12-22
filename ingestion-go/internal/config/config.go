@@ -8,8 +8,8 @@ import (
 // Config holds application configuration.
 // Add fields as needed throughout the project.
 type Config struct {
-	CDSAPIKey  string
-	CDSBaseURL string
+	ADSAPIKey  string
+	ADSBaseURL string
 	MinIOURL   string
 }
 
@@ -25,13 +25,13 @@ func (e *ErrMissingRequiredEnvVar) Error() string {
 // Returns an error if required variables are missing.
 func Load() (*Config, error) {
 	config := Config{}
-	config.CDSBaseURL = os.Getenv("ADS_BASE_URL")
-	if config.CDSBaseURL == "" {
+	config.ADSBaseURL = os.Getenv("ADS_BASE_URL")
+	if config.ADSBaseURL == "" {
 		return nil, &ErrMissingRequiredEnvVar{Name: "ADS_BASE_URL"}
 	}
-	config.CDSAPIKey = os.Getenv("CDS_API_KEY")
-	if config.CDSAPIKey == "" {
-		return nil, &ErrMissingRequiredEnvVar{Name: "CDS_API_KEY"}
+	config.ADSAPIKey = os.Getenv("ADS_API_KEY")
+	if config.ADSAPIKey == "" {
+		return nil, &ErrMissingRequiredEnvVar{Name: "ADS_API_KEY"}
 	}
 	config.MinIOURL = os.Getenv("MINIO_URL")
 	if config.MinIOURL == "" {

@@ -33,22 +33,24 @@ Fetch raw data from external environmental APIs and store unchanged in the raw b
 
 **Object key pattern:**
 ```
-{source}/{dataset}/{type}/{YYYY-MM-DD}.{ext}
+{source}/{dataset}/{YYYY-MM-DD}.{ext}
 ```
 
 **Example:**
 ```
-cds/cams-europe-air-quality-forecasts/analysis/2025-03-12.nc
-cds/cams-europe-air-quality-forecasts/forecast/2025-03-12.nc
+ads/cams-europe-air-quality-forecasts-analysis/2025-03-12.nc
+ads/cams-europe-air-quality-forecasts-forecast/2025-03-12.nc
+ads/glofas-river-discharge/2025-03-12.nc
 ```
 
 **Rules:**
-- Fuck versioning, re-ingestion overwrites old raw
+- Re-ingestion overwrites (idempotent by date)
 - Unzip compressed responses (CDS returns `netcdf_zip`)
 - Detect format from content, use correct extension (`.nc`, `.grib2`)
 - Date in path is **ingest date** (when we fetched), not event date
 - Static filename: `{date}.{ext}` — path contains all metadata
 - Multi-variable files stored as-is (ETL splits them later)
+- Dataset name includes request variants (e.g., CAMS analysis vs forecast are separate datasets)
 
 ## Data Strategy
 

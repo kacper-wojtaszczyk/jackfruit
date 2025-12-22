@@ -9,8 +9,8 @@ import (
 
 func TestCAMSRequest_Payload_Analysis(t *testing.T) {
 	req := &CAMSRequest{
-		Date:             time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		AnalysisForecast: AnalysisForecastAnalysis,
+		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
+		Dataset: DatasetCAMSAnalysis,
 	}
 
 	payload := req.Payload()
@@ -51,8 +51,8 @@ func TestCAMSRequest_Payload_Analysis(t *testing.T) {
 
 func TestCAMSRequest_Payload_Forecast(t *testing.T) {
 	req := &CAMSRequest{
-		Date:             time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		AnalysisForecast: AnalysisForecastForecast,
+		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
+		Dataset: DatasetCAMSForecast,
 	}
 
 	payload := req.Payload()
@@ -92,29 +92,30 @@ func TestCAMSRequest_Payload_Forecast(t *testing.T) {
 	}
 }
 
-func TestCAMSRequest_Payload_Invalid(t *testing.T) {
+func TestCAMSRequest_Payload_InvalidDataset(t *testing.T) {
 	req := &CAMSRequest{
-		Date:             time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		AnalysisForecast: "invalid", // Invalid value
+		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
+		Dataset: Dataset("invalid"),
 	}
 
 	payload := req.Payload()
 
-	// Assert payload is nil for invalid AnalysisForecast
+	// Assert payload is nil for invalid Dataset
 	if payload != nil {
-		t.Errorf("expected nil payload for invalid AnalysisForecast, got %v", payload)
+		t.Errorf("expected nil payload for invalid Dataset, got %v", payload)
 	}
 }
 
-func TestCAMSRequest_Dataset(t *testing.T) {
+func TestCAMSRequest_APIDataset(t *testing.T) {
 	req := &CAMSRequest{
-		Date:             time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		AnalysisForecast: AnalysisForecastAnalysis,
+		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
+		Dataset: DatasetCAMSAnalysis,
 	}
 
-	dataset := req.Dataset()
+	apiDataset := req.APIDataset()
+	expected := "cams-europe-air-quality-forecasts"
 
-	if dataset != DatasetCAMS {
-		t.Errorf("expected dataset %s, got %s", DatasetCAMS, dataset)
+	if apiDataset != expected {
+		t.Errorf("expected API dataset %s, got %s", expected, apiDataset)
 	}
 }
