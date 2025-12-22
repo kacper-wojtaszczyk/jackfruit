@@ -25,9 +25,9 @@ func main() {
 	datasetStr := flag.String("dataset", "cams-europe-air-quality-forecasts-analysis", "Dataset name")
 	flag.Parse()
 
-	// Parse and validate date
-	date, err := time.Parse("2006-01-02", *dateStr)
+	// Parse and validate flags
 	dataset := cds.Dataset(*datasetStr)
+	date, err := time.Parse("2006-01-02", *dateStr)
 	if err != nil {
 		slog.Error("invalid date format", "date", *dateStr, "error", err)
 		fmt.Fprintf(os.Stderr, "Usage: date must be in YYYY-MM-DD format\n")
