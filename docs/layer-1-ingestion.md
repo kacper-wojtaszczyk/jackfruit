@@ -45,7 +45,6 @@ ads/glofas-river-discharge/2025-03-12.nc
 
 **Rules:**
 - Re-ingestion overwrites (idempotent by date)
-- Unzip compressed responses (CDS returns `netcdf_zip`)
 - Detect format from content, use correct extension (`.nc`, `.grib2`)
 - Date in path is **ingest date** (when we fetched), not event date
 - Static filename: `{date}.{ext}` — path contains all metadata

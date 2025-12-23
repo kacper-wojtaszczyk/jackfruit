@@ -12,11 +12,11 @@ func TestObjectKey_Key(t *testing.T) {
 		Dataset:   model.Dataset("cams-europe-air-quality-forecasts-analysis"),
 		Date:      "2025-03-12",
 		RunID:     "01890c24-905b-7122-b170-b60814e6ee06",
-		Extension: "zip",
+		Extension: "grib",
 	}
 
 	got := key.Key()
-	want := "ads/cams-europe-air-quality-forecasts-analysis/2025-03-12/01890c24-905b-7122-b170-b60814e6ee06.zip"
+	want := "ads/cams-europe-air-quality-forecasts-analysis/2025-03-12/01890c24-905b-7122-b170-b60814e6ee06.grib"
 
 	if got != want {
 		t.Fatalf("Key() = %s, want %s", got, want)
