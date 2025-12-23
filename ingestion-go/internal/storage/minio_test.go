@@ -2,7 +2,14 @@ package storage
 
 import (
 	"context"
+	"io"
+	"os"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/joho/godotenv"
+	"github.com/minio/minio-go/v7"
 )
 
 func TestNewMinIOClient_InvalidEndpoint(t *testing.T) {
@@ -38,34 +45,60 @@ func TestNewMinIOClient_ConnectionRefused(t *testing.T) {
 	}
 }
 
+func loadMinIOConfigFromEnv(t *testing.T) MinIOConfig {
+	t.Helper()
+	godotenv.Load("../../.env.test")
+
+	endpoint := os.Getenv("MINIO_ENDPOINT")
+	accessKey := os.Getenv("MINIO_ACCESS_KEY")
+	secretKey := os.Getenv("MINIO_SECRET_KEY")
+	useSSL := os.Getenv("MINIO_USE_SSL") == "true"
+
+	if endpoint == "" || accessKey == "" || secretKey == "" {
+		t.Fatalf("MINIO_ENDPOINT, MINIO_ACCESS_KEY, and MINIO_SECRET_KEY must be set for integration tests")
+	}
+
+	return MinIOConfig{
+		Endpoint:  endpoint,
+		AccessKey: accessKey,
+		SecretKey: secretKey,
+		UseSSL:    useSSL,
+	}
+}
+
 func TestMinIOClient_Put_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	// This test requires a running MinIO instance.
-	// It attempts to connect to localhost:9000 by default.
-	// If connection fails, we skip.
+	cfg := loadMinIOConfigFromEnv(t)
+	cfg.Bucket = "test-bucket-" + time.Now().Format("20060102-150405")
 
-	cfg := MinIOConfig{
-		Endpoint:  "localhost:9000",
-		AccessKey: "minioadmin",
-		SecretKey: "minioadmin",
-		Bucket:    "test-bucket",
-		UseSSL:    false,
-	}
-
-	client, err := NewMinIOClient(context.Background(), cfg)
+	ctx := context.Background()
+	client, err := NewMinIOClient(ctx, cfg)
 	if err != nil {
-		t.Skipf("skipping integration test: failed to connect to minio: %v", err)
+		t.Fatalf("failed to initialize minio client: %v", err)
 	}
 
-	// If we got here, we have a connection.
-	// Try to Put something.
-	// Note: This might fail if bucket creation failed in NewMinIOClient but we didn't catch it (unlikely)
-	// or if we don't have permissions.
+	key := "integration/hello.txt"
+	content := "hello minio"
 
-	// For now, just a placeholder to show intent.
-	// In a real CI, we'd spin up MinIO service.
-	_ = client
+	if err := client.Put(ctx, key, strings.NewReader(content)); err != nil {
+		t.Fatalf("Put() error = %v", err)
+	}
+
+	obj, err := client.client.GetObject(ctx, cfg.Bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		t.Fatalf("GetObject() error = %v", err)
+	}
+	defer obj.Close()
+
+	data, err := io.ReadAll(obj)
+	if err != nil {
+		t.Fatalf("io.ReadAll() error = %v", err)
+	}
+
+	if string(data) != content {
+		t.Fatalf("unexpected content: got %q, want %q", string(data), content)
+	}
 }

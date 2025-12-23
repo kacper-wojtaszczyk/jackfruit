@@ -36,11 +36,11 @@ type stubStorage struct {
 	err    error
 }
 
-func (s *stubStorage) Put(ctx context.Context, bucket, key string, data io.Reader) error {
+func (s *stubStorage) Put(ctx context.Context, key string, data io.Reader) error {
 	if s.err != nil {
 		return s.err
 	}
-	s.bucket = bucket
+	s.bucket = "jackfruit-raw"
 	s.key = key
 	b, err := io.ReadAll(data)
 	if err != nil {
@@ -51,7 +51,7 @@ func (s *stubStorage) Put(ctx context.Context, bucket, key string, data io.Reade
 }
 
 func TestService_Ingest_Success(t *testing.T) {
-	fetcher := stubFetcher{source: "ads", extension: "nc", data: "hello"}
+	fetcher := stubFetcher{source: "ads", extension: "zip", data: "hello"}
 	storage := &stubStorage{}
 	svc := NewService(fetcher, storage, "jackfruit-raw")
 
@@ -66,7 +66,7 @@ func TestService_Ingest_Success(t *testing.T) {
 		t.Fatalf("expected bucket jackfruit-raw, got %s", storage.bucket)
 	}
 
-	expectedKey := "ads/cams-europe-air-quality-forecasts-analysis/2025-03-12/01890c24-905b-7122-b170-b60814e6ee06.nc"
+	expectedKey := "ads/cams-europe-air-quality-forecasts-analysis/2025-03-12/01890c24-905b-7122-b170-b60814e6ee06.zip"
 	if storage.key != expectedKey {
 		t.Fatalf("expected key %s, got %s", expectedKey, storage.key)
 	}

@@ -52,9 +52,9 @@ func NewMinIOClient(ctx context.Context, cfg MinIOConfig) (*MinIOClient, error) 
 }
 
 // Put stores an object in MinIO.
-func (m *MinIOClient) Put(ctx context.Context, bucket, key string, reader io.Reader) error {
+func (m *MinIOClient) Put(ctx context.Context, key string, reader io.Reader) error {
 	// Upload the file with PutObject
-	_, err := m.client.PutObject(ctx, bucket, key, reader, -1, minio.PutObjectOptions{
+	_, err := m.client.PutObject(ctx, m.bucketName, key, reader, -1, minio.PutObjectOptions{
 		ContentType: "application/octet-stream", // Default, can be improved later
 	})
 	if err != nil {
