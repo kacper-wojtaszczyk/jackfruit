@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/ingestion"
 )
 
 // Request represents a CDS data request.
@@ -44,10 +46,25 @@ func NewClient(baseURL, apiKey string) *Client {
 	return c
 }
 
-// Fetch requests data from CDS and returns the file content.
+// Fetch requests data from CDS and returns the file content with metadata.
 // It handles the full async flow: submit → poll → download.
-// Returns an io.ReadCloser — caller must close it.
-func (c *Client) Fetch(ctx context.Context, req Request) (io.ReadCloser, error) {
+func (c *Client) Fetch(ctx context.Context, req ingestion.FetchRequest) (ingestion.FetchResult, error) {
+	cdsReq := &CAMSRequest{Date: req.Date, Dataset: req.Dataset}
+
+	body, err := c.fetchInternal(ctx, cdsReq)
+	if err != nil {
+		return ingestion.FetchResult{}, err
+	}
+
+	return ingestion.FetchResult{
+		Body:      body,
+		Source:    "ads",
+		Extension: "zip", // TODO: detect from asset type
+	}, nil
+}
+
+// fetchInternal preserves existing behavior for tests that use Request directly.
+func (c *Client) fetchInternal(ctx context.Context, req Request) (io.ReadCloser, error) {
 	slog.InfoContext(ctx, "submitting execute request", "dataset", req.APIDataset())
 	job, err := c.apiPostExecute(ctx, req)
 	if err != nil {

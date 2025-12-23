@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -14,6 +13,9 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/adapters/cds"
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/config"
+	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/ingestion"
+	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/model"
+	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/storage"
 )
 
 func main() {
@@ -23,14 +25,27 @@ func main() {
 	// Parse CLI flags
 	dateStr := flag.String("date", time.Now().Format("2006-01-02"), "Date for data request (YYYY-MM-DD)")
 	datasetStr := flag.String("dataset", "cams-europe-air-quality-forecasts-analysis", "Dataset name")
+	runID := flag.String("run-id", "", "Run identifier (UUIDv7 from orchestration)")
 	flag.Parse()
 
 	// Parse and validate flags
-	dataset := cds.Dataset(*datasetStr)
+	datasetName := model.Dataset(*datasetStr)
 	date, err := time.Parse("2006-01-02", *dateStr)
 	if err != nil {
 		slog.Error("invalid date format", "date", *dateStr, "error", err)
 		fmt.Fprintf(os.Stderr, "Usage: date must be in YYYY-MM-DD format\n")
+		os.Exit(1)
+	}
+	if *runID == "" {
+		slog.Error("run-id is required")
+		fmt.Fprintf(os.Stderr, "Usage: run-id must be provided (UUIDv7)\n")
+		os.Exit(1)
+	}
+
+	// Ensure run-id parses as UUIDv7 early
+	if err := model.RunID(*runID).Validate(); err != nil {
+		slog.Error("invalid run-id", "error", err)
+		fmt.Fprintf(os.Stderr, "Usage: run-id must be a UUIDv7\n")
 		os.Exit(1)
 	}
 
@@ -53,37 +68,30 @@ func main() {
 		syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	// Run the application
-	if err := run(ctx, cfg, date, dataset); err != nil {
+	client := cds.NewClient(cfg.ADSBaseURL, cfg.ADSAPIKey)
+
+	// Initialize MinIO client
+	minioCfg := storage.MinIOConfig{
+		Endpoint:  cfg.MinIOEndpoint,
+		AccessKey: cfg.MinIOAccessKey,
+		SecretKey: cfg.MinIOSecretKey,
+		Bucket:    cfg.MinIOBucket,
+		UseSSL:    cfg.MinIOUseSSL,
+	}
+	minioClient, err := storage.NewMinIOClient(ctx, minioCfg)
+	if err != nil {
+		slog.Error("failed to initialize minio client", "error", err)
+		os.Exit(1)
+	}
+
+	svc := ingestion.NewService(client, minioClient)
+
+	req := ingestion.FetchRequest{Dataset: datasetName, Date: date}
+
+	if err := svc.Ingest(ctx, req, model.RunID(*runID)); err != nil {
 		slog.Error("application error", "error", err)
 		os.Exit(1)
 	}
 
 	slog.Info("shutdown complete")
-}
-
-func run(ctx context.Context, cfg *config.Config, date time.Time, dataset cds.Dataset) error {
-	slog.DebugContext(ctx, "running application", "config", cfg, "date", date.Format("2006-01-02"), "dataset", dataset)
-
-	client := cds.NewClient(cfg.ADSBaseURL, cfg.ADSAPIKey)
-
-	slog.DebugContext(ctx, "client created", "client", client)
-
-	data, err := client.Fetch(ctx, &cds.CAMSRequest{Date: date, Dataset: dataset})
-
-	if err != nil {
-		return fmt.Errorf("fetch from CDS: %w", err)
-	}
-	defer data.Close()
-
-	// TODO: Stream to MinIO (next tutorial)
-	// For now, just discard the data to verify it works
-	n, err := io.Copy(io.Discard, data)
-	if err != nil {
-		return fmt.Errorf("read data: %w", err)
-	}
-
-	slog.Info("ingestion complete", "bytes", n)
-
-	return nil
 }

@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-var configVars = []string{"ADS_API_KEY", "ADS_BASE_URL", "MINIO_URL"}
+var configVars = []string{"ADS_API_KEY", "ADS_BASE_URL", "MINIO_ENDPOINT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY", "MINIO_BUCKET"}
 
 func TestLoad_RequiredVarsMissing(t *testing.T) {
 
@@ -54,7 +54,37 @@ func TestLoad_ValidConfig(t *testing.T) {
 	if config.ADSBaseURL != testValue {
 		t.Fatal()
 	}
-	if config.MinIOURL != testValue {
+	if config.MinIOEndpoint != testValue {
 		t.Fatal()
+	}
+	if config.MinIOAccessKey != testValue {
+		t.Fatal()
+	}
+	if config.MinIOSecretKey != testValue {
+		t.Fatal()
+	}
+	if config.MinIOBucket != testValue {
+		t.Fatal()
+	}
+	if config.MinIOUseSSL {
+		t.Fatal("expected MinIOUseSSL to be false by default")
+	}
+}
+
+func TestLoad_SSL(t *testing.T) {
+	testValue := "test-value"
+	for _, configVar := range configVars {
+		os.Setenv(configVar, testValue)
+	}
+	os.Setenv("MINIO_USE_SSL", "true")
+	defer os.Unsetenv("MINIO_USE_SSL")
+
+	config, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	if !config.MinIOUseSSL {
+		t.Fatal("expected MinIOUseSSL to be true")
 	}
 }
