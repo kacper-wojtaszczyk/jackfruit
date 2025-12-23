@@ -29,7 +29,7 @@ func (r *CAMSRequest) Payload() any {
 				[]string{"analysis"},
 				[]string{"00:00", "04:00", "08:00", "12:00", "16:00", "20:00"},
 				[]string{"0"},
-				"netcdf_zip",
+				"grib",
 			},
 		}
 	case model.CAMSEuropeAirQualityForecastsForecast:
@@ -42,7 +42,7 @@ func (r *CAMSRequest) Payload() any {
 				[]string{"forecast"},
 				[]string{"00:00"},
 				[]string{"0", "4", "8", "12", "16", "20", "24", "28", "32", "36", "40", "44", "48"},
-				"netcdf_zip",
+				"grib",
 			},
 		}
 	default:

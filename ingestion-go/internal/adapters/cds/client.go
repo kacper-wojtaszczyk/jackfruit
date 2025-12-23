@@ -59,7 +59,7 @@ func (c *Client) Fetch(ctx context.Context, req ingestion.FetchRequest) (ingesti
 	return ingestion.FetchResult{
 		Body:      body,
 		Source:    "ads",
-		Extension: "zip", // TODO: detect from asset type
+		Extension: "grib", // TODO: detect from asset type
 	}, nil
 }
 
