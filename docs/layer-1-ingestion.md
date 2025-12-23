@@ -2,6 +2,20 @@
 
 Fetch raw data from external environmental APIs and store unchanged in the raw bucket.
 
+## Status
+
+| Component | Status |
+|-----------|--------|
+| CDS API client (async job pattern) | ✅ Done |
+| CLI with flags (`--date`, `--dataset`, `--run-id`) | ✅ Done |
+| MinIO storage integration | ✅ Done |
+| Structured logging (slog/JSON) | ✅ Done |
+| CAMS Europe Air Quality datasets | ✅ Done |
+| Containerization (Docker) | 🚧 In progress |
+| Dagster orchestration | 🚧 In progress |
+| GloFAS dataset | ⏳ Next |
+| Retry/rate limiting | ⏳ Planned |
+
 ## Responsibilities
 
 - API authentication and key management
@@ -33,23 +47,40 @@ Fetch raw data from external environmental APIs and store unchanged in the raw b
 
 **Object key pattern:**
 ```
-{source}/{dataset}/{YYYY-MM-DD}.{ext}
+{source}/{dataset}/{YYYY-MM-DD}/{run_id}.{ext}
 ```
 
 **Example:**
 ```
-ads/cams-europe-air-quality-forecasts-analysis/2025-03-12.nc
-ads/cams-europe-air-quality-forecasts-forecast/2025-03-12.nc
-ads/glofas-river-discharge/2025-03-12.nc
+ads/cams-europe-air-quality-forecasts-analysis/2025-03-12/01890c24-905b-7122-b170-b60814e6ee06.grib
+ads/cams-europe-air-quality-forecasts-forecast/2025-03-12/01890c24-905b-7122-b170-b60814e6ee06.grib
 ```
 
 **Rules:**
-- Re-ingestion overwrites (idempotent by date)
-- Detect format from content, use correct extension (`.nc`, `.grib2`)
+- Multiple ingests on same date have distinct run_ids (no overwrites)
+- Extension currently hardcoded to `.grib` (detection TBD)
 - Date in path is **ingest date** (when we fetched), not event date
-- Static filename: `{date}.{ext}` — path contains all metadata
+- Run ID is UUIDv7 passed from orchestration (Dagster)
 - Multi-variable files stored as-is (ETL splits them later)
 - Dataset name includes request variants (e.g., CAMS analysis vs forecast are separate datasets)
+
+## CLI Usage
+
+```bash
+./ingestion \
+  --dataset=cams-europe-air-quality-forecasts-analysis \
+  --date=2025-03-12 \
+  --run-id=01890c24-905b-7122-b170-b60814e6ee06
+```
+
+**Environment variables required:**
+- `ADS_BASE_URL` — CDS API base URL
+- `ADS_API_KEY` — CDS API key
+- `MINIO_ENDPOINT` — MinIO endpoint (e.g., `localhost:9000`)
+- `MINIO_ACCESS_KEY` — MinIO access key
+- `MINIO_SECRET_KEY` — MinIO secret key
+- `MINIO_BUCKET` — Target bucket name
+- `MINIO_USE_SSL` — `true` or `false`
 
 ## Data Strategy
 
@@ -71,7 +102,7 @@ ads/glofas-river-discharge/2025-03-12.nc
 
 | Source | Data Types | API | Status |
 |--------|------------|-----|--------|
-| **Copernicus CAMS** | PM2.5, PM10, O3, NO2, AQI | CDS API | 🚧 In progress |
+| **Copernicus CAMS** | PM2.5, PM10, O3, NO2, AQI | CDS API | ✅ Done |
 | **Copernicus GloFAS** | River discharge, floods | CDS API | ⏳ Next |
 | **Copernicus CGLS** | NDVI, LAI, land cover | CDS API | ⏳ Planned |
 
@@ -95,10 +126,30 @@ The Copernicus Data Store API uses an async job pattern:
 
 This pattern applies to CAMS, GloFAS, and CGLS.
 
-## Open Questions
+---
 
-- [ ] Adapter interface design
-- [ ] CLI structure (subcommands, flags)
-- [ ] Retry policy details
-- [ ] Rate limiting strategy
+## Future Refactoring Ideas
+
+High-level improvements to revisit after MVP:
+
+### CDS Client
+- [ ] **Options pattern for client config** — timeouts, poll intervals as functional options
+- [ ] **Extension detection** — derive `.nc` vs `.grib` from Content-Type or asset type
+- [ ] **Retry middleware** — exponential backoff with jitter for transient failures
+- [ ] **Rate limiting** — token bucket or leaky bucket per API
+- [ ] **Richer error types** — distinguish retryable vs permanent failures
+
+### CLI / Main
+- [ ] **Subcommands** — `ingestion fetch`, `ingestion list-datasets`, etc.
+- [ ] **Config file support** — YAML/TOML as alternative to env vars
+- [ ] **Dry-run mode** — validate request without executing
+
+### Architecture
+- [ ] **Adapter registry** — map dataset → adapter dynamically
+- [ ] **Parallel fetching** — goroutines for multiple datasets/dates
+- [ ] **Progress reporting** — structured events for Dagster to parse
+
+### Testing
+- [ ] **Integration test with real MinIO** — docker-compose test harness
+- [ ] **Golden file tests** — snapshot CDS request payloads
 

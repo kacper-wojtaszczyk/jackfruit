@@ -2,6 +2,15 @@
 
 Read raw data, normalize schemas, compute quality flags, and write to curated storage.
 
+## Status
+
+| Component | Status |
+|-----------|--------|
+| Dagster project setup | 🚧 In progress |
+| Dagster invoking Go ingestion | 🚧 In progress |
+| CAMS transformation asset | ⏳ Planned |
+| Curated partitioning scheme | ⏳ Planned |
+
 ## Responsibilities
 
 - Schema mapping per source → unified schema
@@ -102,11 +111,14 @@ Transformation jobs must be idempotent:
 - Re-running produces identical output
 - Can delete curated, re-run ETL, get same results
 
-## Open Questions
+---
 
-- [ ] Unified schema design
-- [ ] Derived metrics (compute here vs client)
-- [ ] Schema evolution strategy
-- [ ] Backfill strategy for historical data
-- [ ] Spatial chunking granularity (lat/lon grid? regions?)
-- [ ] Metadata format (JSON sidecar? Postgres+PostGIS?)
+## Future Refactoring Ideas
+
+- [ ] **Unified schema design** — common structure across datasets
+- [ ] **Derived metrics** — compute here vs push to serving layer?
+- [ ] **Schema evolution strategy** — how to handle breaking changes
+- [ ] **Backfill strategy** — bulk historical data processing
+- [ ] **Spatial chunking granularity** — lat/lon grid? Named regions? H3?
+- [ ] **Metadata format** — JSON sidecar? Postgres+PostGIS catalog?
+- [ ] **Dagster partitions** — daily partitions aligned with raw storage
