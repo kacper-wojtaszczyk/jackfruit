@@ -38,11 +38,10 @@ type ObjectStorage interface {
 type Service struct {
 	fetcher       Fetcher
 	objectStorage ObjectStorage
-	bucket        string
 }
 
-func NewService(fetcher Fetcher, objectStorage ObjectStorage, bucket string) *Service {
-	return &Service{fetcher: fetcher, objectStorage: objectStorage, bucket: bucket}
+func NewService(fetcher Fetcher, objectStorage ObjectStorage) *Service {
+	return &Service{fetcher: fetcher, objectStorage: objectStorage}
 }
 
 func (s *Service) Ingest(ctx context.Context, req FetchRequest, runID model.RunID) error {

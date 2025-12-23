@@ -53,7 +53,7 @@ func (s *stubStorage) Put(ctx context.Context, key string, data io.Reader) error
 func TestService_Ingest_Success(t *testing.T) {
 	fetcher := stubFetcher{source: "ads", extension: "zip", data: "hello"}
 	storage := &stubStorage{}
-	svc := NewService(fetcher, storage, "jackfruit-raw")
+	svc := NewService(fetcher, storage)
 
 	req := FetchRequest{Dataset: model.CAMSEuropeAirQualityForecastsAnalysis, Date: time.Date(2025, 3, 12, 0, 0, 0, 0, time.UTC)}
 	runID := model.RunID("01890c24-905b-7122-b170-b60814e6ee06")
@@ -79,7 +79,7 @@ func TestService_Ingest_Success(t *testing.T) {
 func TestService_Ingest_FetchError(t *testing.T) {
 	fetcher := stubFetcher{source: "ads", extension: "nc", err: errors.New("fetch failed")}
 	storage := &stubStorage{}
-	svc := NewService(fetcher, storage, "jackfruit-raw")
+	svc := NewService(fetcher, storage)
 
 	req := FetchRequest{Dataset: model.CAMSEuropeAirQualityForecastsAnalysis, Date: time.Date(2025, 3, 12, 0, 0, 0, 0, time.UTC)}
 	runID := model.RunID("01890c24-905b-7122-b170-b60814e6ee06")
@@ -93,7 +93,7 @@ func TestService_Ingest_FetchError(t *testing.T) {
 func TestService_Ingest_StoreError(t *testing.T) {
 	fetcher := stubFetcher{source: "ads", extension: "nc", data: "hello"}
 	storage := &stubStorage{err: errors.New("store failed")}
-	svc := NewService(fetcher, storage, "jackfruit-raw")
+	svc := NewService(fetcher, storage)
 
 	req := FetchRequest{Dataset: model.CAMSEuropeAirQualityForecastsAnalysis, Date: time.Date(2025, 3, 12, 0, 0, 0, 0, time.UTC)}
 	runID := model.RunID("01890c24-905b-7122-b170-b60814e6ee06")
@@ -107,7 +107,7 @@ func TestService_Ingest_StoreError(t *testing.T) {
 func TestService_Ingest_InvalidRunID(t *testing.T) {
 	fetcher := stubFetcher{source: "ads", extension: "nc", data: "hello"}
 	storage := &stubStorage{}
-	svc := NewService(fetcher, storage, "jackfruit-raw")
+	svc := NewService(fetcher, storage)
 
 	req := FetchRequest{Dataset: model.CAMSEuropeAirQualityForecastsAnalysis, Date: time.Date(2025, 3, 12, 0, 0, 0, 0, time.UTC)}
 	runID := model.RunID("not-a-uuid")

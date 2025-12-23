@@ -84,7 +84,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	svc := ingestion.NewService(client, minioClient, cfg.MinIOBucket)
+	svc := ingestion.NewService(client, minioClient)
 
 	req := ingestion.FetchRequest{Dataset: datasetName, Date: date}
 
