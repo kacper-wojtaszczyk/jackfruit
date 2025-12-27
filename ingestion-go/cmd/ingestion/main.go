@@ -90,7 +90,7 @@ func main() {
 
 	if err := svc.Ingest(ctx, req, model.RunID(*runID)); err != nil {
 		slog.Error("application error", "error", err)
-		os.Exit(exitcode.ConfigError)
+		os.Exit(exitcode.ApplicationError)
 	}
 
 	slog.Info("shutdown complete")

@@ -7,7 +7,8 @@ Read raw data, normalize schemas, compute quality flags, and write to curated st
 | Component | Status |
 |-----------|--------|
 | Dagster project setup | 🚧 In progress |
-| Dagster invoking Go ingestion | 🚧 In progress |
+| Containerized Go ingestion (for Dagster) | ✅ Done |
+| Dagster asset invoking ingestion | 🚧 In progress |
 | CAMS transformation asset | ⏳ Planned |
 | Curated partitioning scheme | ⏳ Planned |
 
@@ -36,6 +37,55 @@ Read raw data, normalize schemas, compute quality flags, and write to curated st
 
 **Why Python:** Rich data ecosystem (pandas, polars, pyarrow, xarray)  
 **Why Dagster:** Asset-centric model, built-in partitioning, lineage tracking, observability UI
+
+## Invoking Go Ingestion from Dagster
+
+The Go ingestion layer is containerized and invoked by Dagster as a subprocess/container run.
+
+**Pattern:**
+1. Dagster asset generates UUIDv7 for `run_id`
+2. Dagster invokes `docker-compose run ingestion --dataset=... --date=... --run-id=...`
+3. Dagster captures exit code and stdout logs
+4. On success (exit 0), downstream transformation assets can materialize
+
+**Example Dagster asset (pseudocode):**
+
+```python
+from dagster import asset, OpExecutionContext
+import subprocess
+import uuid
+
+@asset
+def raw_cams_air_quality(context: OpExecutionContext):
+    run_id = str(uuid.uuid7())
+    dataset = "cams-europe-air-quality-forecasts-analysis"
+    date = context.partition_key  # e.g., "2025-03-12"
+    
+    result = subprocess.run(
+        [
+            "docker-compose", "run", "--rm", "ingestion",
+            f"--dataset={dataset}",
+            f"--date={date}",
+            f"--run-id={run_id}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    
+    if result.returncode != 0:
+        context.log.error(f"Ingestion failed: {result.stderr}")
+        raise Exception(f"Ingestion exit code {result.returncode}")
+    
+    context.log.info(f"Raw data ingested with run_id={run_id}")
+    return {"run_id": run_id, "dataset": dataset, "date": date}
+```
+
+**Exit code handling:**
+- `0`: Success → materialize downstream assets
+- `1`: Config error → fail immediately, alert human
+- `2`: Application error → retry with backoff (future: split into retryable vs not)
+
+**Alternative:** Use Dagster's `DockerRunLauncher` or `K8sRunLauncher` for more integrated execution.
 
 ## Storage
 
