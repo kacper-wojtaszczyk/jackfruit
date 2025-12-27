@@ -8,22 +8,30 @@ Environmental data platform. Ingests, transforms, and serves weather, air qualit
 
 - [x] Architecture defined (5 layers)
 - [x] Storage strategy decided (MinIO raw/curated buckets)
-- [ ] Go ingestion — in progress (CAMS adapter)
-- [ ] Python ETL — not started
+- [x] Go ingestion CLI (CAMS adapter working)
+- [x] Dagster orchestration setup
+- [x] Ingestion asset (runs Go CLI via docker compose)
+- [ ] Python ETL assets — not started
 - [ ] Serving API — not started
 
 ## Quick Start
 
 ```bash
-# Start local infrastructure
-docker-compose up -d  # MinIO, (future: ClickHouse, Dagster)
+# Copy and configure secrets (first time)
+cp .env.example .env
+# Edit .env with your API keys and credentials
 
-# MinIO console
-open http://localhost:9001  # minioadmin / minioadmin
+# Start MinIO
+docker-compose up -d
 
-# Create buckets (first time only)
-# - jackfruit-raw
-# - jackfruit-curated
+# MinIO console: http://localhost:9001 (minioadmin / minioadmin)
+# Create buckets (first time): jackfruit-raw, jackfruit-curated
+
+# Start Dagster (orchestration UI)
+cd pipeline-python
+uv sync
+dg dev
+# Dagster UI: http://localhost:3000
 ```
 
 ## Architecture
@@ -31,19 +39,20 @@ open http://localhost:9001  # minioadmin / minioadmin
 ```
 External APIs → [Ingestion/Go] → jackfruit-raw (MinIO)
                                       ↓
-                              [ETL/Python+Dagster]
+                         [ETL/Python + Dagster orchestration]
                                       ↓
                               jackfruit-curated (MinIO)
                                       ↓
-                              [Serving/Go] → Clients
+                              [Serving/Go + DuckDB] → Clients
 ```
 
 | Layer | Tech | Status |
 |-------|------|--------|
-| Ingestion | Go | 🚧 In progress |
-| Raw Storage | MinIO/S3 | ✅ Ready |
-| ETL | Python + Dagster | ⏳ Planned |
-| Warehouse | ClickHouse | ⏸️ On-hold |
+| Ingestion | Go CLI | ✅ Active (CAMS) |
+| Raw Storage | MinIO/S3 | ✅ Active |
+| Orchestration | Dagster | ✅ Active |
+| ETL | Python + Dagster | 🚧 In progress |
+| Warehouse | ClickHouse | ⏸️ Deferred |
 | Serving | Go + DuckDB | ⏳ Planned |
 
 See `docs/` for layer details.
@@ -52,20 +61,19 @@ See `docs/` for layer details.
 
 ```
 jackfruit/
-├── ingestion-go/      # Go — fetch external data → raw bucket
-├── etl-python/       # Python + Dagster — ETL
-├── serving-go/        # Go — API for clients
-├── infra/          # MinIO, ClickHouse config
-└── docs/           # Architecture docs
+├── ingestion-go/       # Go CLI — fetch external data → raw bucket
+├── pipeline-python/    # Dagster orchestration + ETL assets
+├── docs/               # Architecture docs
+└── docker-compose.yml  # MinIO
 ```
 
 ## Data Sources (Current Targets)
 
-| Source | Type | Status |
-|--------|------|--------|
-| Copernicus CAMS | Air quality | 🚧 In progress |
-| Copernicus GloFAS | Hydrology | ⏳ Next |
-| ERA5 (public S3) | Weather | ⏳ ETL target |
+| Source | Type | Status                  |
+|--------|------|-------------------------|
+| Copernicus CAMS | Air quality | ✅ Implemented ingestion |
+| Copernicus GloFAS | Hydrology | ⏳ Next                  |
+| ERA5 (public S3) | Weather | ⏳ ETL target            |
 
 ## License
 
