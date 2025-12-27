@@ -1,18 +1,43 @@
-version: "3"
 services:
   minio:
     image: minio/minio
     container_name: minio
     environment:
-      - MINIO_ROOT_USER=root
-      - MINIO_ROOT_PASSWORD=root
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    command: server /data --console-address ":9001"
     networks:
       jackfruit:
     ports:
       - "9099:9000"
       - "9098:9001"
+
+  ingestion:
+    profiles: ["ingestion"]
+    build:
+      context: ./ingestion-go
+      dockerfile: Dockerfile
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      ADS_BASE_URL: ${ADS_BASE_URL}
+      ADS_API_KEY: ${ADS_API_KEY}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+      LOG_LEVEL: debug
+    networks:
+      jackfruit:
 networks:
     jackfruit:
 volumes:

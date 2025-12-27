@@ -13,6 +13,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/adapters/cds"
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/config"
+	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/exitcode"
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/ingestion"
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/model"
 	"github.com/kacper-wojtaszczyk/jackfruit/ingestion-go/internal/storage"
@@ -34,33 +35,32 @@ func main() {
 	if err != nil {
 		slog.Error("invalid date format", "date", *dateStr, "error", err)
 		fmt.Fprintf(os.Stderr, "Usage: date must be in YYYY-MM-DD format\n")
-		os.Exit(1)
+		os.Exit(exitcode.ConfigError)
 	}
 	if *runID == "" {
 		slog.Error("run-id is required")
 		fmt.Fprintf(os.Stderr, "Usage: run-id must be provided (UUIDv7)\n")
-		os.Exit(1)
+		os.Exit(exitcode.ConfigError)
 	}
 
 	// Ensure run-id parses as UUIDv7 early
 	if err := model.RunID(*runID).Validate(); err != nil {
 		slog.Error("invalid run-id", "error", err)
 		fmt.Fprintf(os.Stderr, "Usage: run-id must be a UUIDv7\n")
-		os.Exit(1)
+		os.Exit(exitcode.ConfigError)
 	}
 
 	// Ensure environment variables are loaded
 	err = godotenv.Load()
 	if err != nil {
-		slog.Error("failed to load env vars", "error", err)
-		os.Exit(1)
+		slog.Warn("failed to load env vars", "error", err)
 	}
 
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
 		slog.Error("failed to load config", "error", err)
-		os.Exit(1)
+		os.Exit(exitcode.ConfigError)
 	}
 
 	// Create a cancellable context (for graceful shutdown)
@@ -81,7 +81,7 @@ func main() {
 	minioClient, err := storage.NewMinIOClient(ctx, minioCfg)
 	if err != nil {
 		slog.Error("failed to initialize minio client", "error", err)
-		os.Exit(1)
+		os.Exit(exitcode.ConfigError)
 	}
 
 	svc := ingestion.NewService(client, minioClient)
@@ -90,7 +90,7 @@ func main() {
 
 	if err := svc.Ingest(ctx, req, model.RunID(*runID)); err != nil {
 		slog.Error("application error", "error", err)
-		os.Exit(1)
+		os.Exit(exitcode.ApplicationError)
 	}
 
 	slog.Info("shutdown complete")

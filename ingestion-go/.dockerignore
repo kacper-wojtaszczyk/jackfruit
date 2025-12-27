@@ -1,0 +1,37 @@
+# Build artifacts
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binaries
+*.test
+*.out
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Version control
+.git/
+.gitignore
+
+# Documentation and CI (not needed in image)
+*.md
+.github/
+
+# Environment files (secrets should come from compose/orchestration)
+.env
+.env.*
+
+# Go workspace
+go.work
+go.work.sum
+
+# macOS
+.DS_Store
+

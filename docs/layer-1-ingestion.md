@@ -11,7 +11,7 @@ Fetch raw data from external environmental APIs and store unchanged in the raw b
 | MinIO storage integration | ✅ Done |
 | Structured logging (slog/JSON) | ✅ Done |
 | CAMS Europe Air Quality datasets | ✅ Done |
-| Containerization (Docker) | 🚧 In progress |
+| Containerization (Docker) | ✅ Done |
 | Dagster orchestration | 🚧 In progress |
 | GloFAS dataset | ⏳ Next |
 | Retry/rate limiting | ⏳ Planned |
@@ -81,6 +81,64 @@ ads/cams-europe-air-quality-forecasts-forecast/2025-03-12/01890c24-905b-7122-b17
 - `MINIO_SECRET_KEY` — MinIO secret key
 - `MINIO_BUCKET` — Target bucket name
 - `MINIO_USE_SSL` — `true` or `false`
+
+## Docker Usage
+
+The ingestion app is containerized and can be invoked via `docker-compose` or standalone Docker.
+
+### Via docker-compose (recommended)
+
+```bash
+# Build the image
+docker compose build ingestion
+
+# Run a single ingestion job
+docker compose run --rm ingestion \
+  --dataset=cams-europe-air-quality-forecasts-analysis \
+  --date=2025-03-12 \
+  --run-id=01890c24-905b-7122-b170-b60814e6ee06
+```
+
+The `ingestion` service uses the `ingestion` profile, so it won't start automatically with `docker-compose up`. It's designed to be invoked on-demand (e.g., by Dagster).
+
+**How it works:**
+- `depends_on` ensures MinIO is healthy before ingestion runs
+- Environment variables are read from `.env` file or shell
+- Logs stream to stdout (JSON format)
+- Exit codes: `0` = success, `1` = config error, `2` = application error
+
+### Via standalone Docker
+
+```bash
+# Build
+docker build -t jackfruit-ingestion:latest ./ingestion-go
+
+# Run (must have MinIO running and network accessible)
+docker run --rm \
+  --network jackfruit_jackfruit \
+  -e ADS_BASE_URL=$ADS_BASE_URL \
+  -e ADS_API_KEY=$ADS_API_KEY \
+  -e MINIO_ENDPOINT=minio:9000 \
+  -e MINIO_ACCESS_KEY=$MINIO_ACCESS_KEY \
+  -e MINIO_SECRET_KEY=$MINIO_SECRET_KEY \
+  -e MINIO_BUCKET=jackfruit-raw \
+  jackfruit-ingestion:latest \
+  --dataset=cams-europe-air-quality-forecasts-analysis \
+  --date=2025-03-12 \
+  --run-id=01890c24-905b-7122-b170-b60814e6ee06
+```
+
+### Exit Codes
+
+Dagster (or any orchestrator) can use exit codes to decide retry strategy:
+
+| Code | Meaning | Retry? |
+|------|---------|--------|
+| `0` | Success | N/A |
+| `1` | Config error (missing env vars, invalid flags) | No — fix config first |
+| `2` | Application error (network, API, storage) | Maybe — depends on error type |
+
+Future: split code `2` into retryable (transient network) vs non-retryable (invalid dataset) errors.
 
 ## Data Strategy
 
