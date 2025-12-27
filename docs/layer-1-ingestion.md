@@ -90,10 +90,10 @@ The ingestion app is containerized and can be invoked via `docker-compose` or st
 
 ```bash
 # Build the image
-docker-compose build ingestion
+docker compose build ingestion
 
 # Run a single ingestion job
-docker-compose run --rm ingestion \
+docker compose run --rm ingestion \
   --dataset=cams-europe-air-quality-forecasts-analysis \
   --date=2025-03-12 \
   --run-id=01890c24-905b-7122-b170-b60814e6ee06
