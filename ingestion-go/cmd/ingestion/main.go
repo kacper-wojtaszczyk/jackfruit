@@ -94,5 +94,4 @@ func main() {
 	}
 
 	slog.Info("shutdown complete")
-	os.Exit(exitcode.Success)
 }
