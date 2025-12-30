@@ -107,7 +107,7 @@ open http://localhost:3000
 ```
 
 **docker-compose.yml provides:**
-- MinIO (ports 9099, 9098)
+- MinIO (API: 9099, Console: 9098)
 - Dagster (port 3000) with host Docker socket mounted to run ingestion containers
 - Network for service communication
 
