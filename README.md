@@ -6,12 +6,13 @@ Environmental data platform. Ingests, transforms, and serves weather, air qualit
 
 **Early development.** Core pipeline taking shape:
 
-- [x] Architecture defined (5 layers)
+- [x] Architecture defined (infrastructure + 3 processing layers)
 - [x] Storage strategy decided (MinIO raw/curated buckets)
 - [x] Go ingestion CLI (CAMS adapter working)
 - [x] Dagster orchestration setup
 - [x] Ingestion asset (runs Go CLI via docker compose)
-- [ ] Python ETL assets — not started
+- [ ] Metadata DB (Postgres) — not started
+- [ ] Transformation assets — not started
 - [ ] Serving API — not started
 
 ## Quick Start
@@ -37,25 +38,33 @@ dg dev
 ## Architecture
 
 ```
-External APIs → [Ingestion/Go] → jackfruit-raw (MinIO)
-                                      ↓
-                         [ETL/Python + Dagster orchestration]
-                                      ↓
-                              jackfruit-curated (MinIO)
-                                      ↓
-                              [Serving/Go + DuckDB] → Clients
+┌─────────────────────────────────────────────────────────────┐
+│                      INFRASTRUCTURE                         │
+│   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│   │ Object Store │  │  Metadata DB │  │   Dagster    │      │
+│   │ (MinIO / S3) │  │  (Postgres)  │  │              │      │
+│   └──────────────┘  └──────────────┘  └──────────────┘      │
+└─────────────────────────────────────────────────────────────┘
+        │                    │                   │
+        ▼                    ▼                   ▼
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│ L1: Ingest   │ ──▶ │ L2: Transform│ ──▶ │ L3: Serving  │
+│    (Go)      │     │   (Python)   │     │    (Go)      │
+└──────────────┘     └──────────────┘     └──────────────┘
 ```
 
-| Layer | Tech | Status |
-|-------|------|--------|
-| Ingestion | Go CLI | ✅ Active (CAMS) |
-| Raw Storage | MinIO/S3 | ✅ Active |
+| Component | Tech | Status |
+|-----------|------|--------|
+| **Infrastructure** |||
+| Object Storage | MinIO / S3 | ✅ Active |
+| Metadata DB | Postgres | ⏳ Planned |
 | Orchestration | Dagster | ✅ Active |
-| ETL | Python + Dagster | 🚧 In progress |
-| Warehouse | ClickHouse | ⏸️ Deferred |
-| Serving | Go + DuckDB | ⏳ Planned |
+| **Processing Layers** |||
+| L1: Ingestion | Go CLI | ✅ Active (CAMS) |
+| L2: Transformation | Python + Dagster | 🚧 In progress |
+| L3: Serving | Go | ⏳ Planned |
 
-See `docs/` for layer details.
+See `docs/` for details.
 
 ## Project Structure
 

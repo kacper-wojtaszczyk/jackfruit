@@ -1,4 +1,4 @@
-# Layer 5 — Serving
+# Layer 3 — Serving
 
 Expose query interfaces for client projects. Abstracts storage backend from consumers.
 
@@ -7,7 +7,7 @@ Expose query interfaces for client projects. Abstracts storage backend from cons
 - API contracts and versioning
 - Request validation
 - Response formatting
-- Translating high-level queries to data store queries
+- Translating high-level queries to metadata DB + storage
 - Caching (if needed)
 
 ## Does NOT Do
@@ -27,10 +27,10 @@ Expose query interfaces for client projects. Abstracts storage backend from cons
 
 ## Data Source
 
-**MVP:** Query `jackfruit-curated` bucket directly via DuckDB(?) 
-**Future:** Query ClickHouse when performance requires it
+1. **Metadata DB (Postgres):** Query for tile locations matching bbox/time range
+2. **Object Storage (S3/MinIO):** Fetch actual data files from curated bucket
 
-The API contract stays the same regardless of backend.
+The API contract stays the same regardless of storage backend.
 
 ## Query Interface
 
@@ -59,5 +59,6 @@ Clients never:
 - [ ] API design (endpoints, request/response contracts)
 - [ ] Caching strategy
 - [ ] Error handling patterns
-- [ ] DuckDB integration for Parquet queries
+- [ ] GRIB file parsing/serving approach
+
 

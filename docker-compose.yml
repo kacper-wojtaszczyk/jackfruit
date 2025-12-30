@@ -38,6 +38,22 @@ services:
       LOG_LEVEL: debug
     networks:
       jackfruit:
+
+  dagster:
+    build:
+      context: ./pipeline-python
+      dockerfile: Dockerfile
+    environment:
+      # Dagster uses host Docker to run ingestion container
+      DOCKER_HOST: unix:///var/run/docker.sock
+      DAGSTER_HOME: /tmp/dagster_home
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./pipeline-python:/app
+    ports:
+      - "3000:3000"
+    networks:
+      jackfruit:
 networks:
     jackfruit:
 volumes:

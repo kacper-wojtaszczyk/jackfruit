@@ -22,6 +22,7 @@ Fetch raw data from external environmental APIs and store unchanged in the raw b
 - Rate limiting and retry logic
 - Scheduling fetch jobs (via Dagster subprocess)
 - Writing raw responses to `jackfruit-raw` bucket
+- Registering ingested files in metadata DB (TBD)
 - Logging for observability
 
 ## Does NOT Do
