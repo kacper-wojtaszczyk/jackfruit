@@ -4,7 +4,7 @@ Environmental data platform. Ingests, transforms, and serves weather, air qualit
 
 ## Status
 
-**Early development.** Core pipeline taking shape:
+**Early development:**
 
 - [x] Architecture defined (infrastructure + 3 processing layers)
 - [x] Storage strategy decided (MinIO raw/curated buckets)
@@ -20,19 +20,14 @@ Environmental data platform. Ingests, transforms, and serves weather, air qualit
 ```bash
 # Copy and configure secrets (first time)
 cp .env.example .env
-# Edit .env with your API keys and credentials
+# Edit .env with your API keys and credentials (ask kacper)
 
-# Start MinIO
+# Start MinIO and Dagster
 docker-compose up -d
 
-# MinIO console: http://localhost:9001 (minioadmin / minioadmin)
-# Create buckets (first time): jackfruit-raw, jackfruit-curated
-
-# Start Dagster (orchestration UI)
-cd pipeline-python
-uv sync
-dg dev
-# Dagster UI: http://localhost:3000
+# MinIO console: http://localhost:9098 (minioadmin / minioadmin)
+# Create buckets (first time): jackfruit-raw, jackfruit-curated (or not, they will auto-create)
+# Dagster UI: http://localhost:3099
 ```
 
 ## Architecture
