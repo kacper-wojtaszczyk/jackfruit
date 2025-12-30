@@ -103,12 +103,12 @@ Dagster is infrastructure, not a processing layer — it orchestrates Layers 1 a
 docker-compose up -d
 
 # Dagster UI
-open http://localhost:3000
+open http://localhost:3099
 ```
 
 **docker-compose.yml provides:**
 - MinIO (API: 9099, Console: 9098)
-- Dagster (port 3000) with host Docker socket mounted to run ingestion containers
+- Dagster (port 3099) with host Docker socket mounted to run ingestion containers
 - Network for service communication
 
 ## Environment Configuration
