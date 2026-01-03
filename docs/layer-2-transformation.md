@@ -1,4 +1,4 @@
-# Layer 3 — Transformation (ETL)
+# Layer 2 — Transformation
 
 Read raw data, normalize schemas, compute quality flags, and write to curated storage.
 
@@ -21,7 +21,9 @@ Read raw data, normalize schemas, compute quality flags, and write to curated st
 - Null/missing value flagging
 - Provenance tagging (source, ingestion time)
 - Spatial + temporal chunking for query efficiency
-- Writing metadata alongside data chunks
+- Writing curated data to `jackfruit-curated` bucket
+- Registering curated tiles in metadata DB (spatial/temporal bounds, S3 keys)
+- Recording lineage (which raw files → which curated files)
 
 ## Does NOT Do
 
