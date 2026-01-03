@@ -9,8 +9,8 @@ Environmental data platform. Ingests, transforms, and serves weather, air qualit
 - [x] Architecture defined (infrastructure + 3 processing layers)
 - [x] Storage strategy decided (MinIO raw/curated buckets)
 - [x] Go ingestion CLI (CAMS adapter working)
-- [x] Dagster orchestration setup
-- [x] Ingestion asset (runs Go CLI via docker compose)
+- [ ] Dagster orchestration setup
+- [ ] Ingestion asset (runs Go CLI via docker compose)
 - [ ] Metadata DB (Postgres) — not started
 - [ ] Transformation assets — not started
 - [ ] Serving API — not started

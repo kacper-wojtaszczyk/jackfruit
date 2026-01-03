@@ -174,4 +174,3 @@ Transformation jobs must be idempotent:
 - [ ] **Spatial chunking granularity** — lat/lon grid? Named regions? H3?
 - [ ] **Metadata format** — JSON sidecar? Postgres+PostGIS catalog?
 - [ ] **Dagster partitions** — daily partitions aligned with raw storage
-

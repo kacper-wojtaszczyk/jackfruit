@@ -60,5 +60,3 @@ Clients never:
 - [ ] Caching strategy
 - [ ] Error handling patterns
 - [ ] GRIB file parsing/serving approach
-
-

@@ -211,4 +211,3 @@ High-level improvements to revisit after MVP:
 ### Testing
 - [ ] **Integration test with real MinIO** — docker-compose test harness
 - [ ] **Golden file tests** — snapshot CDS request payloads
-
