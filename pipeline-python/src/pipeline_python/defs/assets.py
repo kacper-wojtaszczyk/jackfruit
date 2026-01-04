@@ -1,7 +1,11 @@
 """
 Ingestion assets for fetching and storing raw environmental data.
 
-These assets orchestrate the Go ingestion container via Docker (local) or ECS (AWS).
+These assets orchestrate the Go ingestion container via Docker.
+
+DEPRECATION NOTICE:
+This Go-based ingestion will be replaced with Python-native ingestion using cdsapi.
+See docs/layer-1-ingestion.md for details.
 """
 import uuid
 from datetime import datetime
@@ -15,7 +19,7 @@ class IngestionConfig(dg.Config):
     """Configuration for the ingestion asset."""
 
     date: str | None = None
-    dataset: str = "cams-europe-air-quality-forecasts-forecast"
+    dataset: str = "cams-europe-air-quality-forecasts-forecast"  # CAMS Europe Air Quality forecast
 
 
 @dg.asset
@@ -27,17 +31,15 @@ def ingest_cams_data(
     """
     Run the ingestion service to fetch and store raw CAMS data.
 
-    This asset uses the injected IngestionContainerClient to run the Go ingestion
-    CLI container. The client implementation determines whether this runs via
-    Docker (local dev) or ECS (AWS prod).
+    This asset uses the DockerIngestionClient to run the Go ingestion CLI container.
 
     Data will be written to the jackfruit-raw bucket following the pattern:
-        {source}/{dataset}/{variable}/ingest_date=YYYY-MM-DD/{filename}
+        {source}/{dataset}/{YYYY-MM-DD}/{run_id}.grib
 
     Args:
         context: Dagster execution context
         config: Ingestion configuration (date, dataset)
-        ingestion_client: Container client resource (Docker or ECS)
+        ingestion_client: Docker container client resource
 
     Returns:
         MaterializeResult with run metadata
@@ -50,8 +52,7 @@ def ingest_cams_data(
 
     context.log.info(f"Starting ingestion: dataset={config.dataset}, date={date}, run_id={run_id}")
 
-    # Delegate to the container client (Docker or ECS)
-    # TODO: Implement the client methods - they should return MaterializeResult
+    # Delegate to the container client
     return ingestion_client.run_ingestion(
         context,
         dataset=config.dataset,
