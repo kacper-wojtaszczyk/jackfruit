@@ -6,11 +6,11 @@ Read raw data, normalize schemas, compute quality flags, and write to curated st
 
 | Component | Status |
 |-----------|--------|
-| Dagster project setup | 🚧 In progress |
-| Containerized Go ingestion (for Dagster) | ✅ Done |
-| Dagster asset invoking ingestion | 🚧 In progress |
-| CAMS transformation asset | ⏳ Planned |
+| Dagster project setup | ✅ Done |
+| Dagster asset invoking Go ingestion | ✅ Done |
+| CAMS transformation asset | ⏳ Next |
 | Curated partitioning scheme | ⏳ Planned |
+| Curated file format | GRIB2 (decided) |
 
 ## Responsibilities
 
@@ -22,7 +22,6 @@ Read raw data, normalize schemas, compute quality flags, and write to curated st
 - Provenance tagging (source, ingestion time)
 - Spatial + temporal chunking for query efficiency
 - Writing curated data to `jackfruit-curated` bucket
-- Registering curated tiles in metadata DB (spatial/temporal bounds, S3 keys)
 - Recording lineage (which raw files → which curated files)
 
 ## Does NOT Do
@@ -42,87 +41,79 @@ Read raw data, normalize schemas, compute quality flags, and write to curated st
 
 ## Invoking Go Ingestion from Dagster
 
-The Go ingestion layer is containerized and invoked by Dagster as a subprocess/container run.
+> ⚠️ **Deprecation Notice:** The Go ingestion layer will be replaced with native Python ingestion using `cdsapi`. See [Layer 1 docs](layer-1-ingestion.md) for details. The current implementation works and unblocks development.
+
+The Go ingestion layer is containerized and invoked by Dagster using `PipesDockerClient`.
+
+**Current implementation:** Uses `dagster-docker` to spawn the ingestion container as a sibling on the host Docker daemon.
 
 **Pattern:**
 1. Dagster asset generates UUIDv7 for `run_id`
-2. Dagster invokes `docker-compose run ingestion --dataset=... --date=... --run-id=...`
-3. Dagster captures exit code and stdout logs
+2. `PipesDockerClient` spawns ingestion container with network and env vars configured
+3. Container runs, logs stream to Dagster
 4. On success (exit 0), downstream transformation assets can materialize
 
-**Example Dagster asset (pseudocode):**
-
-```python
-from dagster import asset, OpExecutionContext
-import subprocess
-import uuid
-
-@asset
-def raw_cams_air_quality(context: OpExecutionContext):
-    run_id = str(uuid.uuid7())
-    dataset = "cams-europe-air-quality-forecasts-analysis"
-    date = context.partition_key  # e.g., "2025-03-12"
-    
-    result = subprocess.run(
-        [
-            "docker-compose", "run", "--rm", "ingestion",
-            f"--dataset={dataset}",
-            f"--date={date}",
-            f"--run-id={run_id}",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    
-    if result.returncode != 0:
-        context.log.error(f"Ingestion failed: {result.stderr}")
-        raise Exception(f"Ingestion exit code {result.returncode}")
-    
-    context.log.info(f"Raw data ingested with run_id={run_id}")
-    return {"run_id": run_id, "dataset": dataset, "date": date}
-```
+**Key configuration (Docker sibling pattern):**
+- Network: `jackfruit_jackfruit` (so container can reach MinIO)
+- Env vars: Forwarded from Dagster container (`ADS_*`, `MINIO_*`)
 
 **Exit code handling:**
 - `0`: Success → materialize downstream assets
-- `1`: Config error → fail immediately, alert human
-- `2`: Application error → retry with backoff (future: split into retryable vs not)
-
-**Alternative:** Use Dagster's `DockerRunLauncher` or `K8sRunLauncher` for more integrated execution.
+- `1`: Config error → fail immediately
+- `2`: Application error → retry with backoff (future)
 
 ## Storage
 
-**Input:** `jackfruit-raw` bucket  
+**Input:** `jackfruit-raw` bucket (for API-sourced data)  
 **Output:** `jackfruit-curated` bucket
 
-ETL reads raw, writes curated. Never mutates raw.
+ETL reads raw (or public S3 directly for large datasets), writes curated. Never mutates raw.
 
 **Raw path pattern:** `{source}/{dataset}/{YYYY-MM-DD}/{run_id}.{ext}`
 - ETL can list by date prefix and then by run_id
 - Dataset name includes variants (e.g., `cams-europe-air-quality-forecasts-analysis`)
-- Multi-variable NetCDF files are introspected with `xarray` (`ds.data_vars`)
-- Each variable is split into separate curated partitions
+- Multi-variable GRIB files are introspected with `xarray` + `cfgrib`
+- Each variable is split into separate curated files
+
+## Curated File Format
+
+**Format:** GRIB2
+
+**Why GRIB2:**
+- Native format for gridded meteorological data — no conversion overhead
+- Coordinate-aware (lat/lon/time built-in)
+- Go serving layer can read via `eccodes` bindings
+- Compact and well-supported by ECMWF tools
+
+**Alternatives considered:**
+- Zarr: Cloud-native but poor Go support
+- Parquet: Columnar, loses grid structure
+- NetCDF: Good but less cloud-optimized than GRIB2
 
 ## Curated Partitioning
 
-**Partition by event time first, then space.**
+**Partition by event time, one file per variable.**
 
 ```
 curated/
-  dataset=weather/
-    temporal_resolution=hourly/
-      year=2025/
-        month=03/
-          day=11/
-            hour=12/
-              spatial_chunk=<TBD>/
-                data.parquet
-                metadata.json
+  source=cams/
+    dataset=europe-air-quality/
+      variable=pm2p5/
+        year=2025/
+          month=03/
+            day=11/
+              data.grib2
 ```
 
 **Principles:**
-- Time-first (most selective for queries)
-- Spatial chunking comes after time
-- Each chunk = manageable query unit (MBs, not GBs)
+- Time-first partitioning (most selective for queries)
+- One variable per file (simplifies serving layer aggregation)
+- Europe-only for MVP (no spatial tiling needed yet)
+- Each file = manageable size (tens of MB for Europe)
+
+**Deferred:**
+- Spatial tiling — not needed for Europe-only single-metric files
+- Can add later if file sizes grow or global coverage is added
 
 ## Multi-Resolution Sources
 
@@ -138,24 +129,18 @@ Queries can snap to nearest timestamp, interpolate, or aggregate.
 
 ## Metadata
 
-Each curated chunk should have metadata (format TBD):
+GRIB2 files are self-describing (coordinates, units, CRS embedded). Additional metadata TBD:
 
-- Source dataset
-- Temporal bounds (start, end)
-- Spatial bounds (bbox or region)
-- Units
-- CRS
 - Processing version
-- Checksum of input files
+- Lineage (source raw file checksums)
+- Ingest timestamp
 
 ## Processing Libraries
 
 | Format | Library |
 |--------|---------|
-| NetCDF | `xarray` + `netCDF4` |
-| GRIB | `xarray` + `cfgrib` |
-| GeoTIFF | `rasterio` |
-| Parquet | `pyarrow` |
+| GRIB | `xarray` + `cfgrib` (primary) |
+| NetCDF | `xarray` + `netCDF4` (if needed) |
 
 ## Idempotency
 
