@@ -4,6 +4,7 @@ requires-python = ">=3.10,<3.15"
 version = "0.1.0"
 dependencies = [
     "dagster==1.12.7",
+    "dagster-docker>=0.26.0",
 ]
 
 [dependency-groups]
@@ -29,5 +30,3 @@ root_module = "pipeline_python"
 registry_modules = [
     "pipeline_python.components.*",
 ]
-
-
