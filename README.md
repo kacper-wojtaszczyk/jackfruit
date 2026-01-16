@@ -11,7 +11,7 @@ Environmental data platform. Ingests, transforms, and serves weather, air qualit
 - [x] Go ingestion CLI (CAMS adapter working)
 - [x] Dagster orchestration setup
 - [x] Ingestion asset (runs Go CLI via docker compose)
-- [ ] CAMS transformation asset — [in progress](docs/impl-cams-transformation.md)
+- [ ] CAMS transformation asset — [in progress](https://github.com/kacper-wojtaszczyk/jackfruit/issues/12)
 - [ ] Metadata DB (Postgres) — not started
 - [ ] Serving API — not started
 
