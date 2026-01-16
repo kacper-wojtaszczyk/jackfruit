@@ -80,8 +80,9 @@ ETL reads raw (or public S3 directly for large datasets), writes curated. Never 
 - Dataset name is deterministic per transform asset (e.g., `cams-europe-air-quality-forecasts-analysis`)
 
 **Processing:**
-- Multi-variable GRIB files are introspected with `xarray` + `cfgrib`
-- Each variable is split into separate curated files (one timestamp per file)
+- Multi-variable GRIB files are read with `grib2io` (NOAA's GRIB2 library)
+- Each variable/timestamp is split into separate curated files
+- Single message per output file for serving layer simplicity
 
 ## Curated File Format
 
@@ -224,8 +225,14 @@ If any variable fails to extract or write:
 
 | Format | Library |
 |--------|---------|
-| GRIB | `xarray` + `cfgrib` (primary) |
-| NetCDF | `xarray` + `netCDF4` (if needed) |
+| GRIB2 | [`grib2io`](https://github.com/NOAA-MDL/grib2io) — NOAA's GRIB2 read/write library |
+
+**Why grib2io:**
+- Full GRIB2 read AND write support
+- Native Python API with clean context managers
+- Python 3.10-3.14 support
+- Uses NCEP g2c library backend
+- Maintained by NOAA MDL — production-quality library
 
 ## Idempotency
 
