@@ -6,11 +6,13 @@ Read raw data, normalize schemas, compute quality flags, and write to curated st
 
 | Component | Status |
 |-----------|--------|
-| Dagster project setup | 🚧 In progress |
-| Containerized Go ingestion (for Dagster) | ✅ Done |
-| Dagster asset invoking ingestion | 🚧 In progress |
-| CAMS transformation asset | ⏳ Planned |
-| Curated partitioning scheme | ⏳ Planned |
+| Dagster project setup | ✅ Done |
+| Dagster asset invoking Go ingestion | ✅ Done |
+| CAMS transformation asset | ⏳ Next |
+| Curated partitioning scheme | ✅ Decided |
+| Curated file format | GRIB2 (decided) |
+| Error handling | Fail-fast (decided) |
+| Metadata storage | Dagster → Postgres (decided) |
 
 ## Responsibilities
 
@@ -22,7 +24,6 @@ Read raw data, normalize schemas, compute quality flags, and write to curated st
 - Provenance tagging (source, ingestion time)
 - Spatial + temporal chunking for query efficiency
 - Writing curated data to `jackfruit-curated` bucket
-- Registering curated tiles in metadata DB (spatial/temporal bounds, S3 keys)
 - Recording lineage (which raw files → which curated files)
 
 ## Does NOT Do
@@ -42,120 +43,196 @@ Read raw data, normalize schemas, compute quality flags, and write to curated st
 
 ## Invoking Go Ingestion from Dagster
 
-The Go ingestion layer is containerized and invoked by Dagster as a subprocess/container run.
+> ⚠️ **Deprecation Notice:** The Go ingestion layer will be replaced with native Python ingestion using `cdsapi`. See [Layer 1 docs](layer-1-ingestion.md) for details. The current implementation works and unblocks development.
+
+The Go ingestion layer is containerized and invoked by Dagster using `PipesDockerClient`.
+
+**Current implementation:** Uses `dagster-docker` to spawn the ingestion container as a sibling on the host Docker daemon.
 
 **Pattern:**
 1. Dagster asset generates UUIDv7 for `run_id`
-2. Dagster invokes `docker-compose run ingestion --dataset=... --date=... --run-id=...`
-3. Dagster captures exit code and stdout logs
+2. `PipesDockerClient` spawns ingestion container with network and env vars configured
+3. Container runs, logs stream to Dagster
 4. On success (exit 0), downstream transformation assets can materialize
 
-**Example Dagster asset (pseudocode):**
-
-```python
-from dagster import asset, OpExecutionContext
-import subprocess
-import uuid
-
-@asset
-def raw_cams_air_quality(context: OpExecutionContext):
-    run_id = str(uuid.uuid7())
-    dataset = "cams-europe-air-quality-forecasts-analysis"
-    date = context.partition_key  # e.g., "2025-03-12"
-    
-    result = subprocess.run(
-        [
-            "docker-compose", "run", "--rm", "ingestion",
-            f"--dataset={dataset}",
-            f"--date={date}",
-            f"--run-id={run_id}",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    
-    if result.returncode != 0:
-        context.log.error(f"Ingestion failed: {result.stderr}")
-        raise Exception(f"Ingestion exit code {result.returncode}")
-    
-    context.log.info(f"Raw data ingested with run_id={run_id}")
-    return {"run_id": run_id, "dataset": dataset, "date": date}
-```
+**Key configuration (Docker sibling pattern):**
+- Network: `jackfruit_jackfruit` (so container can reach MinIO)
+- Env vars: Forwarded from Dagster container (`ADS_*`, `MINIO_*`)
 
 **Exit code handling:**
 - `0`: Success → materialize downstream assets
-- `1`: Config error → fail immediately, alert human
-- `2`: Application error → retry with backoff (future: split into retryable vs not)
-
-**Alternative:** Use Dagster's `DockerRunLauncher` or `K8sRunLauncher` for more integrated execution.
+- `1`: Config error → fail immediately
+- `2`: Application error → retry with backoff (future)
 
 ## Storage
 
-**Input:** `jackfruit-raw` bucket  
+**Input:** `jackfruit-raw` bucket (for API-sourced data)  
 **Output:** `jackfruit-curated` bucket
 
-ETL reads raw, writes curated. Never mutates raw.
+ETL reads raw (or public S3 directly for large datasets), writes curated. Never mutates raw.
 
 **Raw path pattern:** `{source}/{dataset}/{YYYY-MM-DD}/{run_id}.{ext}`
-- ETL can list by date prefix and then by run_id
-- Dataset name includes variants (e.g., `cams-europe-air-quality-forecasts-analysis`)
-- Multi-variable NetCDF files are introspected with `xarray` (`ds.data_vars`)
-- Each variable is split into separate curated partitions
+
+**Raw file selection:** Explicit lineage via `run_id` from ingestion asset metadata.
+- Ingestion asset outputs `run_id` in `MaterializeResult.metadata`
+- Transform asset reads upstream metadata to construct exact raw key
+- No S3 LIST operations needed — direct GET by constructed key
+- Dataset name is deterministic per transform asset (e.g., `cams-europe-air-quality-forecasts-analysis`)
+
+**Processing:**
+- Multi-variable GRIB files are read with `grib2io` (NOAA's GRIB2 library)
+- Each variable/timestamp is split into separate curated files
+- Single message per output file for serving layer simplicity
+
+## Curated File Format
+
+**Format:** GRIB2
+
+**Why GRIB2:**
+- Native format for gridded meteorological data — no conversion overhead
+- Coordinate-aware (lat/lon/time built-in)
+- Go serving layer can read via `eccodes` bindings
+- Compact and well-supported by ECMWF tools
+
+**Alternatives considered:**
+- Zarr: Cloud-native but poor Go support
+- Parquet: Columnar, loses grid structure
+- NetCDF: Good but less cloud-optimized than GRIB2
 
 ## Curated Partitioning
 
-**Partition by event time first, then space.**
+**One file per variable per timestamp.** Path structure ends where granularity ends.
+
+### Key Structure (Plain Paths)
 
 ```
-curated/
-  dataset=weather/
-    temporal_resolution=hourly/
-      year=2025/
-        month=03/
-          day=11/
-            hour=12/
-              spatial_chunk=<TBD>/
-                data.parquet
-                metadata.json
+curated/{source}/{dataset}/{variable}/{year}/{month}/{day}/{hour}/data.grib2   # hourly
+curated/{source}/{dataset}/{variable}/{year}/{month}/{day}/data.grib2          # daily
+curated/{source}/{dataset}/{variable}/{year}/W{week}/data.grib2                # weekly (ISO week)
 ```
 
-**Principles:**
-- Time-first (most selective for queries)
-- Spatial chunking comes after time
-- Each chunk = manageable query unit (MBs, not GBs)
+### Examples by Source
+
+| Source | Granularity | Example Path |
+|--------|-------------|--------------|
+| CAMS | Hourly | `curated/cams/europe-air-quality/pm2p5/2025/03/11/14/data.grib2` |
+| ERA5 | Hourly | `curated/era5/reanalysis/temperature/2025/03/11/00/data.grib2` |
+| GloFAS | Daily | `curated/glofas/river-discharge/discharge/2025/03/11/data.grib2` |
+| CGLS | Weekly | `curated/cgls/ndvi/ndvi/2025/W11/data.grib2` |
+
+### Design Principles
+
+- **Plain paths** — no `key=value` Hive-style, simpler key construction in Go
+- **Single timestamp per file** — serving layer fetches exactly one file per query
+- **Time-first partitioning** — most selective dimension for queries
+- **Granularity in path depth** — hourly paths deeper than daily, weekly uses ISO week
+- **Filename is always `data.grib2`** — time components are directories
+
+### Why Single-Timestamp Files?
+
+Optimized for the serving layer query pattern:
+
+1. Client requests: "PM2.5 for Berlin at 2025-03-11T14:37:00Z"
+2. Server snaps to nearest hour: `14:00`
+3. Server constructs key: `curated/cams/europe-air-quality/pm2p5/2025/03/11/14/data.grib2`
+4. Server fetches single file via direct S3 GET (no listing)
+5. Server extracts grid cell, returns value
+
+**Trade-offs accepted:**
+- More files (CAMS: ~88K files/year) — S3 handles this fine
+- Small file overhead (~5%) — acceptable for query simplicity
+- Write amplification in ETL (raw→many curated) — ETL runs once, serving queries many times
+
+### Serving Layer Key Construction (Go)
+
+```go
+// Hourly
+key := fmt.Sprintf("curated/%s/%s/%s/%04d/%02d/%02d/%02d/data.grib2",
+    source, dataset, variable, year, month, day, hour)
+
+// Daily
+key := fmt.Sprintf("curated/%s/%s/%s/%04d/%02d/%02d/data.grib2",
+    source, dataset, variable, year, month, day)
+
+// Weekly (ISO week)
+year, week := timestamp.ISOWeek()
+key := fmt.Sprintf("curated/%s/%s/%s/%04d/W%02d/data.grib2",
+    source, dataset, variable, year, week)
+```
+
+### Scope
+
+- **MVP:** Europe only (no spatial tiling needed)
+- **Future:** Add spatial partitioning if file sizes grow or global coverage added
 
 ## Multi-Resolution Sources
 
-Different sources have different temporal resolutions. Don't force alignment too early.
+Different sources have different temporal resolutions. Each source has a defined granularity.
 
-| Source Type | Resolution |
-|-------------|------------|
-| ERA5, CAMS | Hourly |
-| Satellite imagery | Daily/weekly |
-| River discharge | Daily |
+| Source | Granularity | Resolution |
+|--------|-------------|------------|
+| CAMS | Hourly | 1 hour |
+| ERA5 | Hourly | 1 hour |
+| GloFAS | Daily | 1 day |
+| CGLS (NDVI) | Weekly | ISO week |
 
-Queries can snap to nearest timestamp, interpolate, or aggregate.
+**Granularity config:** Serving layer maintains a simple lookup (source → granularity) to snap query timestamps to the correct resolution.
 
 ## Metadata
 
-Each curated chunk should have metadata (format TBD):
+GRIB2 files are self-describing (coordinates, units, CRS embedded). 
 
-- Source dataset
-- Temporal bounds (start, end)
-- Spatial bounds (bbox or region)
-- Units
-- CRS
-- Processing version
-- Checksum of input files
+### Current: Dagster Metadata
+
+Lineage and processing metadata stored in `MaterializeResult.metadata`:
+
+```python
+return dg.MaterializeResult(
+    metadata={
+        "run_id": run_id,
+        "raw_key": raw_key,
+        "curated_keys": curated_keys,  # list of output paths
+        "variables_processed": variables,
+        "processing_version": "1.0.0",
+    }
+)
+```
+
+### Future: Postgres Catalog
+
+Migrate to Postgres for queryable metadata:
+- Which raw files → which curated files (lineage)
+- Processing version per curated file
+- Temporal/spatial bounds index for serving layer queries
+
+**Migration path:** Keep Dagster metadata structure consistent so it can be written to Postgres when ready.
+
+## Error Handling
+
+**Strategy: Fail-fast, no partial updates.**
+
+If any variable fails to extract or write:
+- Entire asset fails
+- No partial curated files written
+- Retry processes all variables again
+
+**Rationale:**
+- Simpler to reason about — asset either succeeds completely or fails completely
+- Avoids inconsistent state in curated bucket
+- Can refine later if specific failure modes warrant partial success
 
 ## Processing Libraries
 
 | Format | Library |
 |--------|---------|
-| NetCDF | `xarray` + `netCDF4` |
-| GRIB | `xarray` + `cfgrib` |
-| GeoTIFF | `rasterio` |
-| Parquet | `pyarrow` |
+| GRIB2 | [`grib2io`](https://github.com/NOAA-MDL/grib2io) — NOAA's GRIB2 read/write library |
+
+**Why grib2io:**
+- Full GRIB2 read AND write support
+- Native Python API with clean context managers
+- Python 3.10-3.14 support
+- Uses NCEP g2c library backend
+- Maintained by NOAA MDL — production-quality library
 
 ## Idempotency
 
@@ -171,6 +248,5 @@ Transformation jobs must be idempotent:
 - [ ] **Derived metrics** — compute here vs push to serving layer?
 - [ ] **Schema evolution strategy** — how to handle breaking changes
 - [ ] **Backfill strategy** — bulk historical data processing
-- [ ] **Spatial chunking granularity** — lat/lon grid? Named regions? H3?
-- [ ] **Metadata format** — JSON sidecar? Postgres+PostGIS catalog?
-- [ ] **Dagster partitions** — daily partitions aligned with raw storage
+- [ ] **Spatial chunking** — add when needed for global coverage or large files
+- [ ] **Postgres metadata catalog** — migrate from Dagster metadata
