@@ -38,6 +38,30 @@ services:
       LOG_LEVEL: debug
     networks:
       jackfruit:
+
+  dagster:
+    build:
+      context: ./pipeline-python
+      dockerfile: Dockerfile
+    environment:
+      # Dagster env
+      ENV: ${ENV}
+      DOCKER_HOST: unix:///var/run/docker.sock
+      # Forwarded to ingestion sibling container
+      ADS_BASE_URL: ${ADS_BASE_URL}
+      ADS_API_KEY: ${ADS_API_KEY}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./pipeline-python:/app
+    ports:
+      - "3099:3000"
+    networks:
+      jackfruit:
 networks:
     jackfruit:
 volumes:

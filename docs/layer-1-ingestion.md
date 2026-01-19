@@ -6,21 +6,38 @@ Fetch raw data from external environmental APIs and store unchanged in the raw b
 
 | Component | Status |
 |-----------|--------|
-| CDS API client (async job pattern) | ✅ Done |
-| CLI with flags (`--date`, `--dataset`, `--run-id`) | ✅ Done |
-| MinIO storage integration | ✅ Done |
-| Structured logging (slog/JSON) | ✅ Done |
-| CAMS Europe Air Quality datasets | ✅ Done |
-| Containerization (Docker) | ✅ Done |
-| Dagster orchestration | 🚧 In progress |
-| GloFAS dataset | ⏳ Next |
+| CDS API client (async job pattern) | ✅ Done (Go) |
+| CLI with flags (`--date`, `--dataset`, `--run-id`) | ✅ Done (Go) |
+| MinIO storage integration | ✅ Done (Go) |
+| Structured logging (slog/JSON) | ✅ Done (Go) |
+| CAMS Europe Air Quality datasets | ✅ Done (Go) |
+| Containerization (Docker) | ✅ Done (Go) |
+| Dagster orchestration (Docker client) | ✅ Done |
+| Python-native ingestion rewrite | ⏳ Planned |
+| GloFAS dataset | ⏳ Planned |
 | Retry/rate limiting | ⏳ Planned |
+
+## ⚠️ Migration Notice: Go → Python
+
+**Current state:** Go CLI invoked via Docker from Dagster (`PipesDockerClient`).
+
+**Planned:** Rewrite ingestion as native Python Dagster assets using `cdsapi`.
+
+**Why migrate:**
+- Container orchestration adds complexity (Docker sibling pattern, env var forwarding, network config)
+- Original parallelism rationale is moot — CDS returns single aggregated files, no benefit from goroutines
+- Unified Python stack simplifies the pipeline (ingestion + transformation in one language)
+- Go's strengths are better utilized in the serving layer (concurrent client requests)
+
+**Timeline:** Migrate when convenient. Go implementation is functional and unblocks development.
+
+**What stays:** Go serving layer (Layer 5) — genuine benefits from multi-threaded execution there.
 
 ## Responsibilities
 
 - API authentication and key management
 - Rate limiting and retry logic
-- Scheduling fetch jobs (via Dagster subprocess)
+- Scheduling fetch jobs (via Dagster)
 - Writing raw responses to `jackfruit-raw` bucket
 - Logging for observability
 
@@ -33,13 +50,31 @@ Fetch raw data from external environmental APIs and store unchanged in the raw b
 
 ## Technology
 
+### Current: Go (deprecated, to be replaced)
+
 **Language:** Go
 
-**Why Go:**
+**Why Go was chosen:**
 - Single static binary — trivial deployment
 - Native concurrency (goroutines) for parallel fetching
 - Explicit error handling
 - Full control over HTTP without SDK abstractions
+
+**Why Go is being replaced:**
+- Parallelism benefit didn't materialize (CDS API returns single files)
+- Container-in-container orchestration from Dagster is complex
+- Python `cdsapi` library handles async job pattern natively
+
+### Future: Python
+
+**Language:** Python (with `cdsapi` library)
+**Orchestration:** Native Dagster assets
+
+**Benefits:**
+- Same language as transformation layer
+- No container orchestration overhead
+- `cdsapi` handles CDS async job pattern (submit → poll → download)
+- Simpler configuration (no env var forwarding between containers)
 
 ## Storage Contract
 
@@ -210,4 +245,3 @@ High-level improvements to revisit after MVP:
 ### Testing
 - [ ] **Integration test with real MinIO** — docker-compose test harness
 - [ ] **Golden file tests** — snapshot CDS request payloads
-
