@@ -6,7 +6,7 @@ Tests the GRIB validation script functionality.
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
@@ -72,7 +72,7 @@ class TestCreateS3Client:
         monkeypatch.setenv("MINIO_SECRET_KEY", "test-secret")
         monkeypatch.delenv("MINIO_ENDPOINT_URL", raising=False)
         
-        with patch("grib_sanity_check.boto3.client") as mock_boto3:
+        with patch("boto3.client") as mock_boto3:
             create_s3_client()
             
             mock_boto3.assert_called_once()
@@ -85,7 +85,7 @@ class TestCreateS3Client:
         monkeypatch.setenv("MINIO_SECRET_KEY", "test-secret")
         monkeypatch.setenv("MINIO_ENDPOINT_URL", "http://custom:8000")
         
-        with patch("grib_sanity_check.boto3.client") as mock_boto3:
+        with patch("boto3.client") as mock_boto3:
             create_s3_client()
             
             call_kwargs = mock_boto3.call_args[1]
@@ -113,7 +113,7 @@ class TestDownloadFromS3:
         monkeypatch.setenv("MINIO_ACCESS_KEY", "test-key")
         monkeypatch.setenv("MINIO_SECRET_KEY", "test-secret")
         
-        with patch("grib_sanity_check.boto3.client") as mock_boto3:
+        with patch("boto3.client") as mock_boto3:
             mock_client = Mock()
             mock_boto3.return_value = mock_client
             
@@ -146,14 +146,12 @@ class TestInspectGribFile:
                 f.write(b"GRIB")  # GRIB magic number
             
             # Mock grib2io.open to return empty message list
-            with patch("grib_sanity_check.grib2io.open") as mock_open:
-                mock_grb = Mock()
-                mock_grb.__enter__.return_value = mock_grb
-                mock_grb.__exit__.return_value = None
+            with patch("grib2io.open") as mock_open:
+                mock_grb = MagicMock()
                 mock_grb.__len__.return_value = 0
                 mock_grb.__iter__.return_value = iter([])
-                mock_open.return_value = mock_grb
-                
+                mock_open.return_value.__enter__.return_value = mock_grb
+
                 inspect_grib_file(temp_path)
             
             captured = capsys.readouterr()
@@ -179,22 +177,22 @@ class TestMain:
         """Should return exit code 0 for valid local file."""
         with tempfile.NamedTemporaryFile(suffix=".grib", delete=False) as f:
             temp_path = Path(f.name)
-        
+            # Write dummy data so file is not empty (main() checks for empty files)
+            f.write(b"GRIB dummy data")
+
         try:
             # Mock grib2io.open to simulate successful read
-            with patch("grib_sanity_check.grib2io.open") as mock_open:
-                mock_grb = Mock()
-                mock_grb.__enter__.return_value = mock_grb
-                mock_grb.__exit__.return_value = None
+            with patch("grib2io.open") as mock_open:
+                mock_grb = MagicMock()
                 mock_grb.__len__.return_value = 0
                 mock_grb.__iter__.return_value = iter([])
-                mock_open.return_value = mock_grb
-                
+                mock_open.return_value.__enter__.return_value = mock_grb
+
                 with patch("sys.argv", ["grib_sanity_check.py", str(temp_path)]):
                     exit_code = main()
             
-            assert exit_code == 0
             captured = capsys.readouterr()
+            assert exit_code == 0, f"Exit code was {exit_code}. stdout: {captured.out}, stderr: {captured.err}"
             assert "✅ grib2io successfully read the GRIB file!" in captured.out
         finally:
             temp_path.unlink()
@@ -204,25 +202,24 @@ class TestMain:
         monkeypatch.setenv("MINIO_ACCESS_KEY", "test-key")
         monkeypatch.setenv("MINIO_SECRET_KEY", "test-secret")
         
-        with patch("grib_sanity_check.boto3.client") as mock_boto3:
+        with patch("boto3.client") as mock_boto3:
             mock_client = Mock()
             mock_boto3.return_value = mock_client
             
             # Mock successful download
             def mock_download(bucket, key, local_path):
-                Path(local_path).touch()
-            
+                # Write dummy data so file is not empty (main() checks for empty files)
+                Path(local_path).write_bytes(b"GRIB dummy data")
+
             mock_client.download_file.side_effect = mock_download
             
             # Mock grib2io.open
-            with patch("grib_sanity_check.grib2io.open") as mock_open:
-                mock_grb = Mock()
-                mock_grb.__enter__.return_value = mock_grb
-                mock_grb.__exit__.return_value = None
+            with patch("grib2io.open") as mock_open:
+                mock_grb = MagicMock()
                 mock_grb.__len__.return_value = 0
                 mock_grb.__iter__.return_value = iter([])
-                mock_open.return_value = mock_grb
-                
+                mock_open.return_value.__enter__.return_value = mock_grb
+
                 with patch("sys.argv", ["grib_sanity_check.py", "s3://bucket/key/file.grib"]):
                     exit_code = main()
         
@@ -235,7 +232,7 @@ class TestMain:
         monkeypatch.setenv("MINIO_ACCESS_KEY", "test-key")
         monkeypatch.setenv("MINIO_SECRET_KEY", "test-secret")
         
-        with patch("grib_sanity_check.boto3.client") as mock_boto3:
+        with patch("boto3.client") as mock_boto3:
             mock_client = Mock()
             mock_boto3.return_value = mock_client
             mock_client.download_file.side_effect = Exception("Network error")

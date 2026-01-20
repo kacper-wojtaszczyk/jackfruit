@@ -37,7 +37,7 @@ class TestObjectStorageResourceDownloadRaw:
     
     def test_downloads_file_successfully(self, storage_resource, mock_s3_client):
         """Should download file from raw bucket."""
-        with patch.object(storage_resource, "_get_client", return_value=mock_s3_client):
+        with patch("pipeline_python.defs.resources.boto3.client", return_value=mock_s3_client):
             with tempfile.TemporaryDirectory() as tmpdir:
                 local_path = Path(tmpdir) / "downloaded.grib"
                 
@@ -51,7 +51,7 @@ class TestObjectStorageResourceDownloadRaw:
     
     def test_creates_parent_directories(self, storage_resource, mock_s3_client):
         """Should create parent directories if they don't exist."""
-        with patch.object(storage_resource, "_get_client", return_value=mock_s3_client):
+        with patch("pipeline_python.defs.resources.boto3.client", return_value=mock_s3_client):
             with tempfile.TemporaryDirectory() as tmpdir:
                 local_path = Path(tmpdir) / "nested" / "dir" / "downloaded.grib"
                 
@@ -74,7 +74,7 @@ class TestObjectStorageResourceDownloadRaw:
         error_response = {"Error": {"Code": "NoSuchKey", "Message": "Not found"}}
         mock_s3_client.download_file.side_effect = ClientError(error_response, "download_file")
         
-        with patch.object(storage_resource, "_get_client", return_value=mock_s3_client):
+        with patch("pipeline_python.defs.resources.boto3.client", return_value=mock_s3_client):
             with tempfile.TemporaryDirectory() as tmpdir:
                 local_path = Path(tmpdir) / "file.grib"
                 
@@ -87,7 +87,7 @@ class TestObjectStorageResourceUploadCurated:
     
     def test_uploads_file_successfully(self, storage_resource, mock_s3_client):
         """Should upload file to curated bucket."""
-        with patch.object(storage_resource, "_get_client", return_value=mock_s3_client):
+        with patch("pipeline_python.defs.resources.boto3.client", return_value=mock_s3_client):
             with tempfile.NamedTemporaryFile(delete=False) as f:
                 local_path = Path(f.name)
             
@@ -139,7 +139,7 @@ class TestObjectStorageResourceKeyExists:
     
     def test_returns_true_for_existing_key(self, storage_resource, mock_s3_client):
         """Should return True if key exists."""
-        with patch.object(storage_resource, "_get_client", return_value=mock_s3_client):
+        with patch("pipeline_python.defs.resources.boto3.client", return_value=mock_s3_client):
             result = storage_resource.key_exists("test-raw", "ads/dataset/file.grib")
             
             assert result is True
@@ -154,7 +154,7 @@ class TestObjectStorageResourceKeyExists:
             {"Error": {"Code": "404"}}, "head_object"
         )
         
-        with patch.object(storage_resource, "_get_client", return_value=mock_s3_client):
+        with patch("pipeline_python.defs.resources.boto3.client", return_value=mock_s3_client):
             result = storage_resource.key_exists("test-raw", "missing/file.grib")
             
             assert result is False

@@ -89,8 +89,8 @@ class TestProductDefinitionTemplate40:
     
     def test_has_atmospheric_constituent_field(self):
         """Template should have atmosphericChemicalConstituentType field."""
-        assert hasattr(ProductDefinitionTemplate40, "atmosphericChemicalConstituentType")
-    
+        assert "atmosphericChemicalConstituentType" in ProductDefinitionTemplate40.__dataclass_fields__
+
     def test_inherits_from_base_templates(self):
         """Template should inherit from required base classes."""
         import grib2io.templates as templates
