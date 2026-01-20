@@ -3,7 +3,6 @@ Tests for grib2io_patch module.
 
 Tests the PDT 4.40 patch for atmospheric chemical constituents.
 """
-import pytest
 
 from pipeline_python.grib2io_patch import (
     CONSTITUENT_TYPE_NAMES,

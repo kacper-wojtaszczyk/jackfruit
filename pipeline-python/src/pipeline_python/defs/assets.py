@@ -52,28 +52,17 @@ def ingest_cams_data(
     Returns:
         MaterializeResult with run metadata
     """
-    # Generate UUIDv7 run-id for traceability
     run_id = str(uuid.uuid7())
 
-    # Use today's date if not provided
     date = context.partition_key
 
     context.log.info(f"Starting ingestion: dataset={config.dataset}, date={date}, run_id={run_id}")
 
-    # Delegate to the container client
-    result = ingestion_client.run_ingestion(
+    return ingestion_client.run_ingestion(
         context,
         dataset=config.dataset,
         date=date,
         run_id=run_id,
-    )
-
-    return dg.MaterializeResult(
-        metadata={
-            "run_id": run_id,
-            "dataset": config.dataset,
-            "date": date,
-        }
     )
 
 # GRIB2 Table 4.230 constituent type codes we want to process
