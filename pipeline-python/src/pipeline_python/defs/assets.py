@@ -158,9 +158,9 @@ def _write_curated_grib(
         f"Processing {var_name} (code={constituent_code}) at {year}-{month:02d}-{day:02d} {hour:02d}:00"
     )
 
-    # Construct curated key
+    # Construct curated key (no prefix - bucket is already jackfruit-curated)
     curated_key = (
-        f"curated/cams/europe-air-quality/{var_name}/"
+        f"cams/europe-air-quality/{var_name}/"
         f"{year:04d}/{month:02d}/{day:02d}/{hour:02d}/data.grib2"
     )
 
@@ -203,8 +203,8 @@ def transform_cams_data(
     Reads multi-variable GRIB from raw bucket, splits by variable and hour,
     writes individual GRIB2 files to curated bucket.
 
-    Output path pattern:
-        curated/cams/europe-air-quality/{variable}/{year}/{month}/{day}/{hour}/data.grib2
+    Output path pattern (in jackfruit-curated bucket):
+        cams/europe-air-quality/{variable}/{year}/{month}/{day}/{hour}/data.grib2
 
     Args:
         context: Dagster execution context
@@ -322,7 +322,7 @@ def transform_cams_data(
             "run_id": run_id,
             "date": date,
             "curated_keys": curated_keys,
-            "variables_processed": list(set(k.split("/")[3] for k in curated_keys)) if curated_keys else [],
+            "variables_processed": list(set(k.split("/")[2] for k in curated_keys)) if curated_keys else [],
             "files_written": len(curated_keys),
             "total_messages": num_messages,
         }

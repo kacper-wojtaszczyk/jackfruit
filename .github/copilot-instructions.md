@@ -11,19 +11,24 @@ Domain: weather, air quality, hydrology, vegetation — bulk/gridded datasets, n
 </project_context>
 
 <architecture>
-Five-layer pipeline:
+Three processing layers + infrastructure:
 
-| Layer | Name | Tech | MVP Status |
-|-------|------|------|------------|
-| 1 | Ingestion | Python (Go deprecated) | Active |
-| 2 | Raw Storage | MinIO/S3 | Active |
-| 3 | Transformation/ETL | Python + Dagster | Active |
-| 4 | Warehouse | ClickHouse | On-hold |
-| 5 | Serving API | Go | Planned |
+**Infrastructure** (not a processing layer):
+- Object Storage: MinIO/S3 (raw + curated buckets)
+- Metadata DB: Postgres (planned)
+- Orchestration: Dagster
 
-MVP target: Layers 1–3 + 5. Serving queries `jackfruit-curated` bucket directly via S3 GET. ClickHouse deferred until needed for analytics.
+**Processing Layers:**
 
-Go ingestion is being replaced with native Python ingestion (`cdsapi`). Go's strengths better utilized in serving layer.
+| Layer | Name | Tech | Status |
+|-------|------|------|--------|
+| 1 | Ingestion | Go CLI (Python planned) | Active |
+| 2 | Transformation | Python + Dagster | Active |
+| 3 | Serving API | Go | Planned |
+
+MVP target: All 3 layers. Serving queries `jackfruit-curated` bucket directly via S3 GET. ClickHouse deferred until needed for analytics.
+
+Go ingestion works but will be replaced with native Python ingestion (`cdsapi`) to simplify the stack. Go's strengths better utilized in serving layer.
 </architecture>
 
 <storage_rules>
@@ -39,9 +44,9 @@ Raw key pattern:
 Example: `ads/cams-europe-air-quality-forecasts-analysis/2025-03-12/01890c24-905b-7122-b170-b60814e6ee06.grib`
 
 Curated key pattern (single file per variable per timestamp):
-`curated/{source}/{dataset}/{variable}/{year}/{month}/{day}/{hour}/data.grib2`
+`{source}/{dataset}/{variable}/{year}/{month}/{day}/{hour}/data.grib2`
 
-Example: `curated/cams/europe-air-quality/pm2p5/2025/03/11/14/data.grib2`
+Example: `cams/europe-air-quality/pm2p5/2025/03/11/14/data.grib2`
 
 Curated format: GRIB2 (self-describing, native for gridded data, Go-readable via eccodes)
 </storage_rules>

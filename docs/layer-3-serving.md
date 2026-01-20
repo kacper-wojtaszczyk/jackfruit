@@ -37,9 +37,9 @@ The API contract stays the same regardless of storage backend.
 Single-timestamp files with plain paths. Key depth depends on source granularity.
 
 ```
-curated/{source}/{dataset}/{variable}/{year}/{month}/{day}/{hour}/data.grib2   # hourly
-curated/{source}/{dataset}/{variable}/{year}/{month}/{day}/data.grib2          # daily
-curated/{source}/{dataset}/{variable}/{year}/W{week}/data.grib2                # weekly
+{source}/{dataset}/{variable}/{year}/{month}/{day}/{hour}/data.grib2   # hourly
+{source}/{dataset}/{variable}/{year}/{month}/{day}/data.grib2          # daily
+{source}/{dataset}/{variable}/{year}/W{week}/data.grib2                # weekly
 ```
 
 ### Key Construction (Go)
@@ -52,16 +52,16 @@ var sourceGranularity = map[string]time.Duration{
 }
 
 // Hourly
-key := fmt.Sprintf("curated/%s/%s/%s/%04d/%02d/%02d/%02d/data.grib2",
+key := fmt.Sprintf("%s/%s/%s/%04d/%02d/%02d/%02d/data.grib2",
     source, dataset, variable, year, month, day, hour)
 
 // Daily
-key := fmt.Sprintf("curated/%s/%s/%s/%04d/%02d/%02d/data.grib2",
+key := fmt.Sprintf("%s/%s/%s/%04d/%02d/%02d/data.grib2",
     source, dataset, variable, year, month, day)
 
 // Weekly (ISO week)
 year, week := timestamp.ISOWeek()
-key := fmt.Sprintf("curated/%s/%s/%s/%04d/W%02d/data.grib2",
+key := fmt.Sprintf("%s/%s/%s/%04d/W%02d/data.grib2",
     source, dataset, variable, year, week)
 ```
 

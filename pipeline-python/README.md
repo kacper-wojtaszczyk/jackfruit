@@ -22,6 +22,8 @@ uv run dg dev
 
 Open http://localhost:3000 in your browser to see the project.
 
+> **Note:** When running via `docker-compose up`, use http://localhost:3099 instead (port is mapped in docker-compose.yml).
+
 ## Schedules
 
 The pipeline includes a daily schedule that automatically materializes CAMS data:
