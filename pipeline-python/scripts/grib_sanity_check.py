@@ -3,121 +3,103 @@
 GRIB2 sanity check script.
 
 Validates that grib2io can read GRIB files (including CAMS from ECMWF).
+Supports both local files and S3/MinIO paths.
 
 Usage:
-    uv run scripts/grib_sanity_check.py <path/to/file.grib>
+    # Local file
+    uv run scripts/grib_sanity_check.py data/file.grib
+
+    # S3 path (requires MINIO_* env vars)
+    uv run scripts/grib_sanity_check.py s3://jackfruit-raw/ads/cams.../file.grib
 
 Run inside Docker:
-    docker compose run dagster \
-        uv run scripts/grib_sanity_check.py data/file.grib
+    docker compose run dagster uv run scripts/grib_sanity_check.py data/file.grib
+
+Environment variables for S3 access:
+    MINIO_ENDPOINT_URL  - S3/MinIO endpoint (default: http://minio:9000)
+    MINIO_ACCESS_KEY    - Access key (required for S3)
+    MINIO_SECRET_KEY    - Secret key (required for S3)
 """
 
 import argparse
+import os
 import sys
+import tempfile
 from pathlib import Path
 
-# Apply PDT 4.40 patch before importing grib2io
-import pipeline_python.grib2io_patch  # noqa: F401
+# Apply PDT 4.40 patch and import shared mappings
+from pipeline_python.grib2io_patch import get_constituent_name
 
 import grib2io
 
 
+def create_s3_client():
+    """Create boto3 S3 client from environment variables."""
+    import boto3
 
-# GRIB2 Table 4.230 - Atmospheric Chemical Constituent Type
-# Reference: https://www.nco.ncep.noaa.gov/pmb/docs/grib2/grib2_doc/grib2_table4-230.shtml
-CONSTITUENT_TYPE_NAMES = {
-    0: "Ozone (O3)",
-    1: "Water Vapour (H2O)",
-    2: "Methane (CH4)",
-    3: "Carbon Dioxide (CO2)",
-    4: "Carbon Monoxide (CO)",
-    5: "Nitrogen Dioxide (NO2)",
-    6: "Nitrous Oxide (N2O)",
-    7: "Formaldehyde (HCHO)",
-    8: "Sulphur Dioxide (SO2)",
-    9: "Ammonia (NH3)",
-    10: "Ammonium (NH4+)",
-    11: "Nitrogen Monoxide (NO)",
-    12: "Atomic Oxygen (O)",
-    13: "Nitrate Radical (NO3)",
-    14: "Hydroperoxyl Radical (HO2)",
-    15: "Dinitrogen Pentoxide (N2O5)",
-    16: "Nitrous Acid (HONO)",
-    17: "Nitric Acid (HNO3)",
-    18: "Peroxynitric Acid (HO2NO2)",
-    19: "Hydrogen Peroxide (H2O2)",
-    20: "Molecular Hydrogen (H2)",
-    21: "Atomic Nitrogen (N)",
-    22: "Sulphate (SO42-)",
-    23: "Radon (Rn)",
-    24: "Elemental Mercury (Hg(0))",
-    25: "Divalent Mercury (Hg2+)",
-    26: "Atomic Chlorine (Cl)",
-    27: "Chlorine Monoxide (ClO)",
-    28: "Dichlorine Peroxide (Cl2O2)",
-    29: "Hypochlorous Acid (HOCl)",
-    30: "Chlorine Nitrate (ClONO2)",
-    31: "Chlorine Dioxide (ClO2)",
-    32: "Atomic Bromine (Br)",
-    33: "Bromine Monoxide (BrO)",
-    34: "Bromine Chloride (BrCl)",
-    35: "Hydrogen Bromide (HBr)",
-    36: "Hypobromous Acid (HOBr)",
-    37: "Bromine Nitrate (BrONO2)",
-    10000: "Hydroxyl Radical (OH)",
-    10001: "Methyl Peroxy Radical (CH3O2)",
-    10002: "Methyl Hydroperoxide (CH3O2H)",
-    10004: "Methanol (CH3OH)",
-    10005: "Formic Acid (CH3OOH)",
-    10006: "Hydrogen Cyanide (HCN)",
-    10007: "Aceto Nitrile (CH3CN)",
-    10008: "Ethane (C2H6)",
-    10009: "Ethene (C2H4)",
-    10010: "Ethyne (C2H2)",
-    10011: "Ethanol (C2H5OH)",
-    10012: "Acetic Acid (C2H5OOH)",
-    10013: "Peroxyacetyl Nitrate (CH3C(O)OONO2)",
-    10014: "Propane (C3H8)",
-    10015: "Propene (C3H6)",
-    10016: "Butanes (C4H10)",
-    10017: "Isoprene (C5H8)",
-    10018: "Alpha Pinene (C10H16)",
-    10019: "Beta Pinene (C10H16)",
-    10020: "Limonene (C10H16)",
-    10021: "Benzene (C6H6)",
-    10022: "Toluene (C7H8)",
-    10023: "Xylene (C8H10)",
-    10500: "Dimethyl Sulphide (CH3SCH3)",
-    # Aerosols
-    62000: "Total Aerosol",
-    62001: "Dust Dry",
-    62002: "Water In Ambient",
-    62003: "Ammonium Dry",
-    62004: "Nitrate Dry",
-    62005: "Nitric Acid Trihydrate",
-    62006: "Sulphate Dry",
-    62007: "Mercury Dry",
-    62008: "Sea Salt Dry",
-    62009: "Black Carbon Dry",
-    62010: "Particulate Organic Matter Dry",
-    62011: "Primary Particulate Organic Matter Dry",
-    62012: "Secondary Particulate Organic Matter Dry",
-    # PM categories (WMO standard)
-    62096: "NO (y) Tracer 1",
-    62097: "NO (y) Tracer 2",
-    62098: "NO (y) Tracer 3",
-    62099: "Particulate Matter (PM1.0)",
-    62100: "Particulate Matter (PM2.5)",  # PM2.5 (WMO)
-    62101: "Particulate Matter (PM10)",   # PM10 (WMO)
-    # ECMWF/CAMS local codes
-    40008: "Particulate Matter (PM10)",   # PM10 (ECMWF local)
-    40009: "Particulate Matter (PM2.5)",  # PM2.5 (ECMWF local)
-}
+    endpoint_url = os.environ.get("MINIO_ENDPOINT_URL", "http://minio:9000")
+    access_key = os.environ.get("MINIO_ACCESS_KEY")
+    secret_key = os.environ.get("MINIO_SECRET_KEY")
+
+    if not access_key or not secret_key:
+        raise ValueError(
+            "S3 access requires MINIO_ACCESS_KEY and MINIO_SECRET_KEY environment variables"
+        )
+
+    return boto3.client(
+        "s3",
+        endpoint_url=endpoint_url,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        use_ssl=False,
+    )
 
 
-def get_constituent_name(code: int) -> str:
-    """Get human-readable name for atmospheric chemical constituent type."""
-    return CONSTITUENT_TYPE_NAMES.get(code, f"Unknown ({code})")
+def download_from_s3(s3_path: str, local_path: Path) -> None:
+    """
+    Download a file from S3 to local disk.
+
+    Args:
+        s3_path: S3 URI (e.g., 's3://bucket/key/path.grib')
+        local_path: Local file path to write to
+    """
+    # Parse s3://bucket/key format
+    if not s3_path.startswith("s3://"):
+        raise ValueError(f"Invalid S3 path: {s3_path}")
+
+    path_parts = s3_path[5:].split("/", 1)
+    if len(path_parts) != 2:
+        raise ValueError(f"Invalid S3 path (missing key): {s3_path}")
+
+    bucket, key = path_parts
+    client = create_s3_client()
+    client.download_file(bucket, key, str(local_path))
+
+
+def get_display_name(code: int) -> str:
+    """
+    Get human-readable display name for constituent type.
+
+    Uses the short name from grib2io_patch but formats it nicely for display.
+    """
+    short_name = get_constituent_name(code)
+
+    # Map short names to display names
+    display_names = {
+        "pm2p5": "Particulate Matter (PM2.5)",
+        "pm10": "Particulate Matter (PM10)",
+        "pm1p0": "Particulate Matter (PM1.0)",
+        "ozone": "Ozone (O3)",
+        "nitrogen_dioxide": "Nitrogen Dioxide (NO2)",
+        "sulphur_dioxide": "Sulphur Dioxide (SO2)",
+        "carbon_monoxide": "Carbon Monoxide (CO)",
+        "carbon_dioxide": "Carbon Dioxide (CO2)",
+        "methane": "Methane (CH4)",
+        "ammonia": "Ammonia (NH3)",
+        "formaldehyde": "Formaldehyde (HCHO)",
+    }
+
+    return display_names.get(short_name, short_name)
 
 
 def print_message(i: int, msg) -> None:
@@ -128,9 +110,9 @@ def print_message(i: int, msg) -> None:
     print(f"  units:         {msg.units}")
 
     # For PDT 4.40, show the atmospheric chemical constituent type
-    if hasattr(msg, 'atmosphericChemicalConstituentType'):
+    if hasattr(msg, "atmosphericChemicalConstituentType"):
         constituent_code = msg.atmosphericChemicalConstituentType.value
-        constituent_name = get_constituent_name(constituent_code)
+        constituent_name = get_display_name(constituent_code)
         print(f"  constituent:   {constituent_code} - {constituent_name}")
 
     print(f"  discipline:    {msg.discipline}")
@@ -149,16 +131,13 @@ def print_message(i: int, msg) -> None:
     print()
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate that grib2io can read a GRIB file.")
-    parser.add_argument("path", type=Path, help="Path to GRIB file (relative or absolute)")
-    args = parser.parse_args()
+def inspect_grib_file(grib_path: Path) -> None:
+    """
+    Open and inspect a GRIB file, printing message details.
 
-    grib_path = args.path.resolve()
-    if not grib_path.exists():
-        print(f"❌ GRIB file not found: {grib_path}", file=sys.stderr)
-        return 1
-
+    Args:
+        grib_path: Path to GRIB file (must be local)
+    """
     size_kb = grib_path.stat().st_size / 1024
     size_str = f"{size_kb:.1f} KB" if size_kb < 1024 else f"{size_kb / 1024:.1f} MB"
     print(f"📂 Reading: {grib_path.name}")
@@ -172,6 +151,46 @@ def main() -> int:
             print_message(i, msg)
 
     print("✅ grib2io successfully read the GRIB file!")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Validate that grib2io can read a GRIB file.",
+        epilog="Supports local files and S3 URIs (s3://bucket/key).",
+    )
+    parser.add_argument(
+        "path",
+        help="Path to GRIB file (local path or s3://bucket/key)",
+    )
+    args = parser.parse_args()
+
+    path_str = args.path
+
+    # Check if it's an S3 path
+    if path_str.startswith("s3://"):
+        print(f"📥 Downloading from S3: {path_str}")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            local_path = Path(tmpdir) / "downloaded.grib"
+            try:
+                download_from_s3(path_str, local_path)
+            except ValueError as e:
+                print(f"❌ {e}", file=sys.stderr)
+                return 1
+            except Exception as e:
+                print(f"❌ Failed to download from S3: {e}", file=sys.stderr)
+                return 1
+
+            print(f"   Downloaded to: {local_path}")
+            print()
+            inspect_grib_file(local_path)
+    else:
+        # Local file
+        grib_path = Path(path_str).resolve()
+        if not grib_path.exists():
+            print(f"❌ GRIB file not found: {grib_path}", file=sys.stderr)
+            return 1
+        inspect_grib_file(grib_path)
+
     return 0
 
 
