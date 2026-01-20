@@ -254,7 +254,15 @@ def storage_resources():
     """
     Register the storage resource.
 
-    Reads configuration from environment variables.
+    Reads configuration from environment variables. The following environment
+    variables are REQUIRED:
+    - MINIO_ACCESS_KEY: S3/MinIO access key (required, no default)
+    - MINIO_SECRET_KEY: S3/MinIO secret key (required, no default)
+    
+    Optional environment variables with defaults:
+    - MINIO_ENDPOINT_URL: S3/MinIO endpoint URL (default: 'http://minio:9000')
+    - MINIO_RAW_BUCKET: Raw data bucket name (default: 'jackfruit-raw')
+    - MINIO_CURATED_BUCKET: Curated data bucket name (default: 'jackfruit-curated')
     """
     return dg.Definitions(
         resources={
