@@ -211,11 +211,13 @@ def transform_cams_data(
         storage: S3/MinIO storage resource
 
     Returns:
-        MaterializeResult with list of curated keys written
+        MaterializeResult with list of curated keys written. If no valid GRIB
+        messages are found, returns successfully with an empty curated_keys list
+        and emits a warning.
     
     Raises:
         dg.Failure: If upstream materialization not found, raw file download fails,
-                    GRIB file is invalid, or no valid messages found
+                    or GRIB file is invalid
     """
 
     date = context.partition_key
