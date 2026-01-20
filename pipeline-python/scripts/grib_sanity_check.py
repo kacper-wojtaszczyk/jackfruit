@@ -234,7 +234,7 @@ def main() -> int:
             return 1
         
         # Check if file is readable
-        if not grib_path.stat().st_size > 0:
+        if grib_path.stat().st_size == 0:
             print(f"❌ File is empty: {grib_path}", file=sys.stderr)
             return 1
         

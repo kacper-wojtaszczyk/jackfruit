@@ -10,9 +10,12 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-# Import the script functions
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-from grib_sanity_check import (
+# Add script directory to path for imports
+_SCRIPT_DIR = Path(__file__).parent.parent / "scripts"
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from grib_sanity_check import (  # noqa: E402
     create_s3_client,
     download_from_s3,
     get_display_name,

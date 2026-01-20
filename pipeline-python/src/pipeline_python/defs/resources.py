@@ -228,10 +228,8 @@ class ObjectStorageResource(dg.ConfigurableResource):
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "Unknown")
             if error_code == "404" or error_code == "NoSuchKey":
-                raise ClientError(
-                    {"Error": {"Code": "NoSuchKey", "Message": f"Object not found: {key}"}},
-                    "download_file"
-                ) from e
+                # Add more context to the error message
+                e.response["Error"]["Message"] = f"Object not found in bucket '{self.raw_bucket}': {key}"
             raise
 
     def upload_curated(self, local_path: Path, key: str) -> None:

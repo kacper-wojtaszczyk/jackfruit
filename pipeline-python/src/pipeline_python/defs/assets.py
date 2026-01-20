@@ -278,6 +278,7 @@ def transform_cams_data(
 
         # Open with grib2io
         context.log.info("Opening GRIB file with grib2io")
+        num_messages = 0  # Initialize outside the context to avoid NameError
         try:
             grib_file = grib2io.open(str(raw_path))
         except Exception as e:

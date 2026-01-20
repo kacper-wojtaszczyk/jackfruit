@@ -22,10 +22,8 @@ class MockObjectStorageResource(dg.ConfigurableResource):
     Stores uploaded files in memory for verification.
     """
     
-    def __init__(self):
-        super().__init__()
-        self.uploaded_files = []
-        self.raw_file_path = None
+    uploaded_files: list = []
+    raw_file_path: str = ""
     
     def download_raw(self, key: str, local_path: Path) -> None:
         """Mock download - copy from test fixture if available."""
