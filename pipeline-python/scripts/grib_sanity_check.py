@@ -105,29 +105,34 @@ def get_display_name(code: int) -> str:
 def print_message(i: int, msg) -> None:
     """Print details for a single GRIB message."""
     print(f"─── Message {i + 1} ───")
-    print(f"  shortName:     {msg.shortName}")
-    print(f"  name:          {msg.fullName}")
-    print(f"  units:         {msg.units}")
+    
+    try:
+        print(f"  shortName:     {msg.shortName}")
+        print(f"  name:          {msg.fullName}")
+        print(f"  units:         {msg.units}")
 
-    # For PDT 4.40, show the atmospheric chemical constituent type
-    if hasattr(msg, "atmosphericChemicalConstituentType"):
-        constituent_code = msg.atmosphericChemicalConstituentType.value
-        constituent_name = get_display_name(constituent_code)
-        print(f"  constituent:   {constituent_code} - {constituent_name}")
+        # For PDT 4.40, show the atmospheric chemical constituent type
+        if hasattr(msg, "atmosphericChemicalConstituentType"):
+            constituent_code = msg.atmosphericChemicalConstituentType.value
+            constituent_name = get_display_name(constituent_code)
+            print(f"  constituent:   {constituent_code} - {constituent_name}")
 
-    print(f"  discipline:    {msg.discipline}")
-    print(f"  refDate:       {msg.refDate}")
-    print(f"  leadTime:      {msg.leadTime}")
-    print(f"  validDate:     {msg.validDate}")
-    print(f"  typeOfLevel:   {msg.typeOfFirstFixedSurface}")
-    print(f"  level:         {msg.level}")
-    print(f"  gridType:      {msg.griddef.shape}")
-    print(f"  nx × ny:       {msg.nx} × {msg.ny}")
-    print(f"  lat range:     {msg.latitudeFirstGridpoint}° to {msg.latitudeLastGridpoint}°")
-    print(f"  lon range:     {msg.longitudeFirstGridpoint}° to {msg.longitudeLastGridpoint}°")
-    data = msg.data
-    print(f"  data shape:    {data.shape}")
-    print(f"  data range:    {data.min():.6e} to {data.max():.6e} {msg.units}")
+        print(f"  discipline:    {msg.discipline}")
+        print(f"  refDate:       {msg.refDate}")
+        print(f"  leadTime:      {msg.leadTime}")
+        print(f"  validDate:     {msg.validDate}")
+        print(f"  typeOfLevel:   {msg.typeOfFirstFixedSurface}")
+        print(f"  level:         {msg.level}")
+        print(f"  gridType:      {msg.griddef.shape}")
+        print(f"  nx × ny:       {msg.nx} × {msg.ny}")
+        print(f"  lat range:     {msg.latitudeFirstGridpoint}° to {msg.latitudeLastGridpoint}°")
+        print(f"  lon range:     {msg.longitudeFirstGridpoint}° to {msg.longitudeLastGridpoint}°")
+        data = msg.data
+        print(f"  data shape:    {data.shape}")
+        print(f"  data range:    {data.min():.6e} to {data.max():.6e} {msg.units}")
+    except Exception as e:
+        print(f"  ⚠️  Error reading message details: {e}")
+    
     print()
 
 
@@ -137,18 +142,35 @@ def inspect_grib_file(grib_path: Path) -> None:
 
     Args:
         grib_path: Path to GRIB file (must be local)
+    
+    Raises:
+        FileNotFoundError: If the GRIB file does not exist
+        Exception: If the file cannot be opened or read as a GRIB file
     """
+    if not grib_path.exists():
+        raise FileNotFoundError(f"GRIB file not found: {grib_path}")
+    
     size_kb = grib_path.stat().st_size / 1024
     size_str = f"{size_kb:.1f} KB" if size_kb < 1024 else f"{size_kb / 1024:.1f} MB"
     print(f"📂 Reading: {grib_path.name}")
     print(f"   Size: {size_str}")
     print()
 
-    with grib2io.open(str(grib_path)) as grb:
-        print(f"📊 Total messages: {len(grb)}")
-        print()
-        for i, msg in enumerate(grb):
-            print_message(i, msg)
+    try:
+        with grib2io.open(str(grib_path)) as grb:
+            num_messages = len(grb)
+            print(f"📊 Total messages: {num_messages}")
+            print()
+            
+            if num_messages == 0:
+                print("⚠️  Warning: GRIB file contains no messages")
+                print()
+            
+            for i, msg in enumerate(grb):
+                print_message(i, msg)
+    except Exception as e:
+        print(f"❌ Error reading GRIB file: {e}", file=sys.stderr)
+        raise
 
     print("✅ grib2io successfully read the GRIB file!")
 
@@ -174,22 +196,53 @@ def main() -> int:
             try:
                 download_from_s3(path_str, local_path)
             except ValueError as e:
-                print(f"❌ {e}", file=sys.stderr)
+                print(f"❌ Invalid S3 path: {e}", file=sys.stderr)
                 return 1
             except Exception as e:
                 print(f"❌ Failed to download from S3: {e}", file=sys.stderr)
+                print(f"   Make sure MINIO_ACCESS_KEY and MINIO_SECRET_KEY are set", file=sys.stderr)
                 return 1
 
             print(f"   Downloaded to: {local_path}")
+            
+            # Verify download
+            if not local_path.exists():
+                print(f"❌ Download failed: file does not exist", file=sys.stderr)
+                return 1
+            
+            file_size = local_path.stat().st_size
+            if file_size == 0:
+                print(f"❌ Downloaded file is empty (0 bytes)", file=sys.stderr)
+                return 1
+            
             print()
-            inspect_grib_file(local_path)
+            try:
+                inspect_grib_file(local_path)
+            except Exception as e:
+                print(f"❌ Failed to inspect GRIB file: {e}", file=sys.stderr)
+                return 1
     else:
         # Local file
         grib_path = Path(path_str).resolve()
         if not grib_path.exists():
             print(f"❌ GRIB file not found: {grib_path}", file=sys.stderr)
             return 1
-        inspect_grib_file(grib_path)
+        
+        # Check if it's a regular file
+        if not grib_path.is_file():
+            print(f"❌ Path is not a file: {grib_path}", file=sys.stderr)
+            return 1
+        
+        # Check if file is readable
+        if not grib_path.stat().st_size > 0:
+            print(f"❌ File is empty: {grib_path}", file=sys.stderr)
+            return 1
+        
+        try:
+            inspect_grib_file(grib_path)
+        except Exception as e:
+            print(f"❌ Failed to inspect GRIB file: {e}", file=sys.stderr)
+            return 1
 
     return 0
 
