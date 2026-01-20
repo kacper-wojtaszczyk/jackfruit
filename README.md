@@ -58,7 +58,7 @@ docker-compose up -d
 | Orchestration | Dagster | ✅ Active |
 | **Processing Layers** |||
 | L1: Ingestion | Go CLI | ✅ Active (CAMS) |
-| L2: Transformation | Python + Dagster | 🚧 In progress |
+| L2: Transformation | Python + Dagster | ✅ Active (CAMS) |
 | L3: Serving | Go | ⏳ Planned |
 
 See `docs/` for details.
