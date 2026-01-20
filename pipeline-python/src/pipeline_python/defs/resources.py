@@ -28,6 +28,7 @@ import os
 from pathlib import Path
 
 import boto3
+from botocore.exceptions import ClientError
 from dagster_docker import PipesDockerClient
 
 import dagster as dg
@@ -244,7 +245,7 @@ class ObjectStorageResource(dg.ConfigurableResource):
         try:
             client.head_object(Bucket=bucket, Key=key)
             return True
-        except client.exceptions.ClientError:
+        except ClientError:
             return False
 
 
