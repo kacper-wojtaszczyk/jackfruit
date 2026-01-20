@@ -22,6 +22,25 @@ uv run dg dev
 
 Open http://localhost:3000 in your browser to see the project.
 
+## Schedules
+
+The pipeline includes a daily schedule that automatically materializes CAMS data:
+
+**`cams_daily_schedule`** — Runs at **08:00 UTC** every day
+- Materializes `ingest_cams_data` → `transform_cams_data` for yesterday's partition
+- CAMS data is typically available ~6 hours after midnight UTC
+- Each run is tagged with the date being processed
+
+### Manual Backfill
+
+To process a specific date range (e.g., historical data):
+
+1. In Dagster UI, navigate to **Assets** → `transform_cams_data`
+2. Select the partition(s) you want to materialize
+3. Click **Materialize selected**
+
+Dagster will execute `ingest_cams_data` first, then `transform_cams_data` in dependency order.
+
 ### GRIB Sanity Check Script
 
 Validate that `grib2io` can read a GRIB file (useful for debugging CAMS data issues):

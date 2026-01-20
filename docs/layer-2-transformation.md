@@ -8,11 +8,12 @@ Read raw data, normalize schemas, compute quality flags, and write to curated st
 |-----------|--------|
 | Dagster project setup | ✅ Done |
 | Dagster asset invoking Go ingestion | ✅ Done |
-| CAMS transformation asset | ⏳ Next |
-| Curated partitioning scheme | ✅ Decided |
-| Curated file format | GRIB2 (decided) |
-| Error handling | Fail-fast (decided) |
-| Metadata storage | Dagster → Postgres (decided) |
+| CAMS transformation asset | ✅ Done |
+| Curated partitioning scheme | ✅ Done |
+| Curated file format | ✅ GRIB2 |
+| Error handling | ✅ Fail-fast |
+| Daily schedule (08:00 UTC) | ✅ Done |
+| Metadata storage | Dagster (current) → Postgres (future) |
 
 ## Responsibilities
 
@@ -220,6 +221,37 @@ If any variable fails to extract or write:
 - Simpler to reason about — asset either succeeds completely or fails completely
 - Avoids inconsistent state in curated bucket
 - Can refine later if specific failure modes warrant partial success
+
+## Daily Schedule
+
+**Name:** `cams_daily_schedule`  
+**Cron:** `0 8 * * *` (08:00 UTC every day)  
+**Timezone:** UTC
+
+The schedule automatically triggers ingestion and transformation for the previous day's data each morning:
+
+1. **Trigger Time:** 08:00 UTC (after CAMS data is typically available ~6 hours after midnight UTC)
+2. **Partition:** Yesterday's date (e.g., if scheduled run is 2025-03-12 08:00, it processes 2025-03-11)
+3. **Execution:**
+   - Dagster creates a `RunRequest` for the specific partition
+   - `ingest_cams_data` asset executes first (fetches from CDS API → raw bucket)
+   - On success, `transform_cams_data` executes (transforms raw → curated)
+4. **Observability:** Each run is tagged with `source=schedule`, `pipeline=cams`, `scheduled_date=YYYY-MM-DD`
+
+### Manual Backfills
+
+To materialize data for specific dates (e.g., historical backfill):
+
+```bash
+# Via Dagster UI
+# 1. Navigate to Assets → transform_cams_data
+# 2. Select date range (e.g., 2025-01-01 to 2025-03-11)
+# 3. Click "Materialize selected"
+
+# Via Dagster CLI (future)
+# dagster asset materialize --asset-selection 'transform_cams_data' \
+#   --start-partition '2025-01-01' --end-partition '2025-03-11'
+```
 
 ## Processing Libraries
 
