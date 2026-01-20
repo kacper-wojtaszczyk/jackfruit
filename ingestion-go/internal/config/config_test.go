@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-var configVars = []string{"ADS_API_KEY", "ADS_BASE_URL", "MINIO_ENDPOINT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY", "MINIO_BUCKET"}
+var configVars = []string{"ADS_API_KEY", "ADS_BASE_URL", "MINIO_ENDPOINT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY", "MINIO_RAW_BUCKET"}
 
 func TestLoad_RequiredVarsMissing(t *testing.T) {
 

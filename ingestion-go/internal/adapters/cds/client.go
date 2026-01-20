@@ -132,7 +132,11 @@ func (c *Client) apiPostExecute(ctx context.Context, req Request) (*jobResponse,
 	defer response.Body.Close()
 
 	if response.StatusCode != 201 {
-		return nil, &apiError{StatusCode: response.StatusCode, Message: "execute request failed"}
+		bodyBytes, _ := io.ReadAll(response.Body)
+		return nil, &apiError{
+			StatusCode: response.StatusCode,
+			Message:    fmt.Sprintf("execute request failed: %s", string(bodyBytes)),
+		}
 	}
 
 	slog.InfoContext(ctx, "CDS request submitted", "response_length", response.ContentLength)

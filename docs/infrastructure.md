@@ -120,7 +120,7 @@ All services configured via environment variables (`.env` file):
 MINIO_ENDPOINT=minio:9000
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
-MINIO_BUCKET=jackfruit-raw
+MINIO_RAW_BUCKET=jackfruit-raw
 
 # Metadata DB (TBD)
 POSTGRES_HOST=localhost

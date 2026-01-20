@@ -31,6 +31,11 @@ func main() {
 
 	// Parse and validate flags
 	datasetName := model.Dataset(*datasetStr)
+	if err := datasetName.Validate(); err != nil {
+		slog.Error("invalid dataset", "error", err)
+		fmt.Fprintf(os.Stderr, "Usage: %v\n", err)
+		os.Exit(exitcode.ConfigError)
+	}
 	date, err := time.Parse("2006-01-02", *dateStr)
 	if err != nil {
 		slog.Error("invalid date format", "date", *dateStr, "error", err)

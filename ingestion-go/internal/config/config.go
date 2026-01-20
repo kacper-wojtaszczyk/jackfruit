@@ -50,9 +50,9 @@ func Load() (*Config, error) {
 	if config.MinIOSecretKey == "" {
 		return nil, &ErrMissingRequiredEnvVar{Name: "MINIO_SECRET_KEY"}
 	}
-	config.MinIOBucket = os.Getenv("MINIO_BUCKET")
+	config.MinIOBucket = os.Getenv("MINIO_RAW_BUCKET")
 	if config.MinIOBucket == "" {
-		return nil, &ErrMissingRequiredEnvVar{Name: "MINIO_BUCKET"}
+		return nil, &ErrMissingRequiredEnvVar{Name: "MINIO_RAW_BUCKET"}
 	}
 
 	useSSLStr := os.Getenv("MINIO_USE_SSL")

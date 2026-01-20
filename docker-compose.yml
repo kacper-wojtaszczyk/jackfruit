@@ -33,7 +33,7 @@ services:
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_RAW_BUCKET: ${MINIO_RAW_BUCKET}
       MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
       LOG_LEVEL: debug
     networks:
@@ -53,7 +53,7 @@ services:
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_RAW_BUCKET: ${MINIO_RAW_BUCKET}
       MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

@@ -74,11 +74,12 @@ def mock_ingestion_client():
 class TestIngestCamsDataAsset:
     """Tests for the ingest_cams_data asset."""
 
-    def test_asset_executes_with_default_config(self, mock_ingestion_client):
-        """Asset should execute successfully with default configuration."""
+    def test_asset_executes_with_partition(self, mock_ingestion_client):
+        """Asset should execute successfully with a partition key."""
         result = dg.materialize(
             assets=[ingest_cams_data],
             resources={"ingestion_client": mock_ingestion_client},
+            partition_key="2026-01-15",
         )
 
         assert result.success
@@ -86,21 +87,21 @@ class TestIngestCamsDataAsset:
 
         call = _mock_calls[0]
         assert call["dataset"] == "cams-europe-air-quality-forecasts-forecast"
-        # Date should be today if not specified
-        assert call["date"] == datetime.now().strftime("%Y-%m-%d")
+        # Date should match the partition key
+        assert call["date"] == "2026-01-15"
         # run_id should be a valid UUID
         uuid.UUID(call["run_id"])  # Raises if invalid
 
-    def test_asset_uses_provided_date(self, mock_ingestion_client):
-        """Asset should use the date from config when provided."""
+    def test_asset_uses_custom_dataset(self, mock_ingestion_client):
+        """Asset should use the dataset from config when provided."""
         result = dg.materialize(
             assets=[ingest_cams_data],
             resources={"ingestion_client": mock_ingestion_client},
+            partition_key="2026-01-15",
             run_config={
                 "ops": {
                     "ingest_cams_data": {
                         "config": {
-                            "date": "2025-06-15",
                             "dataset": "cams-europe-air-quality-forecasts-analysis",
                         }
                     }
@@ -110,19 +111,24 @@ class TestIngestCamsDataAsset:
 
         assert result.success
         call = _mock_calls[0]
-        assert call["date"] == "2025-06-15"
+        assert call["date"] == "2026-01-15"
         assert call["dataset"] == "cams-europe-air-quality-forecasts-analysis"
 
     def test_asset_generates_unique_run_ids(self, mock_ingestion_client):
         """Each asset execution should generate a unique run_id."""
-        # Execute twice
+        global _mock_calls
+        _mock_calls = []
+
+        # Execute twice with same partition
         dg.materialize(
             assets=[ingest_cams_data],
             resources={"ingestion_client": mock_ingestion_client},
+            partition_key="2026-01-15",
         )
         dg.materialize(
             assets=[ingest_cams_data],
             resources={"ingestion_client": mock_ingestion_client},
+            partition_key="2026-01-16",
         )
 
         assert len(_mock_calls) == 2
@@ -135,11 +141,11 @@ class TestIngestCamsDataAsset:
         result = dg.materialize(
             assets=[ingest_cams_data],
             resources={"ingestion_client": mock_ingestion_client},
+            partition_key="2026-01-01",
             run_config={
                 "ops": {
                     "ingest_cams_data": {
                         "config": {
-                            "date": "2025-01-01",
                             "dataset": "test-dataset",
                         }
                     }
@@ -160,6 +166,7 @@ class TestIngestCamsDataAsset:
         result = dg.materialize(
             assets=[ingest_cams_data],
             resources={"ingestion_client": mock_client},
+            partition_key="2026-01-15",
             raise_on_error=False,
         )
 
@@ -186,7 +193,7 @@ class TestDockerIngestionClientUnit:
         """Should skip environment variables that aren't set."""
         # Clear all ingestion env vars
         for var in ["ADS_BASE_URL", "ADS_API_KEY", "MINIO_ENDPOINT",
-                    "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY", "MINIO_BUCKET", "MINIO_USE_SSL"]:
+                    "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY", "MINIO_RAW_BUCKET", "MINIO_USE_SSL"]:
             monkeypatch.delenv(var, raising=False)
 
         monkeypatch.setenv("MINIO_ENDPOINT", "localhost:9000")
