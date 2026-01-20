@@ -15,13 +15,15 @@ Five-layer pipeline:
 
 | Layer | Name | Tech | MVP Status |
 |-------|------|------|------------|
-| 1 | Ingestion | Go | Active |
+| 1 | Ingestion | Python (Go deprecated) | Active |
 | 2 | Raw Storage | MinIO/S3 | Active |
 | 3 | Transformation/ETL | Python + Dagster | Active |
 | 4 | Warehouse | ClickHouse | On-hold |
-| 5 | Serving API | Go | Active |
+| 5 | Serving API | Go | Planned |
 
-MVP target: Layers 1–3 + 5. Serving queries `jackfruit-curated` bucket directly (via DuckDB). ClickHouse deferred until needed for performance.
+MVP target: Layers 1–3 + 5. Serving queries `jackfruit-curated` bucket directly via S3 GET. ClickHouse deferred until needed for analytics.
+
+Go ingestion is being replaced with native Python ingestion (`cdsapi`). Go's strengths better utilized in serving layer.
 </architecture>
 
 <storage_rules>
@@ -32,19 +34,22 @@ Two buckets:
 Raw is NEVER mutated. ETL reads raw, writes curated.
 
 Raw key pattern:
-{source}/{dataset}/{variable}/ingest_date=YYYY-MM-DD/{filename}
+`{source}/{dataset}/{YYYY-MM-DD}/{run_id}.{ext}`
 
-Curated partitioning:
-event time first, then space (spatial chunking TBD)
+Example: `ads/cams-europe-air-quality-forecasts-analysis/2025-03-12/01890c24-905b-7122-b170-b60814e6ee06.grib`
 
-Metadata per curated chunk (format TBD — keep pluggable):
-temporal bounds, spatial bounds, units, CRS, processing version, input checksums
+Curated key pattern (single file per variable per timestamp):
+`curated/{source}/{dataset}/{variable}/{year}/{month}/{day}/{hour}/data.grib2`
+
+Example: `curated/cams/europe-air-quality/pm2p5/2025/03/11/14/data.grib2`
+
+Curated format: GRIB2 (self-describing, native for gridded data, Go-readable via eccodes)
 </storage_rules>
 
 <boundaries>
 - Ingestion: fetch external data → write to `jackfruit-raw`
 - ETL: read `jackfruit-raw` → transform → write to `jackfruit-curated`
-- Warehouse/Serving: downstream consumers (later)
+- Serving: read `jackfruit-curated` → serve client queries
 
 Do not blur these boundaries.
 </boundaries>
@@ -64,4 +69,4 @@ Do not blur these boundaries.
 - Keep it fun — weirdness is allowed
 - When unsure: ask rather than guess on domain choices (chunk size, schema, metadata format)
 - If a choice locks us in prematurely, keep it pluggable or mark TBD
-  </assistant_behavior>
+</assistant_behavior>
