@@ -12,7 +12,7 @@ from datetime import datetime
 
 import dagster as dg
 
-from pipeline_python.defs.resources import DockerIngestionClient
+from pipeline_python.defs.resources import DockerIngestionClient, ObjectStorageResource
 
 
 class IngestionConfig(dg.Config):
@@ -58,4 +58,29 @@ def ingest_cams_data(
         dataset=config.dataset,
         date=date,
         run_id=run_id,
+    )
+
+def transform_cams_data(
+    context: dg.AssetExecutionContext,
+    object_storage_resource: ObjectStorageResource
+) -> dg.MaterializeResult:
+    """
+    Placeholder for CAMS data transformation asset.
+
+    This asset would handle transforming raw CAMS data into a processed format.
+
+    Args:
+        context: Dagster execution context
+    Returns:
+        MaterializeResult with transformation metadata
+    """
+
+    context.log.info("Transforming CAMS data")
+
+    object_storage_resource.download_raw()
+
+    return dg.MaterializeResult(
+        metadata={
+            "status": "not_implemented",
+        }
     )
