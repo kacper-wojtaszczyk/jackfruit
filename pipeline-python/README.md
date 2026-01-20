@@ -28,10 +28,10 @@ Validate that `grib2io` can read a GRIB file (useful for debugging CAMS data iss
 
 ```bash
 # Local
-uv run python scripts/grib_sanity_check.py path/to/file.grib
+uv run scripts/grib_sanity_check.py path/to/file.grib
 
 # Inside Docker
-docker compose run dagster uv run python scripts/grib_sanity_check.py data/file.grib
+docker compose run dagster uv run scripts/grib_sanity_check.py data/file.grib
 ```
 
 The script includes a monkey-patch for PDT 4.40 (Atmospheric Chemical Constituents) which `grib2io` 2.6.0 doesn't support natively. CAMS air quality data uses this template.
