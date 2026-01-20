@@ -165,10 +165,14 @@ class ObjectStorageResource(dg.ConfigurableResource):
     Provides explicit download/upload methods optimized for large files.
     Uses boto3 with local temp files (grib2io requires local file access).
 
+    **SECURITY**: Credentials must ALWAYS be sourced from secure stores (environment
+    variables, secrets manager, etc.) and NEVER hardcoded. The `access_key` and
+    `secret_key` fields use `EnvVar` to prevent credential exposure in logs and UI.
+
     Attributes:
         endpoint_url: S3/MinIO endpoint URL (e.g., 'http://minio:9000')
-        access_key: S3/MinIO access key
-        secret_key: S3/MinIO secret key
+        access_key: S3/MinIO access key (sourced from environment variable)
+        secret_key: S3/MinIO secret key (sourced from environment variable)
         raw_bucket: Name of the raw data bucket (default: 'jackfruit-raw')
         curated_bucket: Name of the curated data bucket (default: 'jackfruit-curated')
         use_ssl: Whether to use SSL for connections (default: False)
@@ -184,8 +188,8 @@ class ObjectStorageResource(dg.ConfigurableResource):
     """
 
     endpoint_url: str
-    access_key: str
-    secret_key: str
+    access_key: dg.EnvVar
+    secret_key: dg.EnvVar
     raw_bucket: str = "jackfruit-raw"
     curated_bucket: str = "jackfruit-curated"
     use_ssl: bool = False
@@ -195,8 +199,8 @@ class ObjectStorageResource(dg.ConfigurableResource):
         return boto3.client(
             "s3",
             endpoint_url=self.endpoint_url,
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
+            aws_access_key_id=self.access_key.get_value(),
+            aws_secret_access_key=self.secret_key.get_value(),
             use_ssl=self.use_ssl,
         )
 
@@ -250,14 +254,22 @@ def storage_resources():
     """
     Register the storage resource.
 
-    Reads configuration from environment variables.
+    Reads configuration from environment variables. The following environment
+    variables are REQUIRED:
+    - MINIO_ACCESS_KEY: S3/MinIO access key (required, no default)
+    - MINIO_SECRET_KEY: S3/MinIO secret key (required, no default)
+
+    Optional environment variables with defaults:
+    - MINIO_ENDPOINT_URL: S3/MinIO endpoint URL (default: 'http://minio:9000')
+    - MINIO_RAW_BUCKET: Raw data bucket name (default: 'jackfruit-raw')
+    - MINIO_CURATED_BUCKET: Curated data bucket name (default: 'jackfruit-curated')
     """
     return dg.Definitions(
         resources={
             "storage": ObjectStorageResource(
                 endpoint_url=os.environ.get("MINIO_ENDPOINT_URL", "http://minio:9000"),
-                access_key=os.environ.get("MINIO_ACCESS_KEY", "minioadmin"),
-                secret_key=os.environ.get("MINIO_SECRET_KEY", "minioadmin"),
+                access_key=dg.EnvVar("MINIO_ACCESS_KEY"),
+                secret_key=dg.EnvVar("MINIO_SECRET_KEY"),
                 raw_bucket=os.environ.get("MINIO_RAW_BUCKET", "jackfruit-raw"),
                 curated_bucket=os.environ.get("MINIO_CURATED_BUCKET", "jackfruit-curated"),
             ),
