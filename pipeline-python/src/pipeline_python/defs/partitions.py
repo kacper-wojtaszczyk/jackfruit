@@ -10,5 +10,5 @@ import dagster as dg
 daily_partitions = dg.DailyPartitionsDefinition(
     start_date="2026-01-01",
     timezone="UTC",
-    end_offset=7,
+    end_offset=1,
 )
