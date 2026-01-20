@@ -212,10 +212,27 @@ class ObjectStorageResource(dg.ConfigurableResource):
         Args:
             key: S3 key (e.g., "ads/cams-europe.../2025-03-11/{run_id}.grib")
             local_path: Local file path to write to
+        
+        Raises:
+            ValueError: If key is empty or contains invalid characters
+            ClientError: If the S3 download fails (e.g., file not found, permission denied)
         """
+        if not key or not key.strip():
+            raise ValueError("S3 key cannot be empty")
+        
         client = self._get_client()
         local_path.parent.mkdir(parents=True, exist_ok=True)
-        client.download_file(self.raw_bucket, key, str(local_path))
+        
+        try:
+            client.download_file(self.raw_bucket, key, str(local_path))
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            if error_code == "404" or error_code == "NoSuchKey":
+                raise ClientError(
+                    {"Error": {"Code": "NoSuchKey", "Message": f"Object not found: {key}"}},
+                    "download_file"
+                ) from e
+            raise
 
     def upload_curated(self, local_path: Path, key: str) -> None:
         """
@@ -226,7 +243,20 @@ class ObjectStorageResource(dg.ConfigurableResource):
         Args:
             local_path: Local file path to upload
             key: S3 key (e.g., "curated/cams/europe-air-quality/pm2p5/2025/03/11/14/data.grib2")
+        
+        Raises:
+            ValueError: If key is empty or local_path doesn't exist
+            ClientError: If the S3 upload fails
         """
+        if not key or not key.strip():
+            raise ValueError("S3 key cannot be empty")
+        
+        if not local_path.exists():
+            raise ValueError(f"Local file does not exist: {local_path}")
+        
+        if not local_path.is_file():
+            raise ValueError(f"Path is not a file: {local_path}")
+        
         client = self._get_client()
         client.upload_file(str(local_path), self.curated_bucket, key)
 
