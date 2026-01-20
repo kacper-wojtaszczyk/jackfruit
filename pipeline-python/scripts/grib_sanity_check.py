@@ -5,11 +5,11 @@ GRIB2 sanity check script.
 Validates that grib2io can read GRIB files (including CAMS from ECMWF).
 
 Usage:
-    python scripts/grib_sanity_check.py <path/to/file.grib>
+    uv run scripts/grib_sanity_check.py <path/to/file.grib>
 
 Run inside Docker:
     docker compose run dagster \
-        python scripts/grib_sanity_check.py /data/file.grib
+        uv run scripts/grib_sanity_check.py data/file.grib
 """
 
 import argparse
