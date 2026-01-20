@@ -231,7 +231,7 @@ If any variable fails to extract or write:
 The schedule automatically triggers ingestion and transformation for the previous day's data each morning:
 
 1. **Trigger Time:** 08:00 UTC (after CAMS data is typically available ~6 hours after midnight UTC)
-2. **Partition:** Yesterday's date (e.g., if scheduled run is 2025-03-12 08:00, it processes 2025-03-11)
+2. **Partition:** Today's date (e.g., if scheduled run is 2025-03-12 08:00, it processes 2025-03-11)
 3. **Execution:**
    - Dagster creates a `RunRequest` for the specific partition
    - `ingest_cams_data` asset executes first (fetches from CDS API → raw bucket)

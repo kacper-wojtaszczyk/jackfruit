@@ -5,7 +5,7 @@ Daily schedules trigger materialization of partitioned assets.
 Dagster handles partitioning, so we request specific partition keys and let
 Dagster execute asset dependencies in order.
 
-Example: CAMS daily schedule at 08:00 UTC materializes yesterday's data
+Example: CAMS daily schedule at 08:00 UTC materializes today's data
 (because CAMS data is typically available ~6 hours after midnight UTC).
 """
 from datetime import timedelta
@@ -28,7 +28,7 @@ def cams_daily_schedule(context: dg.ScheduleEvaluationContext) -> dg.RunRequest:
     """
     Daily schedule to materialize CAMS ingestion and transformation.
 
-    Runs at 08:00 UTC to process yesterday's data. CAMS forecast data is
+    Runs at 08:00 UTC to process today's data. CAMS forecast data is
     typically available ~6 hours after midnight UTC, so an 8am run provides
     sufficient buffer.
 
@@ -39,9 +39,9 @@ def cams_daily_schedule(context: dg.ScheduleEvaluationContext) -> dg.RunRequest:
         context: Dagster schedule evaluation context
 
     Returns:
-        RunRequest for yesterday's partition, with tags for observability
+        RunRequest for today's partition, with tags for observability
     """
-    # Calculate yesterday's date (the data we want to process)
+    # Calculate today's date (the data we want to process)
     scheduled_date = context.scheduled_execution_time.date()
     partition_key = scheduled_date.strftime("%Y-%m-%d")
 

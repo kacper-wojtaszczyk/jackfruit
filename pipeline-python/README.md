@@ -27,7 +27,7 @@ Open http://localhost:3000 in your browser to see the project.
 The pipeline includes a daily schedule that automatically materializes CAMS data:
 
 **`cams_daily_schedule`** — Runs at **08:00 UTC** every day
-- Materializes `ingest_cams_data` → `transform_cams_data` for yesterday's partition
+- Materializes `ingest_cams_data` → `transform_cams_data` for today's partition
 - CAMS data is typically available ~6 hours after midnight UTC
 - Each run is tagged with the date being processed
 

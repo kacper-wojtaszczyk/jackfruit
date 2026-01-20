@@ -4,10 +4,9 @@ Tests for Jackfruit pipeline schedules.
 Verifies that schedules correctly generate RunRequests for expected partitions
 and apply proper tags for observability.
 """
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import dagster as dg
-import pytest
 
 
 def _mock_schedule_context(scheduled_execution_time: datetime) -> dg.ScheduleEvaluationContext:
@@ -32,19 +31,19 @@ class TestCamsDailySchedule:
         assert request is not None
         assert isinstance(request, dg.RunRequest)
 
-    def test_schedule_processes_yesterday_partition(self):
-        """Schedule should materialize yesterday's partition."""
+    def test_schedule_processes_today_partition(self):
+        """Schedule should materialize today's partition."""
         from pipeline_python.defs.schedules import cams_daily_schedule
 
         # If scheduled_execution_time is 2025-03-12 (Wed),
-        # it should process 2025-03-11 (Tue)
+        # it should process 2025-03-12 (Tue)
         scheduled_date = datetime(2025, 3, 12, 8, 0, 0)
         context = _mock_schedule_context(scheduled_date)
 
         request = cams_daily_schedule(context)
 
-        # Expected partition: 2025-03-11 (yesterday)
-        assert request.partition_key == "2025-03-11"
+        # Expected partition: 2025-03-11 (today)
+        assert request.partition_key == "2025-03-12"
 
     def test_schedule_partition_format(self):
         """Schedule should format partition key as YYYY-MM-DD."""
@@ -52,10 +51,10 @@ class TestCamsDailySchedule:
 
         # Test various dates to ensure consistent formatting
         test_cases = [
-            (datetime(2025, 1, 2, 8, 0, 0), "2025-01-01"),  # Day 1->1
-            (datetime(2025, 3, 1, 8, 0, 0), "2025-02-28"),  # Month boundary
-            (datetime(2025, 4, 1, 8, 0, 0), "2025-03-31"),  # Month boundary
-            (datetime(2026, 1, 1, 8, 0, 0), "2025-12-31"),  # Year boundary
+            (datetime(2025, 1, 2, 8, 0, 0), "2025-01-02"),  # Day 1->1
+            (datetime(2025, 2, 28, 8, 0, 0), "2025-02-28"),  # Month boundary
+            (datetime(2025, 3, 31, 8, 0, 0), "2025-03-31"),  # Month boundary
+            (datetime(2025, 12, 31, 8, 0, 0), "2025-12-31"),  # Year boundary
         ]
 
         for scheduled_time, expected_partition in test_cases:
@@ -73,7 +72,7 @@ class TestCamsDailySchedule:
         request = cams_daily_schedule(context)
 
         # run_key should be unique per partition
-        assert request.run_key == "cams_daily_2025-03-11"
+        assert request.run_key == "cams_daily_2025-03-12"
 
     def test_schedule_tags_include_metadata(self):
         """Schedule should tag runs with source, pipeline, and date."""
@@ -87,7 +86,7 @@ class TestCamsDailySchedule:
         assert request.tags is not None
         assert request.tags.get("source") == "schedule"
         assert request.tags.get("pipeline") == "cams"
-        assert request.tags.get("scheduled_date") == "2025-03-11"
+        assert request.tags.get("scheduled_date") == "2025-03-12"
 
     def test_schedule_consistent_across_runs(self):
         """Multiple evaluations for the same scheduled time should produce identical results."""
@@ -112,7 +111,7 @@ class TestCamsDailySchedule:
         from pipeline_python.defs.schedules import cams_daily_schedule
 
         # 2024 is a leap year; test Feb 29
-        scheduled_date = datetime(2024, 3, 1, 8, 0, 0)
+        scheduled_date = datetime(2024, 2, 29, 8, 0, 0)
         context = _mock_schedule_context(scheduled_date)
 
         request = cams_daily_schedule(context)
@@ -133,8 +132,8 @@ class TestCamsDailySchedule:
 
             request = cams_daily_schedule(context)
 
-            # Regardless of hour, should still process yesterday's partition
-            assert request.partition_key == "2025-03-11"
+            # Regardless of hour, should still process today's partition
+            assert request.partition_key == "2025-03-12"
 
 
 class TestScheduleDefinitions:
