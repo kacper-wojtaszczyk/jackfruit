@@ -88,6 +88,117 @@ CAMS_CONSTITUENT_CODES = {
     # 62101,  # PM10 (WMO)
 }
 
+
+def _extract_message_metadata(msg, context: dg.AssetExecutionContext) -> dict | None:
+    """
+    Extract metadata from a GRIB message.
+    
+    Args:
+        msg: GRIB message object
+        context: Dagster execution context for logging
+    
+    Returns:
+        Dictionary with constituent_code, var_name, year, month, day, hour
+        or None if the message should be skipped
+    """
+    # Get constituent type code from PDT 4.40
+    try:
+        constituent_code = msg.atmosphericChemicalConstituentType.value
+    except AttributeError:
+        context.log.warning(
+            f"Message does not have atmosphericChemicalConstituentType attribute. "
+            f"This may not be a PDT 4.40 message. Skipping."
+        )
+        return None
+
+    if constituent_code not in CAMS_CONSTITUENT_CODES:
+        context.log.debug(f"Skipping constituent code: {constituent_code}")
+        return None
+
+    # Get variable name from constituent code
+    var_name = get_constituent_name(constituent_code)
+
+    # Use validDate (refDate + leadTime) for the actual forecast timestamp
+    try:
+        valid_date = msg.validDate  # datetime object
+        year, month, day, hour = valid_date.year, valid_date.month, valid_date.day, valid_date.hour
+    except Exception as e:
+        context.log.warning(
+            f"Failed to extract validDate from message for constituent {constituent_code}: {e}. Skipping."
+        )
+        return None
+    
+    return {
+        "constituent_code": constituent_code,
+        "var_name": var_name,
+        "year": year,
+        "month": month,
+        "day": day,
+        "hour": hour,
+    }
+
+
+def _write_curated_grib(
+    msg,
+    metadata: dict,
+    tmpdir: Path,
+    storage: ObjectStorageResource,
+    context: dg.AssetExecutionContext,
+) -> str | None:
+    """
+    Write a single GRIB message to a curated file and upload to storage.
+    
+    Args:
+        msg: GRIB message to write
+        metadata: Message metadata from _extract_message_metadata
+        tmpdir: Temporary directory for writing files
+        storage: Storage resource for uploading
+        context: Dagster execution context for logging
+    
+    Returns:
+        Curated key if successful, None otherwise
+    """
+    var_name = metadata["var_name"]
+    year = metadata["year"]
+    month = metadata["month"]
+    day = metadata["day"]
+    hour = metadata["hour"]
+    constituent_code = metadata["constituent_code"]
+    
+    context.log.info(
+        f"Processing {var_name} (code={constituent_code}) at {year}-{month:02d}-{day:02d} {hour:02d}:00"
+    )
+
+    # Construct curated key
+    curated_key = (
+        f"curated/cams/europe-air-quality/{var_name}/"
+        f"{year:04d}/{month:02d}/{day:02d}/{hour:02d}/data.grib2"
+    )
+
+    # Write single message to new GRIB2 file
+    out_path = tmpdir / f"{var_name}_{year}{month:02d}{day:02d}_{hour:02d}.grib2"
+    try:
+        with grib2io.open(str(out_path), mode="w") as out_file:
+            # Copy the message and write it
+            out_file.write(msg)
+    except Exception as e:
+        context.log.error(
+            f"Failed to write GRIB message for {var_name} at hour {hour}: {e}. Skipping."
+        )
+        return None
+
+    # Upload to curated bucket
+    context.log.info(f"Uploading {curated_key}")
+    try:
+        storage.upload_curated(out_path, curated_key)
+        return curated_key
+    except Exception as e:
+        context.log.error(
+            f"Failed to upload {curated_key} to storage: {e}. Skipping."
+        )
+        return None
+
+
 @dg.asset(
     partitions_def=daily_partitions,
     deps=[ingest_cams_data],
@@ -112,6 +223,10 @@ def transform_cams_data(
 
     Returns:
         MaterializeResult with list of curated keys written
+    
+    Raises:
+        dg.Failure: If upstream materialization not found, raw file download fails,
+                    GRIB file is invalid, or no valid messages found
     """
 
     date = context.partition_key
@@ -122,7 +237,10 @@ def transform_cams_data(
         upstream_key
     )
     if materialization_event is None:
-        raise dg.Failure(f"No materialization found for upstream asset {upstream_key} partition {context.partition_key}")
+        raise dg.Failure(
+            f"No materialization found for upstream asset {upstream_key} partition {context.partition_key}. "
+            f"Please ensure the ingestion asset has been materialized for this partition before running transformation."
+        )
 
     ingest_metadata = materialization_event.asset_materialization.metadata
     context.log.info(f"Upstream metadata: {ingest_metadata}")
@@ -140,56 +258,81 @@ def transform_cams_data(
         # Download raw file
         raw_path = tmpdir / "raw.grib"
         context.log.info(f"Downloading {raw_key} to {raw_path}")
-        storage.download_raw(raw_key, raw_path)
+        try:
+            storage.download_raw(raw_key, raw_path)
+        except Exception as e:
+            raise dg.Failure(
+                f"Failed to download raw file {raw_key} from storage: {e}. "
+                f"Ensure the file exists and storage credentials are correct."
+            )
+        
+        # Verify file was downloaded
+        if not raw_path.exists():
+            raise dg.Failure(f"Downloaded file {raw_path} does not exist after download")
+        
+        file_size = raw_path.stat().st_size
+        if file_size == 0:
+            raise dg.Failure(f"Downloaded file {raw_path} is empty (0 bytes)")
+        
+        context.log.info(f"Downloaded {file_size / 1024:.1f} KB")
 
         # Open with grib2io
         context.log.info("Opening GRIB file with grib2io")
-        with grib2io.open(str(raw_path)) as grib_file:
-            context.log.info(f"Found {grib_file.messages} messages")
+        num_messages = 0  # Initialize outside the context to avoid NameError
+        try:
+            grib_file = grib2io.open(str(raw_path))
+        except Exception as e:
+            raise dg.Failure(
+                f"Failed to open GRIB file {raw_path}: {e}. "
+                f"The file may be corrupted or not a valid GRIB2 file."
+            )
+        
+        with grib_file:
+            num_messages = grib_file.messages
+            context.log.info(f"Found {num_messages} messages")
+            
+            if num_messages == 0:
+                context.log.warning(f"GRIB file {raw_key} contains no messages")
+                # Return early with empty result
+                return dg.MaterializeResult(
+                    metadata={
+                        "run_id": run_id,
+                        "date": date,
+                        "curated_keys": [],
+                        "variables_processed": [],
+                        "files_written": 0,
+                        "warning": "No messages in GRIB file",
+                    }
+                )
 
             # Group messages by variable and time
             for msg in grib_file:
-                # Get constituent type code from PDT 4.40
-                constituent_code = msg.atmosphericChemicalConstituentType.value
-
-                if constituent_code not in CAMS_CONSTITUENT_CODES:
-                    context.log.debug(f"Skipping constituent code: {constituent_code}")
+                # Extract message metadata
+                metadata = _extract_message_metadata(msg, context)
+                if metadata is None:
                     continue
-
-                # Get variable name from constituent code
-                var_name = get_constituent_name(constituent_code)
-
-                # Use validDate (refDate + leadTime) for the actual forecast timestamp
-                valid_date = msg.validDate  # datetime object
-                year, month, day, hour = valid_date.year, valid_date.month, valid_date.day, valid_date.hour
-
-                context.log.info(f"Processing {var_name} (code={constituent_code}) at {year}-{month:02d}-{day:02d} {hour:02d}:00")
-
-                # Construct curated key
-                curated_key = (
-                    f"curated/cams/europe-air-quality/{var_name}/"
-                    f"{year:04d}/{month:02d}/{day:02d}/{hour:02d}/data.grib2"
-                )
-
-                # Write single message to new GRIB2 file
-                out_path = tmpdir / f"{var_name}_{hour:02d}.grib2"
-                with grib2io.open(str(out_path), mode="w") as out_file:
-                    # Copy the message and write it
-                    out_file.write(msg)
-
-                # Upload to curated bucket
-                context.log.info(f"Uploading {curated_key}")
-                storage.upload_curated(out_path, curated_key)
-                curated_keys.append(curated_key)
+                
+                # Write and upload curated file
+                curated_key = _write_curated_grib(msg, metadata, tmpdir, storage, context)
+                if curated_key is not None:
+                    curated_keys.append(curated_key)
 
     context.log.info(f"Wrote {len(curated_keys)} curated files")
+    
+    # Warn if no files were written despite having messages
+    if len(curated_keys) == 0 and num_messages > 0:
+        context.log.warning(
+            f"No curated files were written despite {num_messages} messages in the GRIB file. "
+            f"This may indicate that no messages matched the configured CAMS constituent codes: {CAMS_CONSTITUENT_CODES}"
+        )
 
     return dg.MaterializeResult(
         metadata={
             "run_id": run_id,
             "date": date,
             "curated_keys": curated_keys,
-            "variables_processed": list(set(k.split("/")[3] for k in curated_keys)),
+            "variables_processed": list(set(k.split("/")[3] for k in curated_keys)) if curated_keys else [],
             "files_written": len(curated_keys),
+            "total_messages": num_messages,
         }
     )
