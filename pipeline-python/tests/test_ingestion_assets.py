@@ -186,7 +186,7 @@ class TestDockerIngestionClientUnit:
         """Should skip environment variables that aren't set."""
         # Clear all ingestion env vars
         for var in ["ADS_BASE_URL", "ADS_API_KEY", "MINIO_ENDPOINT",
-                    "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY", "MINIO_BUCKET", "MINIO_USE_SSL"]:
+                    "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY", "MINIO_RAW_BUCKET", "MINIO_USE_SSL"]:
             monkeypatch.delenv(var, raising=False)
 
         monkeypatch.setenv("MINIO_ENDPOINT", "localhost:9000")

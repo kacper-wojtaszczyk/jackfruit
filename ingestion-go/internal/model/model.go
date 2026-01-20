@@ -14,6 +14,22 @@ const (
 	CAMSEuropeAirQualityForecastsForecast Dataset = "cams-europe-air-quality-forecasts-forecast"
 )
 
+// ValidDatasets lists all supported dataset identifiers.
+var ValidDatasets = []Dataset{
+	CAMSEuropeAirQualityForecastsAnalysis,
+	CAMSEuropeAirQualityForecastsForecast,
+}
+
+// Validate checks that the Dataset is a known dataset identifier.
+func (d Dataset) Validate() error {
+	for _, valid := range ValidDatasets {
+		if d == valid {
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown dataset %q, valid options: %v", d, ValidDatasets)
+}
+
 // RunID represents a UUIDv7 run identifier from orchestration (Dagster).
 type RunID string
 

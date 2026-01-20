@@ -114,7 +114,7 @@ ads/cams-europe-air-quality-forecasts-forecast/2025-03-12/01890c24-905b-7122-b17
 - `MINIO_ENDPOINT` — MinIO endpoint (e.g., `localhost:9000`)
 - `MINIO_ACCESS_KEY` — MinIO access key
 - `MINIO_SECRET_KEY` — MinIO secret key
-- `MINIO_BUCKET` — Target bucket name
+- `MINIO_RAW_BUCKET` — Target bucket name
 - `MINIO_USE_SSL` — `true` or `false`
 
 ## Docker Usage
@@ -156,7 +156,7 @@ docker run --rm \
   -e MINIO_ENDPOINT=minio:9000 \
   -e MINIO_ACCESS_KEY=$MINIO_ACCESS_KEY \
   -e MINIO_SECRET_KEY=$MINIO_SECRET_KEY \
-  -e MINIO_BUCKET=jackfruit-raw \
+  -e MINIO_RAW_BUCKET=jackfruit-raw \
   jackfruit-ingestion:latest \
   --dataset=cams-europe-air-quality-forecasts-analysis \
   --date=2025-03-12 \

@@ -41,7 +41,7 @@ _INGESTION_ENV_VARS = [
     "MINIO_ENDPOINT",
     "MINIO_ACCESS_KEY",
     "MINIO_SECRET_KEY",
-    "MINIO_BUCKET",
+    "MINIO_RAW_BUCKET",
     "MINIO_USE_SSL",
 ]
 
@@ -189,8 +189,8 @@ class ObjectStorageResource(dg.ConfigurableResource):
     """
 
     endpoint_url: str
-    access_key: dg.EnvVar
-    secret_key: dg.EnvVar
+    access_key: str
+    secret_key: str
     raw_bucket: str = "jackfruit-raw"
     curated_bucket: str = "jackfruit-curated"
     use_ssl: bool = False
@@ -200,8 +200,8 @@ class ObjectStorageResource(dg.ConfigurableResource):
         return boto3.client(
             "s3",
             endpoint_url=self.endpoint_url,
-            aws_access_key_id=self.access_key.get_value(),
-            aws_secret_access_key=self.secret_key.get_value(),
+            aws_access_key_id=self.access_key,
+            aws_secret_access_key=self.secret_key,
             use_ssl=self.use_ssl,
         )
 
