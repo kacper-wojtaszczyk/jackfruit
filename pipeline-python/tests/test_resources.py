@@ -94,13 +94,13 @@ class TestObjectStorageResourceUploadCurated:
             try:
                 storage_resource.upload_curated(
                     local_path,
-                    "curated/cams/europe-air-quality/pm2p5/2025/01/15/12/data.grib2"
+                    "curated/pm2p5/cams/2025/01/15/12/data.grib2"
                 )
                 
                 mock_s3_client.upload_file.assert_called_once_with(
                     str(local_path),
                     "test-curated",
-                    "curated/cams/europe-air-quality/pm2p5/2025/01/15/12/data.grib2",
+                    "curated/pm2p5/cams/2025/01/15/12/data.grib2",
                 )
             finally:
                 local_path.unlink()

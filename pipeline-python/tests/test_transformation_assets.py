@@ -163,7 +163,7 @@ class TestWriteCuratedGrib:
 
                 result = _write_curated_grib(mock_msg, metadata, tmpdir_path, mock_storage, mock_context)
 
-        expected_key = "cams/europe-air-quality/pm2p5/2025/01/15/12/data.grib2"
+        expected_key = "pm2p5/cams/2025/01/15/12/data.grib2"
         assert result == expected_key
 
         # Verify storage was called

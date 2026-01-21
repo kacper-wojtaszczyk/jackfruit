@@ -185,7 +185,7 @@ class ObjectStorageResource(dg.ConfigurableResource):
                 local_path = Path(tmpdir) / "raw.grib"
                 storage.download_raw("ads/cams/.../file.grib", local_path)
                 # ... process ...
-                storage.upload_curated(output_path, "cams/europe-air-quality/.../data.grib2")
+                storage.upload_curated(output_path, "pm2p5/cams/.../data.grib2")
     """
 
     endpoint_url: str
@@ -240,7 +240,7 @@ class ObjectStorageResource(dg.ConfigurableResource):
 
         Args:
             local_path: Local file path to upload
-            key: S3 key (e.g., "cams/europe-air-quality/pm2p5/2025/03/11/14/data.grib2")
+            key: S3 key (e.g., "pm2p5/cams/2025/03/11/14/data.grib2")
 
         Raises:
             ValueError: If key is empty or local_path doesn't exist

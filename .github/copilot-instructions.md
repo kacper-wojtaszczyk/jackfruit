@@ -44,9 +44,9 @@ Raw key pattern:
 Example: `ads/cams-europe-air-quality-forecasts-analysis/2025-03-12/01890c24-905b-7122-b170-b60814e6ee06.grib`
 
 Curated key pattern (single file per variable per timestamp):
-`{source}/{dataset}/{variable}/{year}/{month}/{day}/{hour}/data.grib2`
+`{variable}/{source}/{year}/{month}/{day}/{hour}/data.grib2`
 
-Example: `cams/europe-air-quality/pm2p5/2025/03/11/14/data.grib2`
+Example: `pm2p5/cams/2025/03/11/14/data.grib2`
 
 Curated format: GRIB2 (self-describing, native for gridded data, Go-readable via eccodes)
 </storage_rules>
