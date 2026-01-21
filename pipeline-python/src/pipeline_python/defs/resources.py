@@ -310,6 +310,15 @@ def storage_resources():
 # Catalog resources
 # -----------------------------------------------------------------------------
 
+def _postgres_dsn_from_env() -> str:
+    user = os.environ["POSTGRES_USER"]
+    password = os.environ["POSTGRES_PASSWORD"]
+    host = os.environ.get("POSTGRES_HOST", "postgres")
+    port = os.environ.get("POSTGRES_PORT", "5432")
+    db_name = os.environ.get("POSTGRES_DB", "postgres")
+    return f"postgresql://{user}:{password}@{host}:{port}/{db_name}"
+
+
 class PostgresCatalogResource(dg.ConfigurableResource):
     """
     Resource for interacting with the custom Postgres catalog.
@@ -363,7 +372,7 @@ def catalog_resources():
     return dg.Definitions(
         resources={
             "catalog": PostgresCatalogResource(
-                dsn="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+                dsn=_postgres_dsn_from_env()
             )
         }
     )
