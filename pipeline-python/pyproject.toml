@@ -3,11 +3,13 @@ name = "pipeline_python"
 requires-python = ">=3.10,<3.15"
 version = "0.1.0"
 dependencies = [
-    "boto3~=1.42.30",
-    "boto3-stubs~=1.42.30",
-    "dagster==1.12.7",
-    "dagster-docker>=0.26.0",
+    "boto3~=1.42",
+    "boto3-stubs~=1.42",
+    "dagster~=1.12",
+    "dagster-docker~=0.28",
+    "dagster-postgres~=0.28",
     "grib2io==2.6.0",
+    "psycopg[binary]~=3.2",
 ]
 [dependency-groups]
 dev = [

@@ -30,6 +30,7 @@ from pathlib import Path
 import boto3
 from botocore.exceptions import ClientError
 from dagster_docker import PipesDockerClient
+import psycopg
 
 import dagster as dg
 
@@ -302,5 +303,67 @@ def storage_resources():
                 raw_bucket=os.environ.get("MINIO_RAW_BUCKET", "jackfruit-raw"),
                 curated_bucket=os.environ.get("MINIO_CURATED_BUCKET", "jackfruit-curated"),
             ),
+        }
+    )
+
+# -----------------------------------------------------------------------------
+# Catalog resources
+# -----------------------------------------------------------------------------
+
+class PostgresCatalogResource(dg.ConfigurableResource):
+    """
+    Resource for interacting with the custom Postgres catalog.
+    """
+    dsn: str  # Postgres DSN (e.g., postgres://user:password@host:port/dbname)
+
+    def _get_connection(self):
+        return psycopg.connect(self.dsn)
+
+    def insert_raw_file(self, raw_file):
+        """Insert a raw file record into the database."""
+        query = """
+        INSERT INTO catalog.raw_files (id, source, dataset, date, s3_key, created_at)
+        VALUES (%s, %s, %s, %s, %s, NOW())
+        ON CONFLICT (id) DO NOTHING;
+        """
+        with self._get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (
+                    raw_file["id"],
+                    raw_file["source"],
+                    raw_file["dataset"],
+                    raw_file["date"],
+                    raw_file["s3_key"]
+                ))
+
+    def insert_curated_file(self, curated_file):
+        """Insert a curated file record into the database."""
+        query = """
+        INSERT INTO catalog.curated_files (id, raw_file_id, variable, source, timestamp, s3_key, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, NOW())
+        ON CONFLICT (s3_key) DO UPDATE SET
+            variable = EXCLUDED.variable,
+            source = EXCLUDED.source,
+            timestamp = EXCLUDED.timestamp;
+        """
+        with self._get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (
+                    curated_file["id"],
+                    curated_file["raw_file_id"],
+                    curated_file["variable"],
+                    curated_file["source"],
+                    curated_file["timestamp"],
+                    curated_file["s3_key"]
+                ))
+
+
+@dg.definitions
+def catalog_resources():
+    return dg.Definitions(
+        resources={
+            "catalog": PostgresCatalogResource(
+                dsn="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+            )
         }
     )

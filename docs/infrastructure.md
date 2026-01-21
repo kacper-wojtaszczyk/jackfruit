@@ -123,7 +123,7 @@ MINIO_SECRET_KEY=minioadmin
 MINIO_RAW_BUCKET=jackfruit-raw
 
 # Metadata DB (TBD)
-POSTGRES_HOST=localhost
+POSTGRES_HOST=postgres
 POSTGRES_PORT=5432
 POSTGRES_USER=jackfruit
 POSTGRES_PASSWORD=...
