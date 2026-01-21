@@ -94,13 +94,13 @@ class TestObjectStorageResourceUploadCurated:
             try:
                 storage_resource.upload_curated(
                     local_path,
-                    "curated/cams/europe-air-quality/pm2p5/2025/01/15/12/data.grib2"
+                    "pm2p5/cams/2025/01/15/12/data.grib2"
                 )
                 
                 mock_s3_client.upload_file.assert_called_once_with(
                     str(local_path),
                     "test-curated",
-                    "curated/cams/europe-air-quality/pm2p5/2025/01/15/12/data.grib2",
+                    "pm2p5/cams/2025/01/15/12/data.grib2",
                 )
             finally:
                 local_path.unlink()
@@ -121,7 +121,7 @@ class TestObjectStorageResourceUploadCurated:
         with pytest.raises(ValueError, match="does not exist"):
             storage_resource.upload_curated(
                 Path("/nonexistent/file.grib"),
-                "curated/key"
+                "pm2p5/cams/2025/01/15/12/data.grib2"
             )
     
     def test_raises_error_for_directory(self, storage_resource):
@@ -130,7 +130,7 @@ class TestObjectStorageResourceUploadCurated:
             with pytest.raises(ValueError, match="not a file"):
                 storage_resource.upload_curated(
                     Path(tmpdir),
-                    "curated/key"
+                    "pm2p5/cams/2025/01/15/12/data.grib2"
                 )
 
 

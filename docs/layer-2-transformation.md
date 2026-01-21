@@ -107,19 +107,19 @@ ETL reads raw (or public S3 directly for large datasets), writes curated. Never 
 ### Key Structure (Plain Paths)
 
 ```
-{source}/{dataset}/{variable}/{year}/{month}/{day}/{hour}/data.grib2   # hourly
-{source}/{dataset}/{variable}/{year}/{month}/{day}/data.grib2          # daily
-{source}/{dataset}/{variable}/{year}/W{week}/data.grib2                # weekly (ISO week)
+{variable}/{source}/{year}/{month}/{day}/{hour}/data.grib2   # hourly
+{variable}/{source}/{year}/{month}/{day}/data.grib2          # daily
+{variable}/{source}/{year}/W{week}/data.grib2                # weekly (ISO week)
 ```
 
 ### Examples by Source
 
 | Source | Granularity | Example Path |
 |--------|-------------|--------------|
-| CAMS | Hourly | `cams/europe-air-quality/pm2p5/2025/03/11/14/data.grib2` |
-| ERA5 | Hourly | `era5/reanalysis/temperature/2025/03/11/00/data.grib2` |
-| GloFAS | Daily | `glofas/river-discharge/discharge/2025/03/11/data.grib2` |
-| CGLS | Weekly | `cgls/ndvi/ndvi/2025/W11/data.grib2` |
+| CAMS | Hourly | `pm2p5/cams/2025/03/11/14/data.grib2` |
+| ERA5 | Hourly | `temperature/era5/2025/03/11/00/data.grib2` |
+| GloFAS | Daily | `discharge/glofas/2025/03/11/data.grib2` |
+| CGLS | Weekly | `ndvi/cgls/2025/W11/data.grib2` |
 
 ### Design Principles
 
@@ -135,7 +135,7 @@ Optimized for the serving layer query pattern:
 
 1. Client requests: "PM2.5 for Berlin at 2025-03-11T14:37:00Z"
 2. Server snaps to nearest hour: `14:00`
-3. Server constructs key: `cams/europe-air-quality/pm2p5/2025/03/11/14/data.grib2`
+3. Server constructs key: `pm2p5/cams/2025/03/11/14/data.grib2`
 4. Server fetches single file via direct S3 GET (no listing)
 5. Server extracts grid cell, returns value
 
@@ -148,17 +148,17 @@ Optimized for the serving layer query pattern:
 
 ```go
 // Hourly
-key := fmt.Sprintf("%s/%s/%s/%04d/%02d/%02d/%02d/data.grib2",
-    source, dataset, variable, year, month, day, hour)
+key := fmt.Sprintf("%s/%s/%04d/%02d/%02d/%02d/data.grib2",
+    variable, source, year, month, day, hour)
 
 // Daily
-key := fmt.Sprintf("%s/%s/%s/%04d/%02d/%02d/data.grib2",
-    source, dataset, variable, year, month, day)
+key := fmt.Sprintf("%s/%s/%04d/%02d/%02d/data.grib2",
+    variable, source, year, month, day)
 
 // Weekly (ISO week)
 year, week := timestamp.ISOWeek()
-key := fmt.Sprintf("%s/%s/%s/%04d/W%02d/data.grib2",
-    source, dataset, variable, year, week)
+key := fmt.Sprintf("%s/%s/%04d/W%02d/data.grib2",
+    variable, source, year, week)
 ```
 
 ### Scope
