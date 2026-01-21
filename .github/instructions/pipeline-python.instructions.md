@@ -26,7 +26,7 @@ Raw key pattern:
 `{source}/{dataset}/{YYYY-MM-DD}/{run_id}.{ext}`
 
 Curated key pattern (single file per variable per timestamp):
-`curated/{source}/{dataset}/{variable}/{year}/{month}/{day}/{hour}/data.grib2`
+`{variable}/{source}/{year}/{month}/{day}/{hour}/data.grib2`
 
 Curated format: GRIB2 (self-describing, enables direct S3 GET in serving layer)
 </storage_rules>
