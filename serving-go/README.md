@@ -276,12 +276,7 @@ serving-go/
 ├── go.mod
 ├── go.sum
 ├── Dockerfile
-├── README.md
-├── ROADMAP-MVP.md
-└── ROADMAP-PRODUCTION.md
+
+└── README.md
 ```
 
-## Roadmaps
-
-- [MVP Roadmap](../pipeline-python/data/ROADMAP-MVP.md) — Working prototype for PM2.5/PM10
-- [Production Roadmap](../pipeline-python/data/ROADMAP-PRODUCTION.md) — Full web service with observability

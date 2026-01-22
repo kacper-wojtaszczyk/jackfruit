@@ -2,7 +2,7 @@
 
 Expose query interfaces for client projects. Abstracts storage backend from consumers.
 
-> **Implementation:** See [serving-go/README.md](../serving-go/README.md) for detailed API contract, architecture, and roadmaps.
+> **Implementation:** See [serving-go/README.md](../serving-go/README.md) for detailed API contract, architecture, and development guide.
 
 ## Responsibilities
 
