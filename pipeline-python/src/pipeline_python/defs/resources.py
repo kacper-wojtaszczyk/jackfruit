@@ -31,6 +31,7 @@ import boto3
 from botocore.exceptions import ClientError
 from dagster_docker import PipesDockerClient
 import psycopg
+from pydantic import PrivateAttr
 
 import dagster as dg
 from .models import CuratedFileRecord, RawFileRecord
@@ -348,7 +349,7 @@ class PostgresCatalogResource(dg.ConfigurableResource):
         dsn: Postgres DSN (e.g., postgresql://user:password@host:port/dbname)
     """
     dsn: str
-    _connection: psycopg.Connection | None = None
+    _connection: psycopg.Connection | None = PrivateAttr(default=None)
 
     def get_connection(self) -> psycopg.Connection:
         """
