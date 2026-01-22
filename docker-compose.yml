@@ -55,6 +55,11 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_RAW_BUCKET: ${MINIO_RAW_BUCKET}
       MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./pipeline-python:/app
@@ -62,7 +67,25 @@ services:
       - "3099:3000"
     networks:
       jackfruit:
+
+  postgres:
+    image: postgres:18
+    container_name: postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./pipeline-python/migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      jackfruit:
+
 networks:
     jackfruit:
 volumes:
   minio_data:
+  postgres_data:

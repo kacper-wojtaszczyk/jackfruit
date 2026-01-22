@@ -5,6 +5,7 @@ Tests the transform_cams_data asset with mocked resources and data.
 Focuses on unit testing the helper functions which contain the core logic.
 """
 import tempfile
+import uuid
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch, PropertyMock
 
@@ -16,6 +17,11 @@ from pipeline_python.defs.assets import (
     _extract_message_metadata,
     _write_curated_grib,
 )
+from pipeline_python.defs.models import RawFileRecord, CuratedFileRecord
+
+
+# Global state for tracking mock calls
+_catalog_curated_inserts = []
 
 
 class MockObjectStorageResource(dg.ConfigurableResource):
@@ -46,10 +52,39 @@ class MockObjectStorageResource(dg.ConfigurableResource):
         })
 
 
+class MockCatalogResource(dg.ConfigurableResource):
+    """
+    Mock catalog resource for testing.
+
+    Tracks insert calls for verification in tests.
+    """
+
+    should_fail: bool = False
+
+    def insert_raw_file(self, raw_file: RawFileRecord) -> None:
+        """Record the insert call."""
+        if self.should_fail:
+            raise Exception("Mock catalog failure")
+
+    def insert_curated_file(self, curated_file: CuratedFileRecord) -> None:
+        """Record the insert call."""
+        _catalog_curated_inserts.append(curated_file)
+        if self.should_fail:
+            raise Exception("Mock catalog failure")
+
+
 @pytest.fixture
 def mock_storage():
     """Provide a mock storage resource."""
     return MockObjectStorageResource()
+
+
+@pytest.fixture
+def mock_catalog():
+    """Provide a mock catalog resource."""
+    global _catalog_curated_inserts
+    _catalog_curated_inserts = []
+    return MockCatalogResource()
 
 
 @pytest.fixture
@@ -140,7 +175,7 @@ class TestExtractMessageMetadata:
 class TestWriteCuratedGrib:
     """Tests for the _write_curated_grib helper function."""
 
-    def test_constructs_correct_curated_key(self, mock_storage, mock_context):
+    def test_constructs_correct_curated_key(self, mock_storage, mock_catalog, mock_context):
         """Should construct the correct curated S3 key."""
         mock_msg = Mock()
         metadata = {
@@ -151,6 +186,7 @@ class TestWriteCuratedGrib:
             "day": 15,
             "hour": 12,
         }
+        raw_file_id = uuid.uuid4()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
@@ -161,7 +197,10 @@ class TestWriteCuratedGrib:
                 mock_out_file.__exit__.return_value = None
                 mock_grib_open.return_value = mock_out_file
 
-                result = _write_curated_grib(mock_msg, metadata, tmpdir_path, mock_storage, mock_context)
+                result = _write_curated_grib(
+                    mock_msg, metadata, tmpdir_path, mock_storage, mock_context,
+                    mock_catalog, raw_file_id,
+                )
 
         expected_key = "pm2p5/cams/2025/01/15/12/data.grib2"
         assert result == expected_key
@@ -170,7 +209,52 @@ class TestWriteCuratedGrib:
         assert len(mock_storage.uploaded_files) == 1
         assert mock_storage.uploaded_files[0]["key"] == expected_key
 
-    def test_returns_none_on_write_failure(self, mock_storage, mock_context):
+    def test_inserts_catalog_record_when_provided(self, mock_storage, mock_catalog, mock_context):
+        """Should insert a curated file record when catalog is provided."""
+        global _catalog_curated_inserts
+        _catalog_curated_inserts = []
+
+        mock_msg = Mock()
+        metadata = {
+            "constituent_code": 40009,
+            "var_name": "pm2p5",
+            "year": 2025,
+            "month": 1,
+            "day": 15,
+            "hour": 12,
+        }
+        raw_file_id = uuid.uuid4()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+
+            with patch("pipeline_python.defs.assets.grib2io.open") as mock_grib_open:
+                mock_out_file = MagicMock()
+                mock_out_file.__enter__.return_value = mock_out_file
+                mock_out_file.__exit__.return_value = None
+                mock_grib_open.return_value = mock_out_file
+
+                result = _write_curated_grib(
+                    mock_msg, metadata, tmpdir_path, mock_storage, mock_context,
+                    catalog=mock_catalog, raw_file_id=raw_file_id,
+                )
+
+        expected_key = "pm2p5/cams/2025/01/15/12/data.grib2"
+        assert result == expected_key
+
+        # Verify catalog insert was called
+        assert len(_catalog_curated_inserts) == 1
+        curated_record = _catalog_curated_inserts[0]
+        assert curated_record.raw_file_id == raw_file_id
+        assert curated_record.variable == "pm2p5"
+        assert curated_record.source == "cams"
+        assert curated_record.s3_key == expected_key
+        assert curated_record.timestamp.year == 2025
+        assert curated_record.timestamp.month == 1
+        assert curated_record.timestamp.day == 15
+        assert curated_record.timestamp.hour == 12
+
+    def test_returns_none_on_write_failure(self, mock_storage, mock_catalog, mock_context):
         """Should return None if GRIB write fails."""
         mock_msg = Mock()
         metadata = {
@@ -181,6 +265,7 @@ class TestWriteCuratedGrib:
             "day": 15,
             "hour": 12,
         }
+        raw_file_id = uuid.uuid4()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
@@ -188,12 +273,15 @@ class TestWriteCuratedGrib:
             with patch("pipeline_python.defs.assets.grib2io.open") as mock_grib_open:
                 mock_grib_open.side_effect = Exception("GRIB write error")
 
-                result = _write_curated_grib(mock_msg, metadata, tmpdir_path, mock_storage, mock_context)
+                result = _write_curated_grib(
+                    mock_msg, metadata, tmpdir_path, mock_storage, mock_context,
+                    mock_catalog, raw_file_id,
+                )
 
         assert result is None
         mock_context.log.error.assert_called_once()
 
-    def test_returns_none_on_upload_failure(self, mock_context):
+    def test_returns_none_on_upload_failure(self, mock_catalog, mock_context):
         """Should return None if S3 upload fails."""
         mock_msg = Mock()
         metadata = {
@@ -204,6 +292,7 @@ class TestWriteCuratedGrib:
             "day": 20,
             "hour": 6,
         }
+        raw_file_id = uuid.uuid4()
 
         # Create a mock storage that fails on upload
         mock_storage = Mock()
@@ -218,10 +307,57 @@ class TestWriteCuratedGrib:
                 mock_out_file.__exit__.return_value = None
                 mock_grib_open.return_value = mock_out_file
 
-                result = _write_curated_grib(mock_msg, metadata, tmpdir_path, mock_storage, mock_context)
+                result = _write_curated_grib(
+                    mock_msg, metadata, tmpdir_path, mock_storage, mock_context,
+                    mock_catalog, raw_file_id,
+                )
 
         assert result is None
         mock_context.log.error.assert_called_once()
+
+    def test_continues_on_catalog_failure(self, mock_storage, mock_context):
+        """Should return curated key even if catalog insert fails (non-fatal)."""
+        global _catalog_curated_inserts
+        _catalog_curated_inserts = []
+
+        mock_msg = Mock()
+        metadata = {
+            "constituent_code": 40009,
+            "var_name": "pm2p5",
+            "year": 2025,
+            "month": 1,
+            "day": 15,
+            "hour": 12,
+        }
+        raw_file_id = uuid.uuid4()
+
+        # Create a mock catalog that fails on insert
+        failing_catalog = MockCatalogResource(should_fail=True)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+
+            with patch("pipeline_python.defs.assets.grib2io.open") as mock_grib_open:
+                mock_out_file = MagicMock()
+                mock_out_file.__enter__.return_value = mock_out_file
+                mock_out_file.__exit__.return_value = None
+                mock_grib_open.return_value = mock_out_file
+
+                result = _write_curated_grib(
+                    mock_msg, metadata, tmpdir_path, mock_storage, mock_context,
+                    failing_catalog, raw_file_id,
+                )
+
+        expected_key = "pm2p5/cams/2025/01/15/12/data.grib2"
+        assert result == expected_key  # Should still succeed
+
+        # Verify upload happened
+        assert len(mock_storage.uploaded_files) == 1
+        assert mock_storage.uploaded_files[0]["key"] == expected_key
+
+        # Verify warning was logged
+        mock_context.log.warning.assert_called_once()
+        assert "Failed to record curated file in catalog" in str(mock_context.log.warning.call_args)
 
 
 class TestCamsConstituentCodes:

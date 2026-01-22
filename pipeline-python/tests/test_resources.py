@@ -6,11 +6,15 @@ Tests the ObjectStorageResource for S3/MinIO interactions.
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
+import uuid
+from datetime import date, datetime
+from unittest.mock import MagicMock
 
 import pytest
 from botocore.exceptions import ClientError
 
-from pipeline_python.defs.resources import ObjectStorageResource
+from pipeline_python.defs.resources import ObjectStorageResource, PostgresCatalogResource
+from pipeline_python.defs.models import CuratedFileRecord, RawFileRecord
 
 
 @pytest.fixture
@@ -30,6 +34,20 @@ def storage_resource():
         curated_bucket="test-curated",
         use_ssl=False,
     )
+
+
+@pytest.fixture
+def psycopg_mocks():
+    """Provide psycopg connection and cursor mocks that support context managers."""
+    cursor = MagicMock()
+    cursor.__enter__.return_value = cursor
+    cursor.__exit__.return_value = False
+    conn = MagicMock()
+    conn.__enter__.return_value = conn
+    conn.__exit__.return_value = False
+    conn.cursor.return_value = cursor
+    conn.commit = MagicMock()  # Add commit method
+    return {"connect": MagicMock(return_value=conn), "conn": conn, "cursor": cursor}
 
 
 class TestObjectStorageResourceDownloadRaw:
@@ -192,3 +210,140 @@ class TestObjectStorageResourceConfig:
         assert resource.raw_bucket == "my-raw-bucket"
         assert resource.curated_bucket == "my-curated-bucket"
         assert resource.use_ssl is True
+
+
+class TestPostgresCatalogResource:
+    """Tests for PostgresCatalogResource insert helpers."""
+
+    def test_insert_raw_file_uses_dataclass(self, psycopg_mocks):
+        """Should insert raw file using typed dataclass fields."""
+        resource = PostgresCatalogResource(dsn="postgresql://localhost:5432/db")
+        raw = RawFileRecord(
+            id=uuid.uuid4(),
+            source="ads",
+            dataset="cams-europe-air-quality-forecasts-forecast",
+            date=date(2025, 1, 2),
+            s3_key="ads/cams/2025-01-02/run.grib",
+        )
+
+        with patch("pipeline_python.defs.resources.psycopg.connect", psycopg_mocks["connect"]):
+            resource.insert_raw_file(raw)
+
+        psycopg_mocks["connect"].assert_called_once_with("postgresql://localhost:5432/db")
+        psycopg_mocks["cursor"].execute.assert_called_once()
+        args, kwargs = psycopg_mocks["cursor"].execute.call_args
+        assert "INSERT INTO catalog.raw_files" in args[0]
+        assert args[1] == (
+            str(raw.id),
+            "ads",
+            "cams-europe-air-quality-forecasts-forecast",
+            date(2025, 1, 2),
+            "ads/cams/2025-01-02/run.grib",
+        )
+
+    def test_insert_curated_file_uses_dataclass(self, psycopg_mocks):
+        """Should insert curated file using typed dataclass fields."""
+        resource = PostgresCatalogResource(dsn="postgresql://localhost:5432/db")
+        curated = CuratedFileRecord(
+            id=uuid.uuid4(),
+            raw_file_id=uuid.uuid4(),
+            variable="pm2p5",
+            source="cams",
+            timestamp=datetime(2025, 1, 2, 12, 0, 0),
+            s3_key="pm2p5/cams/2025/01/02/12/data.grib2",
+        )
+
+        with patch("pipeline_python.defs.resources.psycopg.connect", psycopg_mocks["connect"]):
+            resource.insert_curated_file(curated)
+
+        psycopg_mocks["connect"].assert_called_once_with("postgresql://localhost:5432/db")
+        psycopg_mocks["cursor"].execute.assert_called_once()
+        args, kwargs = psycopg_mocks["cursor"].execute.call_args
+        assert "INSERT INTO catalog.curated_files" in args[0]
+        assert args[1] == (
+            str(curated.id),
+            str(curated.raw_file_id),
+            "pm2p5",
+            "cams",
+            datetime(2025, 1, 2, 12, 0, 0),
+            "pm2p5/cams/2025/01/02/12/data.grib2",
+        )
+
+    def test_context_manager_reuses_connection(self, psycopg_mocks):
+        """Should reuse same connection when used as context manager."""
+        resource = PostgresCatalogResource(dsn="postgresql://localhost:5432/db")
+        raw1 = RawFileRecord(
+            id=uuid.uuid4(),
+            source="ads",
+            dataset="test-dataset",
+            date=date(2025, 1, 2),
+            s3_key="ads/test/2025-01-02/run1.grib",
+        )
+        raw2 = RawFileRecord(
+            id=uuid.uuid4(),
+            source="ads",
+            dataset="test-dataset",
+            date=date(2025, 1, 3),
+            s3_key="ads/test/2025-01-03/run2.grib",
+        )
+
+        with patch("pipeline_python.defs.resources.psycopg.connect", psycopg_mocks["connect"]):
+            with resource:
+                resource.insert_raw_file(raw1)
+                resource.insert_raw_file(raw2)
+
+        # Connection should be created once and reused
+        psycopg_mocks["connect"].assert_called_once_with("postgresql://localhost:5432/db")
+        # Close should be called on exit
+        psycopg_mocks["conn"].close.assert_called_once()
+
+
+class TestPostgresDsnFromEnv:
+    """Tests for _postgres_dsn_from_env function."""
+
+    def test_constructs_dsn_with_all_env_vars(self, monkeypatch):
+        """Should construct correct DSN with all environment variables."""
+        from pipeline_python.defs.resources import _postgres_dsn_from_env
+
+        monkeypatch.setenv("POSTGRES_USER", "testuser")
+        monkeypatch.setenv("POSTGRES_PASSWORD", "testpass")
+        monkeypatch.setenv("POSTGRES_HOST", "testhost")
+        monkeypatch.setenv("POSTGRES_PORT", "5433")
+        monkeypatch.setenv("POSTGRES_DB", "testdb")
+
+        dsn = _postgres_dsn_from_env()
+
+        assert dsn == "postgresql://testuser:testpass@testhost:5433/testdb"
+
+    def test_uses_default_values_for_optional_vars(self, monkeypatch):
+        """Should use default values for optional environment variables."""
+        from pipeline_python.defs.resources import _postgres_dsn_from_env
+
+        monkeypatch.setenv("POSTGRES_USER", "testuser")
+        monkeypatch.setenv("POSTGRES_PASSWORD", "testpass")
+        # HOST, PORT, DB not set - should use defaults
+
+        dsn = _postgres_dsn_from_env()
+
+        assert dsn == "postgresql://testuser:testpass@postgres:5432/postgres"
+
+    def test_raises_key_error_when_user_missing(self, monkeypatch):
+        """Should raise KeyError when POSTGRES_USER is missing."""
+        from pipeline_python.defs.resources import _postgres_dsn_from_env
+
+        monkeypatch.delenv("POSTGRES_USER", raising=False)
+        monkeypatch.setenv("POSTGRES_PASSWORD", "testpass")
+
+        with pytest.raises(KeyError, match="POSTGRES_USER"):
+            _postgres_dsn_from_env()
+
+    def test_raises_key_error_when_password_missing(self, monkeypatch):
+        """Should raise KeyError when POSTGRES_PASSWORD is missing."""
+        from pipeline_python.defs.resources import _postgres_dsn_from_env
+
+        monkeypatch.setenv("POSTGRES_USER", "testuser")
+        monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
+
+        with pytest.raises(KeyError, match="POSTGRES_PASSWORD"):
+            _postgres_dsn_from_env()
+

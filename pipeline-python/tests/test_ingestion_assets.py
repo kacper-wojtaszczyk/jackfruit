@@ -7,18 +7,42 @@ Dagster testing patterns used:
 - pytest fixtures for common setup
 """
 import uuid
-from datetime import datetime
 
 import dagster as dg
 import pytest
 
 from pipeline_python.defs.assets import IngestionConfig, ingest_cams_data
 from pipeline_python.defs.resources import DockerIngestionClient
+from pipeline_python.defs.models import RawFileRecord, CuratedFileRecord
 
 
 
 # Global state for tracking mock calls (used during tests)
 _mock_calls = []
+_catalog_raw_inserts = []
+_catalog_curated_inserts = []
+
+
+class MockCatalogResource(dg.ConfigurableResource):
+    """
+    Mock catalog resource for testing.
+
+    Tracks insert calls for verification in tests.
+    """
+
+    should_fail: bool = False
+
+    def insert_raw_file(self, raw_file: RawFileRecord) -> None:
+        """Record the insert call."""
+        _catalog_raw_inserts.append(raw_file)
+        if self.should_fail:
+            raise Exception("Mock catalog failure")
+
+    def insert_curated_file(self, curated_file: CuratedFileRecord) -> None:
+        """Record the insert call."""
+        _catalog_curated_inserts.append(curated_file)
+        if self.should_fail:
+            raise Exception("Mock catalog failure")
 
 
 class StatefulMockIngestionClient(dg.ConfigurableResource):
@@ -66,19 +90,30 @@ class StatefulMockIngestionClient(dg.ConfigurableResource):
 @pytest.fixture
 def mock_ingestion_client():
     """Fixture providing a fresh mock client for each test."""
-    global _mock_calls
+    global _mock_calls, _catalog_raw_inserts, _catalog_curated_inserts
     _mock_calls = []
+    _catalog_raw_inserts = []
+    _catalog_curated_inserts = []
     return StatefulMockIngestionClient()
+
+
+@pytest.fixture
+def mock_catalog():
+    """Fixture providing a fresh mock catalog for each test."""
+    global _catalog_raw_inserts, _catalog_curated_inserts
+    _catalog_raw_inserts = []
+    _catalog_curated_inserts = []
+    return MockCatalogResource()
 
 
 class TestIngestCamsDataAsset:
     """Tests for the ingest_cams_data asset."""
 
-    def test_asset_executes_with_partition(self, mock_ingestion_client):
+    def test_asset_executes_with_partition(self, mock_ingestion_client, mock_catalog):
         """Asset should execute successfully with a partition key."""
         result = dg.materialize(
             assets=[ingest_cams_data],
-            resources={"ingestion_client": mock_ingestion_client},
+            resources={"ingestion_client": mock_ingestion_client, "catalog": mock_catalog},
             partition_key="2026-01-15",
         )
 
@@ -92,11 +127,19 @@ class TestIngestCamsDataAsset:
         # run_id should be a valid UUID
         uuid.UUID(call["run_id"])  # Raises if invalid
 
-    def test_asset_uses_custom_dataset(self, mock_ingestion_client):
+        # Verify catalog insert was called
+        assert len(_catalog_raw_inserts) == 1
+        raw_record = _catalog_raw_inserts[0]
+        assert raw_record.source == "ads"
+        assert raw_record.dataset == "cams-europe-air-quality-forecasts-forecast"
+        assert str(raw_record.date) == "2026-01-15"
+        assert raw_record.s3_key == f"ads/cams-europe-air-quality-forecasts-forecast/2026-01-15/{call['run_id']}.grib"
+
+    def test_asset_uses_custom_dataset(self, mock_ingestion_client, mock_catalog):
         """Asset should use the dataset from config when provided."""
         result = dg.materialize(
             assets=[ingest_cams_data],
-            resources={"ingestion_client": mock_ingestion_client},
+            resources={"ingestion_client": mock_ingestion_client, "catalog": mock_catalog},
             partition_key="2026-01-15",
             run_config={
                 "ops": {
@@ -114,20 +157,25 @@ class TestIngestCamsDataAsset:
         assert call["date"] == "2026-01-15"
         assert call["dataset"] == "cams-europe-air-quality-forecasts-analysis"
 
-    def test_asset_generates_unique_run_ids(self, mock_ingestion_client):
+        # Verify catalog uses custom dataset
+        assert len(_catalog_raw_inserts) == 1
+        assert _catalog_raw_inserts[0].dataset == "cams-europe-air-quality-forecasts-analysis"
+
+    def test_asset_generates_unique_run_ids(self, mock_ingestion_client, mock_catalog):
         """Each asset execution should generate a unique run_id."""
-        global _mock_calls
+        global _mock_calls, _catalog_raw_inserts
         _mock_calls = []
+        _catalog_raw_inserts = []
 
         # Execute twice with same partition
         dg.materialize(
             assets=[ingest_cams_data],
-            resources={"ingestion_client": mock_ingestion_client},
+            resources={"ingestion_client": mock_ingestion_client, "catalog": mock_catalog},
             partition_key="2026-01-15",
         )
         dg.materialize(
             assets=[ingest_cams_data],
-            resources={"ingestion_client": mock_ingestion_client},
+            resources={"ingestion_client": mock_ingestion_client, "catalog": mock_catalog},
             partition_key="2026-01-16",
         )
 
@@ -136,11 +184,11 @@ class TestIngestCamsDataAsset:
         run_id_2 = _mock_calls[1]["run_id"]
         assert run_id_1 != run_id_2
 
-    def test_asset_returns_metadata(self, mock_ingestion_client):
+    def test_asset_returns_metadata(self, mock_ingestion_client, mock_catalog):
         """Asset should return MaterializeResult with expected metadata."""
         result = dg.materialize(
             assets=[ingest_cams_data],
-            resources={"ingestion_client": mock_ingestion_client},
+            resources={"ingestion_client": mock_ingestion_client, "catalog": mock_catalog},
             partition_key="2026-01-01",
             run_config={
                 "ops": {
@@ -159,18 +207,32 @@ class TestIngestCamsDataAsset:
         materializations = result.get_asset_materialization_events()
         assert len(materializations) == 1
 
-    def test_asset_propagates_client_failure(self):
+    def test_asset_propagates_client_failure(self, mock_catalog):
         """Asset should propagate failures from the ingestion client."""
         mock_client = StatefulMockIngestionClient(should_fail=True)
 
         result = dg.materialize(
             assets=[ingest_cams_data],
-            resources={"ingestion_client": mock_client},
+            resources={"ingestion_client": mock_client, "catalog": mock_catalog},
             partition_key="2026-01-15",
             raise_on_error=False,
         )
 
         assert not result.success
+
+    def test_asset_continues_on_catalog_failure(self, mock_ingestion_client):
+        """Asset should succeed even if catalog insert fails (log warning only)."""
+        failing_catalog = MockCatalogResource(should_fail=True)
+
+        result = dg.materialize(
+            assets=[ingest_cams_data],
+            resources={"ingestion_client": mock_ingestion_client, "catalog": failing_catalog},
+            partition_key="2026-01-15",
+        )
+
+        # Asset should still succeed - catalog failure is non-fatal
+        assert result.success
+        assert len(_mock_calls) == 1
 
 
 class TestDockerIngestionClientUnit:

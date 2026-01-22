@@ -30,8 +30,11 @@ from pathlib import Path
 import boto3
 from botocore.exceptions import ClientError
 from dagster_docker import PipesDockerClient
+import psycopg
+from pydantic import PrivateAttr
 
 import dagster as dg
+from .models import CuratedFileRecord, RawFileRecord
 
 
 # Environment variables to forward to the ingestion container
@@ -302,5 +305,146 @@ def storage_resources():
                 raw_bucket=os.environ.get("MINIO_RAW_BUCKET", "jackfruit-raw"),
                 curated_bucket=os.environ.get("MINIO_CURATED_BUCKET", "jackfruit-curated"),
             ),
+        }
+    )
+
+# -----------------------------------------------------------------------------
+# Catalog resources
+# -----------------------------------------------------------------------------
+
+def _postgres_dsn_from_env() -> str:
+    user = os.environ["POSTGRES_USER"]
+    password = os.environ["POSTGRES_PASSWORD"]
+    host = os.environ.get("POSTGRES_HOST", "postgres")
+    port = os.environ.get("POSTGRES_PORT", "5432")
+    db_name = os.environ.get("POSTGRES_DB", "postgres")
+    return f"postgresql://{user}:{password}@{host}:{port}/{db_name}"
+
+
+class PostgresCatalogResource(dg.ConfigurableResource):
+    """
+    Resource for interacting with the Postgres metadata catalog.
+
+    This resource manages connections to the catalog database and provides methods
+    for inserting raw and curated file metadata. Supports context manager protocol
+    for efficient connection reuse across multiple operations.
+
+    **Security Note**: The DSN contains database credentials. Always source these
+    from environment variables or secure credential stores, never hardcode them.
+
+    **Upsert Behavior**:
+    - `insert_raw_file`: Uses ON CONFLICT DO NOTHING (idempotent)
+    - `insert_curated_file`: Uses ON CONFLICT DO UPDATE (latest metadata wins)
+
+    **Usage**:
+        # Single insert (creates new connection)
+        catalog.insert_raw_file(record)
+
+        # Multiple inserts (reuses connection)
+        with catalog:
+            for record in records:
+                catalog.insert_curated_file(record)
+
+    Attributes:
+        dsn: Postgres DSN (e.g., postgresql://user:password@host:port/dbname)
+    """
+    dsn: str
+    _connection: psycopg.Connection | None = PrivateAttr(default=None)
+
+    def get_connection(self) -> psycopg.Connection:
+        """
+        Get or create a database connection.
+
+        Returns existing connection if available, otherwise creates a new one.
+        When using the context manager, the connection is reused across operations.
+
+        Returns:
+            Active Postgres connection
+        """
+        if self._connection is None:
+            self._connection = psycopg.connect(self.dsn)
+        return self._connection
+
+    def close(self) -> None:
+        """Close the database connection if open."""
+        if self._connection is not None:
+            self._connection.close()
+            self._connection = None
+
+    def __enter__(self):
+        """Enter context manager - prepares connection for reuse."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit context manager - closes connection."""
+        self.close()
+        return False
+
+    def insert_raw_file(self, raw_file: RawFileRecord) -> None:
+        """
+        Insert a raw file record into the database.
+
+        Uses ON CONFLICT DO NOTHING for idempotency - repeated inserts with the
+        same ID are silently ignored.
+
+        Args:
+            raw_file: Raw file record to insert
+        """
+        query = """
+        INSERT INTO catalog.raw_files (id, source, dataset, date, s3_key, created_at)
+        VALUES (%s, %s, %s, %s, %s, NOW())
+        ON CONFLICT (id) DO NOTHING;
+        """
+        conn = self.get_connection()
+        with conn.cursor() as cur:
+            cur.execute(query, (
+                str(raw_file.id),
+                raw_file.source,
+                raw_file.dataset,
+                raw_file.date,
+                raw_file.s3_key,
+            ))
+        conn.commit()
+
+    def insert_curated_file(self, curated_file: CuratedFileRecord) -> None:
+        """
+        Insert a curated file record into the database.
+
+        Uses ON CONFLICT DO UPDATE - if a file with the same S3 key already exists,
+        its metadata is updated with the new values. This allows reprocessing without
+        manual cleanup.
+
+        Args:
+            curated_file: Curated file record to insert or update
+        """
+        query = """
+        INSERT INTO catalog.curated_files (id, raw_file_id, variable, source, timestamp, s3_key, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, NOW())
+        ON CONFLICT (s3_key) DO UPDATE SET
+            raw_file_id = EXCLUDED.raw_file_id,
+            variable = EXCLUDED.variable,
+            source = EXCLUDED.source,
+            timestamp = EXCLUDED.timestamp;
+        """
+        conn = self.get_connection()
+        with conn.cursor() as cur:
+            cur.execute(query, (
+                str(curated_file.id),
+                str(curated_file.raw_file_id),
+                curated_file.variable,
+                curated_file.source,
+                curated_file.timestamp,
+                curated_file.s3_key,
+            ))
+        conn.commit()
+
+
+@dg.definitions
+def catalog_resources():
+    return dg.Definitions(
+        resources={
+            "catalog": PostgresCatalogResource(
+                dsn=_postgres_dsn_from_env()
+            )
         }
     )

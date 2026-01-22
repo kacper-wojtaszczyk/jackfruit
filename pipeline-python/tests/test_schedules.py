@@ -7,6 +7,17 @@ and apply proper tags for observability.
 from datetime import datetime
 
 import dagster as dg
+import pytest
+
+
+@pytest.fixture
+def postgres_env(monkeypatch):
+    """Set up required postgres environment variables for definition loading."""
+    monkeypatch.setenv("POSTGRES_USER", "test")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "test")
+    monkeypatch.setenv("POSTGRES_HOST", "localhost")
+    monkeypatch.setenv("POSTGRES_PORT", "5432")
+    monkeypatch.setenv("POSTGRES_DB", "test")
 
 
 def _mock_schedule_context(scheduled_execution_time: datetime) -> dg.ScheduleEvaluationContext:
@@ -139,7 +150,7 @@ class TestCamsDailySchedule:
 class TestScheduleDefinitions:
     """Tests for schedule registration and discovery."""
 
-    def test_schedules_are_loadable(self):
+    def test_schedules_are_loadable(self, postgres_env):
         """Schedules should be loadable from definitions."""
         from pipeline_python.definitions import defs
 
@@ -148,7 +159,7 @@ class TestScheduleDefinitions:
         assert definitions.schedules is not None
         assert len(definitions.schedules) > 0
 
-    def test_cams_daily_schedule_registered(self):
+    def test_cams_daily_schedule_registered(self, postgres_env):
         """cams_daily_schedule should be registered in definitions."""
         from pipeline_python.definitions import defs
 
@@ -167,7 +178,7 @@ class TestScheduleDefinitions:
             cams_daily_schedule
         )
 
-    def test_schedule_job_is_defined(self):
+    def test_schedule_job_is_defined(self, postgres_env):
         """Schedule should reference a valid job."""
         from pipeline_python.definitions import defs
 
@@ -183,7 +194,7 @@ class TestScheduleDefinitions:
 class TestScheduleJobDependencies:
     """Tests for the job that the schedule triggers."""
 
-    def test_schedule_job_includes_both_assets(self):
+    def test_schedule_job_includes_both_assets(self, postgres_env):
         """The job triggered by schedule should include both ingestion and transformation."""
         from pipeline_python.definitions import defs
 

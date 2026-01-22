@@ -13,7 +13,7 @@ Read raw data, normalize schemas, compute quality flags, and write to curated st
 | Curated file format | ✅ GRIB2 |
 | Error handling | ✅ Fail-fast |
 | Daily schedule (08:00 UTC) | ✅ Done |
-| Metadata storage | Dagster (current) → Postgres (future) |
+| Metadata storage | ✅ Postgres catalog |
 
 ## Responsibilities
 
@@ -84,6 +84,22 @@ ETL reads raw (or public S3 directly for large datasets), writes curated. Never 
 - Multi-variable GRIB files are read with `grib2io` (NOAA's GRIB2 library)
 - Each variable/timestamp is split into separate curated files
 - Single message per output file for serving layer simplicity
+
+### Catalog Integration
+
+All file writes are recorded in the Postgres metadata catalog (`catalog` schema):
+
+**Ingestion** writes to `catalog.raw_files`:
+- Record includes `run_id`, source, dataset, date, S3 key
+- Uses `ON CONFLICT DO NOTHING` for idempotency (re-runs don't duplicate)
+
+**Transformation** writes to `catalog.curated_files`:
+- Record includes variable, source, timestamp, S3 key, and `raw_file_id` for lineage
+- Uses `ON CONFLICT DO UPDATE` for reprocessing (latest metadata wins)
+
+**Connection reuse:** Transform assets use the catalog resource as a context manager to reuse database connections across multiple curated file inserts (reduces connection overhead).
+
+**Error handling:** Catalog writes are non-fatal. If a catalog insert fails, the asset logs a warning but continues successfully. S3 is the source of truth; the catalog is a derived index.
 
 ## Curated File Format
 

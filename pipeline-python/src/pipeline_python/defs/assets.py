@@ -9,7 +9,9 @@ See docs/layer-1-ingestion.md for details.
 """
 import tempfile
 import uuid
+from datetime import date, datetime
 from pathlib import Path
+from typing import Any
 
 import dagster as dg
 
@@ -17,7 +19,8 @@ from pipeline_python.grib2io_patch import get_constituent_name  # noqa: F401  # 
 import grib2io
 
 from pipeline_python.defs.partitions import daily_partitions
-from pipeline_python.defs.resources import DockerIngestionClient, ObjectStorageResource
+from pipeline_python.defs.resources import DockerIngestionClient, ObjectStorageResource, PostgresCatalogResource
+from pipeline_python.defs.models import RawFileRecord, CuratedFileRecord
 
 
 class IngestionConfig(dg.Config):
@@ -34,7 +37,8 @@ class IngestionConfig(dg.Config):
 def ingest_cams_data(
     context: dg.AssetExecutionContext,
     config: IngestionConfig,
-    ingestion_client: DockerIngestionClient,  # Resource looked up by param name
+    ingestion_client: DockerIngestionClient,
+    catalog: PostgresCatalogResource,
 ) -> dg.MaterializeResult:
     """
     Run the ingestion service to fetch and store raw CAMS data.
@@ -48,22 +52,40 @@ def ingest_cams_data(
         context: Dagster execution context
         config: Ingestion configuration (date, dataset)
         ingestion_client: Docker container client resource
+        catalog: Postgres catalog resource for metadata tracking
 
     Returns:
         MaterializeResult with run metadata
     """
     run_id = str(uuid.uuid7())
 
-    date = context.partition_key
+    partition_date = context.partition_key
 
-    context.log.info(f"Starting ingestion: dataset={config.dataset}, date={date}, run_id={run_id}")
+    context.log.info(f"Starting ingestion: dataset={config.dataset}, date={partition_date}, run_id={run_id}")
 
-    return ingestion_client.run_ingestion(
+    result = ingestion_client.run_ingestion(
         context,
         dataset=config.dataset,
-        date=date,
+        date=partition_date,
         run_id=run_id,
     )
+
+    # Record raw file in catalog
+    s3_key = f"ads/{config.dataset}/{partition_date}/{run_id}.grib"
+    raw_record = RawFileRecord(
+        id=uuid.UUID(run_id),
+        source="ads",
+        dataset=config.dataset,
+        date=date.fromisoformat(partition_date),
+        s3_key=s3_key,
+    )
+    try:
+        catalog.insert_raw_file(raw_record)
+        context.log.info(f"Recorded raw file in catalog: {s3_key}")
+    except Exception as e:
+        context.log.warning(f"Failed to record raw file in catalog: {e}")
+
+    return result
 
 # GRIB2 Table 4.230 constituent type codes we want to process
 # Note: ECMWF/CAMS uses local codes (40xxx) that differ from WMO standard codes (62xxx)
@@ -78,12 +100,12 @@ CAMS_CONSTITUENT_CODES = {
 }
 
 
-def _extract_message_metadata(msg, context: dg.AssetExecutionContext) -> dict | None:
+def _extract_message_metadata(msg: Any, context: dg.AssetExecutionContext) -> dict | None:
     """
     Extract metadata from a GRIB message.
     
     Args:
-        msg: GRIB message object
+        msg: GRIB message object (grib2io message type)
         context: Dagster execution context for logging
     
     Returns:
@@ -128,22 +150,26 @@ def _extract_message_metadata(msg, context: dg.AssetExecutionContext) -> dict | 
 
 
 def _write_curated_grib(
-    msg,
+    msg: Any,
     metadata: dict,
     tmpdir: Path,
     storage: ObjectStorageResource,
     context: dg.AssetExecutionContext,
+    catalog: PostgresCatalogResource,
+    raw_file_id: uuid.UUID,
 ) -> str | None:
     """
     Write a single GRIB message to a curated file and upload to storage.
     
     Args:
-        msg: GRIB message to write
+        msg: GRIB message to write (grib2io message type)
         metadata: Message metadata from _extract_message_metadata
         tmpdir: Temporary directory for writing files
         storage: Storage resource for uploading
         context: Dagster execution context for logging
-    
+        catalog: Catalog resource for metadata tracking
+        raw_file_id: Raw file UUID for lineage tracking
+
     Returns:
         Curated key if successful, None otherwise
     """
@@ -180,12 +206,28 @@ def _write_curated_grib(
     context.log.info(f"Uploading {curated_key}")
     try:
         storage.upload_curated(out_path, curated_key)
-        return curated_key
     except Exception as e:
         context.log.error(
             f"Failed to upload {curated_key} to storage: {e}. Skipping."
         )
         return None
+
+    # Record curated file in catalog
+    curated_record = CuratedFileRecord(
+        id=uuid.uuid7(),
+        raw_file_id=raw_file_id,
+        variable=var_name,
+        source="cams",
+        timestamp=datetime(year, month, day, hour),
+        s3_key=curated_key,
+    )
+    try:
+        catalog.insert_curated_file(curated_record)
+        context.log.debug(f"Recorded curated file in catalog: {curated_key}")
+    except Exception as e:
+        context.log.warning(f"Failed to record curated file in catalog: {e}")
+
+    return curated_key
 
 
 @dg.asset(
@@ -195,7 +237,8 @@ def _write_curated_grib(
 )
 def transform_cams_data(
     context: dg.AssetExecutionContext,
-    storage: ObjectStorageResource
+    storage: ObjectStorageResource,
+    catalog: PostgresCatalogResource,
 ) -> dg.MaterializeResult:
     """
     Transform raw CAMS data into curated single-variable, single-timestamp files.
@@ -209,6 +252,7 @@ def transform_cams_data(
     Args:
         context: Dagster execution context
         storage: S3/MinIO storage resource
+        catalog: Postgres catalog resource for metadata tracking
 
     Returns:
         MaterializeResult with list of curated keys written. If no valid GRIB
@@ -220,7 +264,7 @@ def transform_cams_data(
                     or GRIB file is invalid
     """
 
-    date = context.partition_key
+    partition_date = context.partition_key
 
     # Get metadata from upstream asset's latest materialization for this partition
     upstream_key = ingest_cams_data.key
@@ -237,8 +281,9 @@ def transform_cams_data(
     context.log.info(f"Upstream metadata: {ingest_metadata}")
     run_id = ingest_metadata["run_id"].value
     dataset = ingest_metadata["dataset"].value
+    raw_file_id = uuid.UUID(run_id)
 
-    raw_key = f"ads/{dataset}/{date}/{run_id}.grib"
+    raw_key = f"ads/{dataset}/{partition_date}/{run_id}.grib"
     context.log.info(f"Processing raw file: {raw_key}")
 
     curated_keys = []
@@ -288,7 +333,7 @@ def transform_cams_data(
                 return dg.MaterializeResult(
                     metadata={
                         "run_id": run_id,
-                        "date": date,
+                        "date": partition_date,
                         "curated_keys": [],
                         "variables_processed": [],
                         "files_written": 0,
@@ -296,17 +341,22 @@ def transform_cams_data(
                     }
                 )
 
-            # Group messages by variable and time
-            for msg in grib_file:
-                # Extract message metadata
-                metadata = _extract_message_metadata(msg, context)
-                if metadata is None:
-                    continue
-                
-                # Write and upload curated file
-                curated_key = _write_curated_grib(msg, metadata, tmpdir, storage, context)
-                if curated_key is not None:
-                    curated_keys.append(curated_key)
+            # Use catalog context manager to reuse connection across all inserts
+            with catalog:
+                # Group messages by variable and time
+                for msg in grib_file:
+                    # Extract message metadata
+                    metadata = _extract_message_metadata(msg, context)
+                    if metadata is None:
+                        continue
+
+                    # Write and upload curated file
+                    curated_key = _write_curated_grib(
+                        msg, metadata, tmpdir, storage, context,
+                        catalog=catalog, raw_file_id=raw_file_id,
+                    )
+                    if curated_key is not None:
+                        curated_keys.append(curated_key)
 
     context.log.info(f"Wrote {len(curated_keys)} curated files")
     
@@ -320,7 +370,7 @@ def transform_cams_data(
     return dg.MaterializeResult(
         metadata={
             "run_id": run_id,
-            "date": date,
+            "date": partition_date,
             "curated_keys": curated_keys,
             "variables_processed": list(set(k.split("/")[0] for k in curated_keys)) if curated_keys else [],
             "files_written": len(curated_keys),
