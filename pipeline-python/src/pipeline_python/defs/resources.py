@@ -394,15 +394,16 @@ class PostgresCatalogResource(dg.ConfigurableResource):
         VALUES (%s, %s, %s, %s, %s, NOW())
         ON CONFLICT (id) DO NOTHING;
         """
-        with self.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(query, (
-                    str(raw_file.id),
-                    raw_file.source,
-                    raw_file.dataset,
-                    raw_file.date,
-                    raw_file.s3_key,
-                ))
+        conn = self.get_connection()
+        with conn.cursor() as cur:
+            cur.execute(query, (
+                str(raw_file.id),
+                raw_file.source,
+                raw_file.dataset,
+                raw_file.date,
+                raw_file.s3_key,
+            ))
+        conn.commit()
 
     def insert_curated_file(self, curated_file: CuratedFileRecord) -> None:
         """
@@ -424,16 +425,17 @@ class PostgresCatalogResource(dg.ConfigurableResource):
             source = EXCLUDED.source,
             timestamp = EXCLUDED.timestamp;
         """
-        with self.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(query, (
-                    str(curated_file.id),
-                    str(curated_file.raw_file_id),
-                    curated_file.variable,
-                    curated_file.source,
-                    curated_file.timestamp,
-                    curated_file.s3_key,
-                ))
+        conn = self.get_connection()
+        with conn.cursor() as cur:
+            cur.execute(query, (
+                str(curated_file.id),
+                str(curated_file.raw_file_id),
+                curated_file.variable,
+                curated_file.source,
+                curated_file.timestamp,
+                curated_file.s3_key,
+            ))
+        conn.commit()
 
 
 @dg.definitions

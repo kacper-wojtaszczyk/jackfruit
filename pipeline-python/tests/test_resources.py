@@ -46,6 +46,7 @@ def psycopg_mocks():
     conn.__enter__.return_value = conn
     conn.__exit__.return_value = False
     conn.cursor.return_value = cursor
+    conn.commit = MagicMock()  # Add commit method
     return {"connect": MagicMock(return_value=conn), "conn": conn, "cursor": cursor}
 
 
