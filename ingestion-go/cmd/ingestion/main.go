@@ -25,7 +25,7 @@ func main() {
 
 	// Parse CLI flags
 	dateStr := flag.String("date", time.Now().Format("2006-01-02"), "Date for data request (YYYY-MM-DD)")
-	datasetStr := flag.String("dataset", "cams-europe-air-quality-forecasts-analysis", "Dataset name")
+	datasetStr := flag.String("dataset", "cams-europe-air-quality-forecasts-forecast", "Dataset name")
 	runID := flag.String("run-id", "", "Run identifier (UUIDv7 from orchestration)")
 	flag.Parse()
 

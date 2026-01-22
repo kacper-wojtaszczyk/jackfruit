@@ -87,7 +87,6 @@ Fetch raw data from external environmental APIs and store unchanged in the raw b
 
 **Example:**
 ```
-ads/cams-europe-air-quality-forecasts-analysis/2025-03-12/01890c24-905b-7122-b170-b60814e6ee06.grib
 ads/cams-europe-air-quality-forecasts-forecast/2025-03-12/01890c24-905b-7122-b170-b60814e6ee06.grib
 ```
 
@@ -158,7 +157,7 @@ docker run --rm \
   -e MINIO_SECRET_KEY=$MINIO_SECRET_KEY \
   -e MINIO_RAW_BUCKET=jackfruit-raw \
   jackfruit-ingestion:latest \
-  --dataset=cams-europe-air-quality-forecasts-analysis \
+  --dataset=cams-europe-air-quality-forecasts-forecast \
   --date=2025-03-12 \
   --run-id=01890c24-905b-7122-b170-b60814e6ee06
 ```

@@ -19,7 +19,7 @@ make build
 
 # Run (requires MinIO and env vars configured)
 ./bin/ingestion \
-  --dataset=cams-europe-air-quality-forecasts-analysis \
+  --dataset=cams-europe-air-quality-forecasts-forecast \
   --date=2025-03-12 \
   --run-id=01890c24-905b-7122-b170-b60814e6ee06
 ```

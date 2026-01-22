@@ -152,22 +152,28 @@ open http://localhost:3099
 All services configured via environment variables (`.env` file):
 
 ```bash
+# Dagster environment
+ENV=dev
+
+# External APIs
+ADS_BASE_URL=https://ads.atmosphere.copernicus.eu/api/retrieve/v1
+ADS_API_KEY=...
+
 # Object Storage
 MINIO_ENDPOINT=minio:9000
+MINIO_ENDPOINT_URL=http://minio:9000
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
 MINIO_RAW_BUCKET=jackfruit-raw
+MINIO_CURATED_BUCKET=jackfruit-curated
+MINIO_USE_SSL=false
 
-# Metadata DB (TBD)
+# Metadata DB
 POSTGRES_HOST=postgres
 POSTGRES_PORT=5432
 POSTGRES_USER=jackfruit
 POSTGRES_PASSWORD=...
 POSTGRES_DB=jackfruit
-
-# External APIs
-ADS_BASE_URL=https://ads.atmosphere.copernicus.eu/api
-ADS_API_KEY=...
 ```
 
 ## Production Deployment
@@ -180,7 +186,8 @@ ADS_API_KEY=...
 ## Open Questions
 
 - [x] Postgres schema design — ✅ Done (`catalog.raw_files`, `catalog.curated_files`)
-- [ ] Tile indexing strategy (PostGIS for spatial?) — Deferred, GRIB self-describes coordinates
+- [x] Lineage tracking — ✅ Done (via `raw_file_id` FK)
+- [ ] Tile indexing strategy (PostGIS for spatial?) — Deferred, GRIB2 self-describes coordinates
 - [ ] Production deployment approach
 - [ ] Backup/restore strategy
 
