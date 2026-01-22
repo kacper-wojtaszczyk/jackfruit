@@ -55,20 +55,56 @@ Think of raw as **evidence**, not data.
 - Native Dagster support
 - Not overkill (ClickHouse deferred until analytics needs arise)
 
+**Schema:** `catalog`
+
+The metadata database tracks all files in object storage and their lineage relationships. Schema is initialized via `migrations/init.sql` mounted into the Postgres container.
+
+### Tables
+
+**`catalog.raw_files`** — Raw files ingested from external sources
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID (PK) | Run ID from ingestion (UUIDv7) |
+| `source` | TEXT | Data source (e.g., 'ads') |
+| `dataset` | TEXT | Dataset identifier (e.g., 'cams-europe-air-quality-forecasts-forecast') |
+| `date` | DATE | Partition date |
+| `s3_key` | TEXT (UNIQUE) | Full S3 key in `jackfruit-raw` bucket |
+| `created_at` | TIMESTAMPTZ | Record creation timestamp |
+
+**`catalog.curated_files`** — Processed files derived from raw files
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID (PK) | Generated UUIDv7 |
+| `raw_file_id` | UUID (FK) | References `catalog.raw_files(id)` for lineage |
+| `variable` | TEXT | Variable name (e.g., 'pm2p5', 'pm10') |
+| `source` | TEXT | Data source (e.g., 'cams') |
+| `timestamp` | TIMESTAMPTZ | Valid time of data |
+| `s3_key` | TEXT (UNIQUE) | Full S3 key in `jackfruit-curated` bucket |
+| `created_at` | TIMESTAMPTZ | Record creation timestamp |
+
+**Indexes:**
+- `idx_curated_files_lookup` on `(variable, timestamp)` — serving layer queries
+- `idx_curated_files_raw` on `(raw_file_id)` — lineage queries
+
+### Access Patterns
+
+| Operation | Query Pattern |
+|-----------|---------------|
+| Ingestion writes | Insert into `raw_files` after S3 upload |
+| Transformation writes | Insert into `curated_files` after S3 upload, linked via `raw_file_id` |
+| Serving reads | Query `curated_files` by variable + timestamp range to find S3 keys |
+| Lineage queries | Join `curated_files` → `raw_files` to trace provenance |
+
 **What it stores:**
 
 | Table (conceptual) | Purpose |
 |--------------------|---------|
-| `datasets` | Source definitions, schemas, refresh schedules |
-| `ingestion_runs` | Run history, status, checksums, raw file locations |
-| `tiles` | Spatial/temporal index of curated chunks, S3 keys |
-| `lineage` | Which raw files → which curated files |
-
-**Access patterns:**
-- Ingestion writes: register new raw files
-- Transformation writes: register curated tiles, update lineage
-- Serving reads: find tiles for bbox/time range
-- Analytics: query run history, data coverage
+| `datasets` | Source definitions, schemas, refresh schedules (TBD) |
+| `ingestion_runs` | Run history, status, checksums (TBD — Dagster tracks this) |
+| `tiles` | Spatial/temporal index of curated chunks (TBD — may not need if GRIB covers this) |
+| `lineage` | Which raw files → which curated files (✅ via `raw_file_id` FK) |
 
 ## Orchestration
 
@@ -143,8 +179,8 @@ ADS_API_KEY=...
 
 ## Open Questions
 
-- [ ] Postgres schema design
-- [ ] Tile indexing strategy (PostGIS for spatial?)
+- [x] Postgres schema design — ✅ Done (`catalog.raw_files`, `catalog.curated_files`)
+- [ ] Tile indexing strategy (PostGIS for spatial?) — Deferred, GRIB self-describes coordinates
 - [ ] Production deployment approach
 - [ ] Backup/restore strategy
 

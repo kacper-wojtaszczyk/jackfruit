@@ -267,3 +267,82 @@ class TestPostgresCatalogResource:
             datetime(2025, 1, 2, 12, 0, 0),
             "pm2p5/cams/2025/01/02/12/data.grib2",
         )
+
+    def test_context_manager_reuses_connection(self, psycopg_mocks):
+        """Should reuse same connection when used as context manager."""
+        resource = PostgresCatalogResource(dsn="postgresql://localhost:5432/db")
+        raw1 = RawFileRecord(
+            id=uuid.uuid4(),
+            source="ads",
+            dataset="test-dataset",
+            date=date(2025, 1, 2),
+            s3_key="ads/test/2025-01-02/run1.grib",
+        )
+        raw2 = RawFileRecord(
+            id=uuid.uuid4(),
+            source="ads",
+            dataset="test-dataset",
+            date=date(2025, 1, 3),
+            s3_key="ads/test/2025-01-03/run2.grib",
+        )
+
+        with patch("pipeline_python.defs.resources.psycopg.connect", psycopg_mocks["connect"]):
+            with resource:
+                resource.insert_raw_file(raw1)
+                resource.insert_raw_file(raw2)
+
+        # Connection should be created once and reused
+        psycopg_mocks["connect"].assert_called_once_with("postgresql://localhost:5432/db")
+        # Close should be called on exit
+        psycopg_mocks["conn"].close.assert_called_once()
+
+
+class TestPostgresDsnFromEnv:
+    """Tests for _postgres_dsn_from_env function."""
+
+    def test_constructs_dsn_with_all_env_vars(self, monkeypatch):
+        """Should construct correct DSN with all environment variables."""
+        from pipeline_python.defs.resources import _postgres_dsn_from_env
+
+        monkeypatch.setenv("POSTGRES_USER", "testuser")
+        monkeypatch.setenv("POSTGRES_PASSWORD", "testpass")
+        monkeypatch.setenv("POSTGRES_HOST", "testhost")
+        monkeypatch.setenv("POSTGRES_PORT", "5433")
+        monkeypatch.setenv("POSTGRES_DB", "testdb")
+
+        dsn = _postgres_dsn_from_env()
+
+        assert dsn == "postgresql://testuser:testpass@testhost:5433/testdb"
+
+    def test_uses_default_values_for_optional_vars(self, monkeypatch):
+        """Should use default values for optional environment variables."""
+        from pipeline_python.defs.resources import _postgres_dsn_from_env
+
+        monkeypatch.setenv("POSTGRES_USER", "testuser")
+        monkeypatch.setenv("POSTGRES_PASSWORD", "testpass")
+        # HOST, PORT, DB not set - should use defaults
+
+        dsn = _postgres_dsn_from_env()
+
+        assert dsn == "postgresql://testuser:testpass@postgres:5432/postgres"
+
+    def test_raises_key_error_when_user_missing(self, monkeypatch):
+        """Should raise KeyError when POSTGRES_USER is missing."""
+        from pipeline_python.defs.resources import _postgres_dsn_from_env
+
+        monkeypatch.delenv("POSTGRES_USER", raising=False)
+        monkeypatch.setenv("POSTGRES_PASSWORD", "testpass")
+
+        with pytest.raises(KeyError, match="POSTGRES_USER"):
+            _postgres_dsn_from_env()
+
+    def test_raises_key_error_when_password_missing(self, monkeypatch):
+        """Should raise KeyError when POSTGRES_PASSWORD is missing."""
+        from pipeline_python.defs.resources import _postgres_dsn_from_env
+
+        monkeypatch.setenv("POSTGRES_USER", "testuser")
+        monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
+
+        with pytest.raises(KeyError, match="POSTGRES_PASSWORD"):
+            _postgres_dsn_from_env()
+

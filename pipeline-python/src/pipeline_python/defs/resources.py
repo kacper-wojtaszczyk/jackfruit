@@ -322,21 +322,79 @@ def _postgres_dsn_from_env() -> str:
 
 class PostgresCatalogResource(dg.ConfigurableResource):
     """
-    Resource for interacting with the custom Postgres catalog.
+    Resource for interacting with the Postgres metadata catalog.
+
+    This resource manages connections to the catalog database and provides methods
+    for inserting raw and curated file metadata. Supports context manager protocol
+    for efficient connection reuse across multiple operations.
+
+    **Security Note**: The DSN contains database credentials. Always source these
+    from environment variables or secure credential stores, never hardcode them.
+
+    **Upsert Behavior**:
+    - `insert_raw_file`: Uses ON CONFLICT DO NOTHING (idempotent)
+    - `insert_curated_file`: Uses ON CONFLICT DO UPDATE (latest metadata wins)
+
+    **Usage**:
+        # Single insert (creates new connection)
+        catalog.insert_raw_file(record)
+
+        # Multiple inserts (reuses connection)
+        with catalog:
+            for record in records:
+                catalog.insert_curated_file(record)
+
+    Attributes:
+        dsn: Postgres DSN (e.g., postgresql://user:password@host:port/dbname)
     """
-    dsn: str  # Postgres DSN (e.g., postgres://user:password@host:port/dbname)
+    dsn: str
+    _connection: psycopg.Connection | None = None
 
-    def _get_connection(self):
-        return psycopg.connect(self.dsn)
+    def get_connection(self) -> psycopg.Connection:
+        """
+        Get or create a database connection.
 
-    def insert_raw_file(self, raw_file: RawFileRecord):
-        """Insert a raw file record into the database."""
+        Returns existing connection if available, otherwise creates a new one.
+        When using the context manager, the connection is reused across operations.
+
+        Returns:
+            Active Postgres connection
+        """
+        if self._connection is None:
+            self._connection = psycopg.connect(self.dsn)
+        return self._connection
+
+    def close(self) -> None:
+        """Close the database connection if open."""
+        if self._connection is not None:
+            self._connection.close()
+            self._connection = None
+
+    def __enter__(self):
+        """Enter context manager - prepares connection for reuse."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit context manager - closes connection."""
+        self.close()
+        return False
+
+    def insert_raw_file(self, raw_file: RawFileRecord) -> None:
+        """
+        Insert a raw file record into the database.
+
+        Uses ON CONFLICT DO NOTHING for idempotency - repeated inserts with the
+        same ID are silently ignored.
+
+        Args:
+            raw_file: Raw file record to insert
+        """
         query = """
         INSERT INTO catalog.raw_files (id, source, dataset, date, s3_key, created_at)
         VALUES (%s, %s, %s, %s, %s, NOW())
         ON CONFLICT (id) DO NOTHING;
         """
-        with self._get_connection() as conn:
+        with self.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(query, (
                     str(raw_file.id),
@@ -346,8 +404,17 @@ class PostgresCatalogResource(dg.ConfigurableResource):
                     raw_file.s3_key,
                 ))
 
-    def insert_curated_file(self, curated_file: CuratedFileRecord):
-        """Insert a curated file record into the database."""
+    def insert_curated_file(self, curated_file: CuratedFileRecord) -> None:
+        """
+        Insert a curated file record into the database.
+
+        Uses ON CONFLICT DO UPDATE - if a file with the same S3 key already exists,
+        its metadata is updated with the new values. This allows reprocessing without
+        manual cleanup.
+
+        Args:
+            curated_file: Curated file record to insert or update
+        """
         query = """
         INSERT INTO catalog.curated_files (id, raw_file_id, variable, source, timestamp, s3_key, created_at)
         VALUES (%s, %s, %s, %s, %s, %s, NOW())
@@ -357,7 +424,7 @@ class PostgresCatalogResource(dg.ConfigurableResource):
             source = EXCLUDED.source,
             timestamp = EXCLUDED.timestamp;
         """
-        with self._get_connection() as conn:
+        with self.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(query, (
                     str(curated_file.id),
