@@ -33,6 +33,7 @@ from dagster_docker import PipesDockerClient
 import psycopg
 
 import dagster as dg
+from .models import CuratedFileRecord, RawFileRecord
 
 
 # Environment variables to forward to the ingestion container
@@ -328,7 +329,7 @@ class PostgresCatalogResource(dg.ConfigurableResource):
     def _get_connection(self):
         return psycopg.connect(self.dsn)
 
-    def insert_raw_file(self, raw_file):
+    def insert_raw_file(self, raw_file: RawFileRecord):
         """Insert a raw file record into the database."""
         query = """
         INSERT INTO catalog.raw_files (id, source, dataset, date, s3_key, created_at)
@@ -338,19 +339,20 @@ class PostgresCatalogResource(dg.ConfigurableResource):
         with self._get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(query, (
-                    raw_file["id"],
-                    raw_file["source"],
-                    raw_file["dataset"],
-                    raw_file["date"],
-                    raw_file["s3_key"]
+                    str(raw_file.id),
+                    raw_file.source,
+                    raw_file.dataset,
+                    raw_file.date,
+                    raw_file.s3_key,
                 ))
 
-    def insert_curated_file(self, curated_file):
+    def insert_curated_file(self, curated_file: CuratedFileRecord):
         """Insert a curated file record into the database."""
         query = """
         INSERT INTO catalog.curated_files (id, raw_file_id, variable, source, timestamp, s3_key, created_at)
         VALUES (%s, %s, %s, %s, %s, %s, NOW())
         ON CONFLICT (s3_key) DO UPDATE SET
+            raw_file_id = EXCLUDED.raw_file_id,
             variable = EXCLUDED.variable,
             source = EXCLUDED.source,
             timestamp = EXCLUDED.timestamp;
@@ -358,12 +360,12 @@ class PostgresCatalogResource(dg.ConfigurableResource):
         with self._get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(query, (
-                    curated_file["id"],
-                    curated_file["raw_file_id"],
-                    curated_file["variable"],
-                    curated_file["source"],
-                    curated_file["timestamp"],
-                    curated_file["s3_key"]
+                    str(curated_file.id),
+                    str(curated_file.raw_file_id),
+                    curated_file.variable,
+                    curated_file.source,
+                    curated_file.timestamp,
+                    curated_file.s3_key,
                 ))
 
 

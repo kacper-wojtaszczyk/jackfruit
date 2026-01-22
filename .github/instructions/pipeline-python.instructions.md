@@ -40,6 +40,7 @@ GRIB2 files are self-describing (coordinates, units, CRS embedded).
 
 <python_style>
 - `pyproject.toml`-managed deps (uv for package management)
+- always verify exact dependency versions online before adding anything to pyproject.toml
 - Type hints for public functions
 - Pure functions for transforms; isolate I/O
 </python_style>

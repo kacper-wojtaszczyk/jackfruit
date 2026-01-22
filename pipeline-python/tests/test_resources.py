@@ -6,11 +6,15 @@ Tests the ObjectStorageResource for S3/MinIO interactions.
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
+import uuid
+from datetime import date, datetime
+from unittest.mock import MagicMock
 
 import pytest
 from botocore.exceptions import ClientError
 
-from pipeline_python.defs.resources import ObjectStorageResource
+from pipeline_python.defs.resources import ObjectStorageResource, PostgresCatalogResource
+from pipeline_python.defs.models import CuratedFileRecord, RawFileRecord
 
 
 @pytest.fixture
@@ -30,6 +34,19 @@ def storage_resource():
         curated_bucket="test-curated",
         use_ssl=False,
     )
+
+
+@pytest.fixture
+def psycopg_mocks():
+    """Provide psycopg connection and cursor mocks that support context managers."""
+    cursor = MagicMock()
+    cursor.__enter__.return_value = cursor
+    cursor.__exit__.return_value = False
+    conn = MagicMock()
+    conn.__enter__.return_value = conn
+    conn.__exit__.return_value = False
+    conn.cursor.return_value = cursor
+    return {"connect": MagicMock(return_value=conn), "conn": conn, "cursor": cursor}
 
 
 class TestObjectStorageResourceDownloadRaw:
@@ -192,3 +209,61 @@ class TestObjectStorageResourceConfig:
         assert resource.raw_bucket == "my-raw-bucket"
         assert resource.curated_bucket == "my-curated-bucket"
         assert resource.use_ssl is True
+
+
+class TestPostgresCatalogResource:
+    """Tests for PostgresCatalogResource insert helpers."""
+
+    def test_insert_raw_file_uses_dataclass(self, psycopg_mocks):
+        """Should insert raw file using typed dataclass fields."""
+        resource = PostgresCatalogResource(dsn="postgresql://localhost:5432/db")
+        raw = RawFileRecord(
+            id=uuid.uuid4(),
+            source="ads",
+            dataset="cams-europe-air-quality-forecasts-forecast",
+            date=date(2025, 1, 2),
+            s3_key="ads/cams/2025-01-02/run.grib",
+        )
+
+        with patch("pipeline_python.defs.resources.psycopg.connect", psycopg_mocks["connect"]):
+            resource.insert_raw_file(raw)
+
+        psycopg_mocks["connect"].assert_called_once_with("postgresql://localhost:5432/db")
+        psycopg_mocks["cursor"].execute.assert_called_once()
+        args, kwargs = psycopg_mocks["cursor"].execute.call_args
+        assert "INSERT INTO catalog.raw_files" in args[0]
+        assert args[1] == (
+            str(raw.id),
+            "ads",
+            "cams-europe-air-quality-forecasts-forecast",
+            date(2025, 1, 2),
+            "ads/cams/2025-01-02/run.grib",
+        )
+
+    def test_insert_curated_file_uses_dataclass(self, psycopg_mocks):
+        """Should insert curated file using typed dataclass fields."""
+        resource = PostgresCatalogResource(dsn="postgresql://localhost:5432/db")
+        curated = CuratedFileRecord(
+            id=uuid.uuid4(),
+            raw_file_id=uuid.uuid4(),
+            variable="pm2p5",
+            source="cams",
+            timestamp=datetime(2025, 1, 2, 12, 0, 0),
+            s3_key="pm2p5/cams/2025/01/02/12/data.grib2",
+        )
+
+        with patch("pipeline_python.defs.resources.psycopg.connect", psycopg_mocks["connect"]):
+            resource.insert_curated_file(curated)
+
+        psycopg_mocks["connect"].assert_called_once_with("postgresql://localhost:5432/db")
+        psycopg_mocks["cursor"].execute.assert_called_once()
+        args, kwargs = psycopg_mocks["cursor"].execute.call_args
+        assert "INSERT INTO catalog.curated_files" in args[0]
+        assert args[1] == (
+            str(curated.id),
+            str(curated.raw_file_id),
+            "pm2p5",
+            "cams",
+            datetime(2025, 1, 2, 12, 0, 0),
+            "pm2p5/cams/2025/01/02/12/data.grib2",
+        )
