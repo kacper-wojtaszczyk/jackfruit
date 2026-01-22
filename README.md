@@ -54,7 +54,7 @@ docker-compose up -d
 |-----------|------|--------|
 | **Infrastructure** |||
 | Object Storage | MinIO / S3 | ✅ Active |
-| Metadata DB | Postgres | ⏳ Planned |
+| Metadata DB | Postgres | ✅ Active |
 | Orchestration | Dagster | ✅ Active |
 | **Processing Layers** |||
 | L1: Ingestion | Go CLI | ✅ Active (CAMS) |
@@ -70,7 +70,7 @@ jackfruit/
 ├── ingestion-go/       # Go CLI — fetch external data → raw bucket
 ├── pipeline-python/    # Dagster orchestration + ETL assets
 ├── docs/               # Architecture docs
-└── docker-compose.yml  # MinIO
+└── docker-compose.yml  # MinIO, Postgres, Dagster
 ```
 
 ## Data Sources (Current Targets)

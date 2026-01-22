@@ -199,9 +199,24 @@ Different sources have different temporal resolutions. Each source has a defined
 
 GRIB2 files are self-describing (coordinates, units, CRS embedded). 
 
-### Current: Dagster Metadata
+### Postgres Catalog (Implemented)
 
-Lineage and processing metadata stored in `MaterializeResult.metadata`:
+All file writes are recorded in the Postgres metadata catalog (`catalog` schema).
+
+**Schema:**
+- `catalog.raw_files` — tracks ingested files with run_id, source, dataset, date, S3 key
+- `catalog.curated_files` — tracks processed files with variable, timestamp, S3 key, lineage via `raw_file_id` FK
+
+**Upsert behavior:**
+- `raw_files`: `ON CONFLICT DO NOTHING` (idempotent, re-runs don't duplicate)
+- `curated_files`: `ON CONFLICT DO UPDATE` (reprocessing updates metadata)
+
+**Connection reuse:**
+Transform assets use the catalog resource as a context manager to reuse database connections across multiple inserts.
+
+### Dagster Metadata
+
+Lineage and processing metadata also stored in `MaterializeResult.metadata`:
 
 ```python
 return dg.MaterializeResult(
@@ -297,4 +312,3 @@ Transformation jobs must be idempotent:
 - [ ] **Schema evolution strategy** — how to handle breaking changes
 - [ ] **Backfill strategy** — bulk historical data processing
 - [ ] **Spatial chunking** — add when needed for global coverage or large files
-- [ ] **Postgres metadata catalog** — migrate from Dagster metadata
