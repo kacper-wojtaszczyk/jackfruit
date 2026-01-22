@@ -1,0 +1,44 @@
+# Binaries for programs and plugins
+.env.local
+.env
+# Environment variables
+
+.cache/
+# Go build cache
+
+out/
+*.iws
+*.ipr
+*.iml
+.idea/
+# IntelliJ IDEA
+
+._*
+.LSOverride
+.AppleDouble
+.DS_Store
+# macOS
+
+/vendor/
+# Dependency directories
+
+serving-go
+/dist/
+/bin/
+# Build output
+
+go.work
+# Go workspace file
+
+*.out
+# Output of the go coverage tool
+
+*.test
+# Test binary, built with `go test -c`
+
+*.dylib
+*.so
+*.dll
+*.exe~
+*.exe
+
