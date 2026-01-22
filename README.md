@@ -14,8 +14,8 @@ Environmental data platform. Ingests, transforms, and serves weather, air qualit
 - [x] CAMS transformation asset — [complete](https://github.com/kacper-wojtaszczyk/jackfruit/issues/12)
   - Transforms raw GRIB → curated single-variable, single-timestamp files
   - Daily schedule runs at 08:00 UTC for current day's data (forecast)
-- [ ] Metadata DB (Postgres) — not started
-- [ ] Serving API — not started
+- [x] Metadata DB (Postgres)
+- [ ] Serving API — in progress
 
 ## Quick Start
 
