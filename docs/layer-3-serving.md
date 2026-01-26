@@ -89,13 +89,13 @@ REST API. Clients provide coordinates, timestamp, and variable names. The servin
 
 **Endpoints:**
 ```
-GET /health                           # 204 No Content (liveness)
-GET /v1/air-quality?lat=&lon=&time=&vars=   # Query air quality data
+GET /health                                       # 204 No Content (liveness)
+GET /v1/environmental?lat=&lon=&time=&vars=       # Query environmental data
 ```
 
 **Example request:**
 ```
-GET /v1/air-quality?lat=52.52&lon=13.40&time=2025-03-12T14:55:00Z&vars=pm2p5,pm10
+GET /v1/environmental?lat=52.52&lon=13.40&time=2025-03-12T14:55:00Z&vars=pm2p5,temperature
 ```
 
 **Example response:**
@@ -113,6 +113,17 @@ GET /v1/air-quality?lat=52.52&lon=13.40&time=2025-03-12T14:55:00Z&vars=pm2p5,pm1
         "raw_file_id": "01890c24-905b-7122-b170-b60814e6ee06",
         "source": "ads",
         "dataset": "cams-europe-air-quality-forecasts-analysis"
+      }
+    },
+    {
+      "name": "temperature",
+      "value": 285.5,
+      "unit": "K",
+      "metadata": {
+        "ref_timestamp": "2025-03-12T14:00:00Z",
+        "raw_file_id": "01890c24-905b-7122-b170-b60814e6ee07",
+        "source": "ads",
+        "dataset": "reanalysis-era5-single-levels"
       }
     }
   ]

@@ -8,11 +8,13 @@ You're helping build the Go serving layer. Inherit behavior from global instruct
 
 <scope>
 **Serving (active):**
-- HTTP API for querying environmental data
+- HTTP API for querying environmental data (any gridded variable: air quality, temperature, vegetation, etc.)
 - Query `catalog.curated_files` + `catalog.raw_files` for file locations and lineage
 - Fetch GRIB2 files from `jackfruit-curated` bucket
 - Extract values at coordinates using eccodes
 - Return JSON responses with values + per-variable lineage metadata
+
+> **MVP Scope:** Initial implementation uses air quality variables (`pm2p5`, `pm10`) from CAMS. The architecture is variable-agnostic.
 
 **Does NOT do:**
 - Fetch from external APIs (that's ingestion)
@@ -23,12 +25,12 @@ You're helping build the Go serving layer. Inherit behavior from global instruct
 <api_contract>
 **Endpoints:**
 - `GET /health` → 204 No Content (liveness)
-- `GET /v1/air-quality?lat=&lon=&time=&vars=` → JSON with values + metadata
+- `GET /v1/environmental?lat=&lon=&time=&vars=` → JSON with values + metadata
 
 **Request parameters:**
 - `lat`, `lon`: coordinates (float)
 - `time`: ISO8601 timestamp (UTC)
-- `vars`: comma-separated variable names (e.g., `pm2p5,pm10`)
+- `vars`: comma-separated variable names (e.g., `pm2p5,pm10,temperature`)
 
 **Response shape:**
 ```json
@@ -45,6 +47,17 @@ You're helping build the Go serving layer. Inherit behavior from global instruct
         "raw_file_id": "...",
         "source": "ads",
         "dataset": "cams-europe-air-quality-forecasts-analysis"
+      }
+    },
+    {
+      "name": "temperature",
+      "value": 285.5,
+      "unit": "K",
+      "metadata": {
+        "ref_timestamp": "2025-03-12T14:00:00Z",
+        "raw_file_id": "...",
+        "source": "ads",
+        "dataset": "reanalysis-era5-single-levels"
       }
     }
   ]
@@ -105,6 +118,7 @@ serving-go/
 ├── internal/
 │   ├── api/                 # HTTP handlers, request/response
 │   ├── catalog/             # Postgres repository
+│   ├── domain/              # Business logic (environmental.go)
 │   ├── grib/                # eccodes wrapper
 │   ├── storage/             # S3/MinIO client
 │   └── config/              # Environment config

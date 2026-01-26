@@ -9,7 +9,7 @@ Go HTTP service for querying environmental data from the Jackfruit platform.
 | Health endpoint (`/health`) | ✅ Done |
 | Postgres catalog integration | ⏳ Next |
 | GRIB2 reading (eccodes) | ⏳ Planned |
-| Air quality endpoint (`/v1/air-quality`) | ⏳ Planned |
+| Environmental endpoint (`/v1/environmental`) | ⏳ Planned |
 | Error handling | ⏳ Planned |
 | Docker/containerization | ⏳ Planned |
 
@@ -20,13 +20,15 @@ The serving layer exposes query interfaces for client applications. It abstracts
 **Clients ask:** "What's the PM2.5 at (52.52, 13.40) at 14:55 UTC?"  
 **Serving layer handles:** Postgres lookup, S3 fetch, GRIB2 parsing, coordinate extraction.
 
+> **MVP Scope:** Initial implementation uses air quality variables (`pm2p5`, `pm10`) from CAMS. The architecture is **variable-agnostic** — the same endpoint serves any gridded environmental data (temperature, humidity, vegetation indices) as datasets are added.
+
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        Client                               │
-│   GET /v1/air-quality?lat=52.52&lon=13.40&time=...&vars=... │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                           Client                                 │
+│   GET /v1/environmental?lat=52.52&lon=13.40&time=...&vars=...    │
+└──────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
@@ -73,10 +75,10 @@ GET /health
 
 Simple liveness check for container orchestration.
 
-### Air Quality Query
+### Environmental Data Query
 
 ```
-GET /v1/air-quality?lat={lat}&lon={lon}&time={timestamp}&vars={var1,var2}
+GET /v1/environmental?lat={lat}&lon={lon}&time={timestamp}&vars={var1,var2}
 ```
 
 **Parameters:**
@@ -86,7 +88,7 @@ GET /v1/air-quality?lat={lat}&lon={lon}&time={timestamp}&vars={var1,var2}
 | `lat` | float | Yes | Latitude (-90 to 90) |
 | `lon` | float | Yes | Longitude (-180 to 180) |
 | `time` | ISO8601 | Yes | Requested timestamp (UTC) |
-| `vars` | string | Yes | Comma-separated variable names (e.g., `pm2p5,pm10`) |
+| `vars` | string | Yes | Comma-separated variable names (e.g., `pm2p5,pm10,temperature`) |
 
 **Success Response (200):**
 
@@ -110,14 +112,14 @@ GET /v1/air-quality?lat={lat}&lon={lon}&time={timestamp}&vars={var1,var2}
       }
     },
     {
-      "name": "pm10",
-      "value": 39.34,
-      "unit": "µg/m³",
+      "name": "temperature",
+      "value": 285.5,
+      "unit": "K",
       "metadata": {
         "ref_timestamp": "2025-03-12T14:00:00Z",
-        "raw_file_id": "01890c24-905b-7122-b170-b60814e6ee06",
+        "raw_file_id": "01890c24-905b-7122-b170-b60814e6ee07",
         "source": "ads",
-        "dataset": "cams-europe-air-quality-forecasts-analysis"
+        "dataset": "reanalysis-era5-single-levels"
       }
     }
   ]
@@ -249,8 +251,8 @@ go run ./cmd/serving
 # Test health endpoint
 curl -i http://localhost:8080/health
 
-# Test air quality endpoint
-curl "http://localhost:8080/v1/air-quality?lat=52.52&lon=13.40&time=2025-03-12T14:55:00Z&vars=pm2p5,pm10"
+# Test environmental endpoint (MVP: air quality variables)
+curl "http://localhost:8080/v1/environmental?lat=52.52&lon=13.40&time=2025-03-12T14:55:00Z&vars=pm2p5,pm10"
 ```
 
 ## Project Structure (Planned)
@@ -267,6 +269,8 @@ serving-go/
 │   │   └── response.go      # Response formatting
 │   ├── catalog/
 │   │   └── repository.go    # Postgres queries
+│   ├── domain/
+│   │   └── environmental.go # Business logic orchestration
 │   ├── grib/
 │   │   └── reader.go        # eccodes wrapper
 │   ├── storage/
