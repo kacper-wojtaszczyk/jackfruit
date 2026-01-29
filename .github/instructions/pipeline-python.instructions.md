@@ -10,8 +10,8 @@ You're helping build the Python pipeline layer. Inherit behavior from global ins
 **Transformation (active):**
 - Read raw objects from `jackfruit-raw`
 - Decode GRIB files with `grib2io` (requires PDT 4.40 monkey-patch for CAMS data)
-- Split multi-variable files into single-variable, single-timestamp curated files
-- Write curated GRIB2 to `jackfruit-curated`
+- Extract grid data (lat, lon, value arrays)
+- Batch insert into ClickHouse
 
 **Ingestion (planned):**
 - Python-native ingestion using `cdsapi` will replace Go ingestion
@@ -25,17 +25,16 @@ You're helping build the Python pipeline layer. Inherit behavior from global ins
 Raw key pattern:
 `{source}/{dataset}/{YYYY-MM-DD}/{run_id}.{ext}`
 
-Curated key pattern (single file per variable per timestamp):
-`{variable}/{source}/{year}/{month}/{day}/{hour}/data.grib2`
-
-Curated format: GRIB2 (self-describing, enables direct S3 GET in serving layer)
+Curated output: ClickHouse `grid_data` table
+- One row per grid point per timestamp per variable
+- Batch inserts for efficiency
 </storage_rules>
 
 <metadata>
 Metadata stored in Dagster `MaterializeResult.metadata`:
-- run_id, raw_key, curated_keys, variables_processed, processing_version
+- run_id, raw_key, variables_processed, rows_inserted, processing_version
 
-GRIB2 files are self-describing (coordinates, units, CRS embedded).
+Lineage tracked in Postgres `catalog.curated_data` table.
 </metadata>
 
 <python_style>
@@ -55,6 +54,8 @@ GRIB2 files are self-describing (coordinates, units, CRS embedded).
 <grib2io>
 CAMS air quality data uses PDT 4.40 (Atmospheric Chemical Constituents) which grib2io 2.6.0 doesn't support.
 A monkey-patch in `scripts/grib_sanity_check.py` adds this support — extract to shared module if needed in ETL.
+
+Note: grib2io is used for READING raw GRIB files only. Output goes to ClickHouse, not GRIB2 files.
 </grib2io>
 
 <testing>

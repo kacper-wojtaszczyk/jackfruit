@@ -14,8 +14,9 @@ Domain: weather, air quality, hydrology, vegetation — bulk/gridded datasets, n
 Three processing layers + infrastructure:
 
 **Infrastructure** (not a processing layer):
-- Object Storage: MinIO/S3 (raw + curated buckets)
-- Metadata DB: Postgres (planned)
+- Object Storage: MinIO/S3 (raw bucket only)
+- Metadata DB: Postgres (lineage, run history)
+- Grid Data Store: ClickHouse (curated grid data)
 - Orchestration: Dagster
 
 **Processing Layers:**
@@ -23,38 +24,34 @@ Three processing layers + infrastructure:
 | Layer | Name | Tech | Status |
 |-------|------|------|--------|
 | 1 | Ingestion | Go CLI (Python planned) | Active |
-| 2 | Transformation | Python + Dagster | Active |
+| 2 | Transformation | Python + Dagster | Migrating to ClickHouse |
 | 3 | Serving API | Go | Planned |
 
-MVP target: All 3 layers. Serving queries `jackfruit-curated` bucket directly via S3 GET. ClickHouse deferred until needed for analytics.
+MVP target: All 3 layers. Serving queries ClickHouse directly for grid data.
 
 Go ingestion works but will be replaced with native Python ingestion (`cdsapi`) to simplify the stack. Go's strengths better utilized in serving layer.
 </architecture>
 
 <storage_rules>
-Two buckets:
+**Object Storage (MinIO/S3):**
 - `jackfruit-raw`: immutable, append-only, source-faithful
-- `jackfruit-curated`: processed, query-optimized
 
-Raw is NEVER mutated. ETL reads raw, writes curated.
+Raw is NEVER mutated. ETL reads raw, writes to ClickHouse.
 
 Raw key pattern:
 `{source}/{dataset}/{YYYY-MM-DD}/{run_id}.{ext}`
 
 Example: `ads/cams-europe-air-quality-forecasts-analysis/2025-03-12/01890c24-905b-7122-b170-b60814e6ee06.grib`
 
-Curated key pattern (single file per variable per timestamp):
-`{variable}/{source}/{year}/{month}/{day}/{hour}/data.grib2`
-
-Example: `pm2p5/cams/2025/03/11/14/data.grib2`
-
-Curated format: GRIB2 (self-describing, native for gridded data, Go-readable via eccodes)
+**ClickHouse (Grid Data):**
+Curated grid data stored as rows: (variable, source, timestamp, lat, lon, value)
+Schema design TBD — optimized for point queries by coordinates.
 </storage_rules>
 
 <boundaries>
 - Ingestion: fetch external data → write to `jackfruit-raw`
-- ETL: read `jackfruit-raw` → transform → write to `jackfruit-curated`
-- Serving: read `jackfruit-curated` → serve client queries
+- ETL: read `jackfruit-raw` → transform → write to ClickHouse
+- Serving: read ClickHouse → serve client queries
 
 Do not blur these boundaries.
 </boundaries>

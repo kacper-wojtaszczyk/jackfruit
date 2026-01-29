@@ -7,15 +7,15 @@ Environmental data platform. Ingests, transforms, and serves weather, air qualit
 **Early development:**
 
 - [x] Architecture defined (infrastructure + 3 processing layers)
-- [x] Storage strategy decided (MinIO raw/curated buckets)
+- [x] Storage strategy decided (MinIO raw bucket + ClickHouse for curated)
 - [x] Go ingestion CLI (CAMS adapter working)
 - [x] Dagster orchestration setup
 - [x] Ingestion asset (runs Go CLI via docker compose)
-- [x] CAMS transformation asset — [complete](https://github.com/kacper-wojtaszczyk/jackfruit/issues/12)
-  - Transforms raw GRIB → curated single-variable, single-timestamp files
-  - Daily schedule runs at 08:00 UTC for current day's data (forecast)
+- [x] CAMS transformation asset — needs migration to ClickHouse
 - [x] Metadata DB (Postgres)
-- [ ] Serving API — in progress
+- [ ] ClickHouse setup — in progress
+- [ ] Transform to ClickHouse — in progress
+- [ ] Serving API — planned
 
 ## Quick Start
 
@@ -24,26 +24,26 @@ Environmental data platform. Ingests, transforms, and serves weather, air qualit
 cp .env.example .env
 # Edit .env with your API keys and credentials (ask kacper)
 
-# Start MinIO and Dagster
+# Start infrastructure (MinIO, Postgres, ClickHouse, Dagster)
 docker-compose up -d
 
 # MinIO console: http://localhost:9098 (minioadmin / minioadmin)
-# Create buckets (first time): jackfruit-raw, jackfruit-curated (or not, they will auto-create)
+# Create bucket (first time): jackfruit-raw (or let it auto-create)
 # Dagster UI: http://localhost:3099
 ```
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      INFRASTRUCTURE                         │
-│   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│   │ Object Store │  │  Metadata DB │  │   Dagster    │      │
-│   │ (MinIO / S3) │  │  (Postgres)  │  │              │      │
-│   └──────────────┘  └──────────────┘  └──────────────┘      │
-└─────────────────────────────────────────────────────────────┘
-        │                    │                   │
-        ▼                    ▼                   ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│                          INFRASTRUCTURE                               │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐       │
+│  │   MinIO    │  │  Postgres  │  │ ClickHouse │  │  Dagster   │       │
+│  │ (raw data) │  │ (metadata) │  │(grid data) │  │            │       │
+│  └────────────┘  └────────────┘  └────────────┘  └────────────┘       │
+└───────────────────────────────────────────────────────────────────────┘
+        │                │                │                │
+        ▼                ▼                ▼                ▼
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
 │ L1: Ingest   │ ──▶ │ L2: Transform│ ──▶ │ L3: Serving  │
 │    (Go)      │     │   (Python)   │     │    (Go)      │
@@ -53,12 +53,13 @@ docker-compose up -d
 | Component | Tech | Status |
 |-----------|------|--------|
 | **Infrastructure** |||
-| Object Storage | MinIO / S3 | ✅ Active |
+| Object Storage | MinIO / S3 | ✅ Active (raw only) |
 | Metadata DB | Postgres | ✅ Active |
+| Grid Data Store | ClickHouse | ⏳ In Progress |
 | Orchestration | Dagster | ✅ Active |
 | **Processing Layers** |||
 | L1: Ingestion | Go CLI | ✅ Active (CAMS) |
-| L2: Transformation | Python + Dagster | ✅ Active (CAMS) |
+| L2: Transformation | Python + Dagster | 🔄 Migrating to ClickHouse |
 | L3: Serving | Go | ⏳ Planned |
 
 See `docs/` for details.

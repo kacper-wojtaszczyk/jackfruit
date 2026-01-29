@@ -9,9 +9,8 @@ You're helping build the Go serving layer. Inherit behavior from global instruct
 <scope>
 **Serving (active):**
 - HTTP API for querying environmental data (any gridded variable: air quality, temperature, vegetation, etc.)
-- Query `catalog.curated_files` + `catalog.raw_files` for file locations and lineage
-- Fetch GRIB2 files from `jackfruit-curated` bucket
-- Extract values at coordinates using eccodes
+- Query ClickHouse for grid values at coordinates
+- Optionally query Postgres `catalog.curated_data` + `catalog.raw_files` for lineage
 - Return JSON responses with values + per-variable lineage metadata
 
 > **MVP Scope:** Initial implementation uses air quality variables (`pm2p5`, `pm10`) from CAMS. The architecture is variable-agnostic.
@@ -19,7 +18,7 @@ You're helping build the Go serving layer. Inherit behavior from global instruct
 **Does NOT do:**
 - Fetch from external APIs (that's ingestion)
 - Transform data (that's ETL)
-- Mutate any bucket data
+- Read from S3 curated bucket (data is in ClickHouse)
 </scope>
 
 <api_contract>
@@ -76,26 +75,36 @@ You're helping build the Go serving layer. Inherit behavior from global instruct
 - Lineage metadata is ALWAYS included in responses (per-variable)
 </boundaries>
 
-<grib2>
-**Library:** eccodes via CGO
+<clickhouse>
+**Library:** `github.com/ClickHouse/clickhouse-go/v2`
 
-**Why eccodes:**
-- ECMWF's official library — handles PDT 4.40 (CAMS atmospheric chemical constituents)
-- Built-in `GetDataAtPoint(lat, lon)` — no manual grid math
-- Pure Go alternatives don't support PDT 4.40
+**Why ClickHouse:**
+- SQL queries replace complex GRIB parsing
+- Built-in nearest-neighbor via `ORDER BY distance LIMIT 1`
+- No CGO dependencies (pure Go driver)
+- Excellent query performance on grid data
 
-**Build requirements:**
-- macOS: `brew install eccodes`
-- Docker: `libeccodes-dev` (build), `libeccodes0` (runtime)
-</grib2>
+**Query pattern:**
+```sql
+SELECT value, lat, lon
+FROM grid_data
+WHERE variable = 'pm2p5'
+  AND source = 'cams'
+  AND timestamp = '2025-03-11 14:00:00'
+ORDER BY greatCircleDistance(lat, lon, 52.52, 13.40)
+LIMIT 1
+```
+</clickhouse>
 
 <database>
-Query `catalog.curated_files` joined with `catalog.raw_files` for lineage.
-
-**Access pattern:**
+**ClickHouse (grid data):**
+- Primary data source for environmental values
 - One query per variable (parallel goroutines)
-- Find latest curated file ≤ requested timestamp within tolerance
-- Join to get raw_file_id, source, dataset for lineage
+- Nearest-neighbor via `ORDER BY distance LIMIT 1`
+
+**Postgres (lineage — optional):**
+- Query `catalog.curated_data` joined with `catalog.raw_files` for lineage
+- May be skipped for performance if lineage not needed in response
 
 **Timestamp snapping:**
 - Snap to last datapoint BEFORE requested timestamp
@@ -117,16 +126,15 @@ serving-go/
 ├── cmd/serving/main.go      # Entry point
 ├── internal/
 │   ├── api/                 # HTTP handlers, request/response
-│   ├── catalog/             # Postgres repository
+│   ├── clickhouse/          # ClickHouse client for grid data
+│   ├── catalog/             # Postgres repository for lineage
 │   ├── domain/              # Business logic (environmental.go)
-│   ├── grib/                # eccodes wrapper
-│   ├── storage/             # S3/MinIO client
 │   └── config/              # Environment config
 ```
 </project_structure>
 
 <testing>
-- Unit test handlers with mock catalog/storage
-- Integration tests optional (real Postgres + MinIO)
-- Test error paths: missing variable, invalid coords, S3 failure
+- Unit test handlers with mock ClickHouse/catalog
+- Integration tests optional (real Postgres + ClickHouse)
+- Test error paths: missing variable, invalid coords, ClickHouse failure
 </testing>
