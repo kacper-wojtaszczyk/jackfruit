@@ -1,5 +1,9 @@
 # pipeline_python
 
+Dagster-based data pipeline for ingestion orchestration and transformation.
+
+**Output:** Grid data is written to ClickHouse (replacing previous GRIB2 file output to S3).
+
 ## Getting started
 
 ### Installing dependencies
@@ -57,6 +61,8 @@ docker compose run dagster uv run scripts/grib_sanity_check.py data/file.grib
 ```
 
 The script includes a monkey-patch for PDT 4.40 (Atmospheric Chemical Constituents) which `grib2io` 2.6.0 doesn't support natively. CAMS air quality data uses this template.
+
+> **Note:** GRIB files are read for transformation, but output goes to ClickHouse (not GRIB2 files).
 
 ## Learn more
 

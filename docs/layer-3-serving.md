@@ -9,7 +9,8 @@ Expose query interfaces for client projects. Abstracts storage backend from cons
 - API contracts and versioning
 - Request validation
 - Response formatting
-- Translating high-level queries to metadata DB + storage
+- Translating high-level queries to ClickHouse
+- Lineage lookup from Postgres
 - Caching (production)
 
 ## Does NOT Do
@@ -26,62 +27,54 @@ Expose query interfaces for client projects. Abstracts storage backend from cons
 - Excellent HTTP server performance and native concurrency
 - Parallel variable fetching via goroutines
 - Single binary deployment
+- No CGO required (unlike previous eccodes approach)
 
-**GRIB2 Parsing:** eccodes (CGO)
+**Grid Data:** ClickHouse via `clickhouse-go/v2`
 
-**Why eccodes:**
-- ECMWF's official library — handles all GRIB2 variants including PDT 4.40
-- Built-in `GetDataAtPoint(lat, lon)` — no manual grid math
-- CAMS data uses PDT 4.40 (Atmospheric Chemical Constituents) which pure Go libraries don't support
+**Why ClickHouse:**
+- SQL queries replace complex GRIB parsing
+- Built-in nearest-neighbor via `ORDER BY distance LIMIT 1`
+- No file management or coordinate math needed
+- Mature Go driver with connection pooling
 
 ## Data Source
 
-1. **Metadata DB (Postgres):** Query `catalog.curated_files` joined with `catalog.raw_files` for file locations and lineage
-2. **Object Storage (S3/MinIO):** Fetch GRIB2 files from curated bucket via S3 key from catalog
+1. **ClickHouse:** Query `grid_data` table for values at coordinates
+2. **Metadata DB (Postgres):** Query `catalog.curated_data` joined with `catalog.raw_files` for lineage (optional)
 
 The API contract stays the same regardless of storage backend.
 
-### Curated Key Structure
+### ClickHouse Query Pattern
 
-Single-timestamp files with plain paths. Key depth depends on source granularity.
-
+**Point query (exact grid match):**
+```sql
+SELECT value
+FROM grid_data
+WHERE variable = 'pm2p5'
+  AND source = 'cams'
+  AND timestamp = '2025-03-11 14:00:00'
+  AND lat = 52.25
+  AND lon = 13.50
 ```
-{variable}/{source}/{year}/{month}/{day}/{hour}/data.grib2   # hourly
-{variable}/{source}/{year}/{month}/{day}/data.grib2          # daily
-{variable}/{source}/{year}/W{week}/data.grib2                # weekly
-```
 
-### Key Construction (Go)
-
-```go
-var sourceGranularity = map[string]time.Duration{
-    "cams":   time.Hour,
-    "era5":   time.Hour,
-    "glofas": 24 * time.Hour,
-}
-
-// Hourly
-key := fmt.Sprintf("%s/%s/%04d/%02d/%02d/%02d/data.grib2",
-    variable, source, year, month, day, hour)
-
-// Daily
-key := fmt.Sprintf("%s/%s/%04d/%02d/%02d/data.grib2",
-    variable, source, year, month, day)
-
-// Weekly (ISO week)
-year, week := timestamp.ISOWeek()
-key := fmt.Sprintf("%s/%s/%04d/W%02d/data.grib2",
-    variable, source, year, week)
+**Nearest-neighbor query (recommended):**
+```sql
+SELECT value, lat, lon
+FROM grid_data
+WHERE variable = 'pm2p5'
+  AND source = 'cams'
+  AND timestamp = '2025-03-11 14:00:00'
+ORDER BY (lat - 52.52)*(lat - 52.52) + (lon - 13.40)*(lon - 13.40)
+LIMIT 1
 ```
 
 ### Query Flow
 
-1. Parse request → extract variable, source, timestamp
+1. Parse request → extract variable, coordinates, timestamp
 2. Snap timestamp to source granularity (e.g., nearest hour for CAMS)
-3. Construct curated key directly (no S3 LIST needed)
-4. Fetch single GRIB file via S3 GET
-5. Extract grid cell for requested location
-6. Return value
+3. Query ClickHouse with nearest-neighbor pattern
+4. Optionally query Postgres for lineage metadata
+5. Return value
 
 ## Query Interface
 
@@ -145,10 +138,10 @@ Clients never:
 ## Decisions Made
 
 - [x] API style — REST
-- [x] GRIB parsing — eccodes (CGO)
-- [x] Postgres for lookups — always query catalog, not direct key construction
+- [x] Grid data storage — ClickHouse (was: GRIB2 files + eccodes)
+- [x] Postgres for lineage — query `catalog.curated_data` for raw file provenance
 - [x] Source selection — hardcoded in Go code (CAMS for MVP)
-- [x] Coordinate mapping — nearest neighbor (MVP)
+- [x] Coordinate mapping — nearest neighbor via ClickHouse `ORDER BY distance LIMIT 1`
 - [x] Response shape — per-variable metadata with lineage
 - [x] Error handling — fail entire request if any variable missing
 
@@ -157,3 +150,4 @@ Clients never:
 - [ ] Timestamp snapping tolerance (TBD during implementation)
 - [ ] Granularity source (hardcode vs Postgres lookup)
 - [ ] Caching strategy (production)
+- [ ] Include lineage in every response or make it optional?

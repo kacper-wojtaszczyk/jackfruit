@@ -7,18 +7,18 @@ Go HTTP service for querying environmental data from the Jackfruit platform.
 | Component | Status |
 |-----------|--------|
 | Health endpoint (`/health`) | ✅ Done |
-| Postgres catalog integration | ⏳ Next |
-| GRIB2 reading (eccodes) | ⏳ Planned |
+| ClickHouse client | ⏳ Next |
+| Postgres catalog integration | ⏳ Planned |
 | Environmental endpoint (`/v1/environmental`) | ⏳ Planned |
 | Error handling | ⏳ Planned |
 | Docker/containerization | ⏳ Planned |
 
 ## Purpose
 
-The serving layer exposes query interfaces for client applications. It abstracts the storage backend (S3 + Postgres) from consumers, providing a stable API contract.
+The serving layer exposes query interfaces for client applications. It abstracts the storage backend (ClickHouse + Postgres) from consumers, providing a stable API contract.
 
 **Clients ask:** "What's the PM2.5 at (52.52, 13.40) at 14:55 UTC?"  
-**Serving layer handles:** Postgres lookup, S3 fetch, GRIB2 parsing, coordinate extraction.
+**Serving layer handles:** ClickHouse query for value, optional Postgres lookup for lineage.
 
 > **MVP Scope:** Initial implementation uses air quality variables (`pm2p5`, `pm10`) from CAMS. The architecture is **variable-agnostic** — the same endpoint serves any gridded environmental data (temperature, humidity, vegetation indices) as datasets are added.
 
@@ -36,18 +36,12 @@ The serving layer exposes query interfaces for client applications. It abstracts
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
 │  │ HTTP Router │→ │ Query Logic │→ │ Response Formatter  │  │
 │  └─────────────┘  └─────────────┘  └─────────────────────┘  │
-│         │                │                                  │
-│         │                ▼                                  │
-│         │        ┌───────────────┐                          │
-│         │        │ GRIB2 Reader  │ (eccodes)                │
-│         │        └───────────────┘                          │
-│         │                │                                  │
-└─────────┼────────────────┼──────────────────────────────────┘
+└─────────┬────────────────┬──────────────────────────────────┘
           │                │
           ▼                ▼
    ┌─────────────┐  ┌─────────────┐
-   │  Postgres   │  │    MinIO    │
-   │  (catalog)  │  │  (curated)  │
+   │  Postgres   │  │ ClickHouse  │
+   │  (lineage)  │  │ (grid data) │
    └─────────────┘  └─────────────┘
 ```
 
@@ -55,11 +49,8 @@ The serving layer exposes query interfaces for client applications. It abstracts
 
 1. Parse request → extract coordinates, timestamp, variable list
 2. For each variable (in parallel):
-   - Query `catalog.curated_files` for matching file within time tolerance
-   - If not found → fail entire request
-   - Fetch GRIB2 file from `jackfruit-curated` bucket via S3 key
-   - Extract value at (lat, lon) using eccodes `GetDataAtPoint()`
-   - Collect lineage metadata from joined `raw_files` table
+   - Query ClickHouse for value at nearest grid point
+   - Optionally query Postgres for lineage metadata
 3. Aggregate results
 4. Return JSON response
 
@@ -141,7 +132,7 @@ GET /v1/environmental?lat={lat}&lon={lon}&time={timestamp}&vars={var1,var2}
 |------|-------------|-------------|
 | `INVALID_REQUEST` | 400 | Missing/invalid parameters |
 | `VARIABLE_NOT_FOUND` | 404 | No data for variable within time tolerance |
-| `INTERNAL_ERROR` | 500 | Postgres/S3/GRIB read failure |
+| `INTERNAL_ERROR` | 500 | ClickHouse/Postgres failure |
 
 **Behavior:**
 - Request fails entirely if any requested variable is not found
@@ -149,32 +140,26 @@ GET /v1/environmental?lat={lat}&lon={lon}&time={timestamp}&vars={var1,var2}
 
 ## Technology
 
-### GRIB2 Parsing: eccodes (CGO)
+### Grid Data: ClickHouse
 
-**Why eccodes:**
-- ECMWF's official library — handles all GRIB2 variants including PDT 4.40
-- Built-in `GetDataAtPoint(lat, lon)` — no manual grid math
-- Same library family as Python pipeline conceptually
-- CAMS data uses PDT 4.40 (Atmospheric Chemical Constituents) which pure Go libraries don't support
+**Library:** `github.com/ClickHouse/clickhouse-go/v2`
 
-**Trade-off:** CGO complicates builds, but Docker handles this cleanly.
+**Why ClickHouse:**
+- SQL queries replace complex GRIB parsing
+- Built-in nearest-neighbor via `ORDER BY distance LIMIT 1`
+- No CGO dependencies (pure Go driver)
+- Excellent query performance on grid data
+- Connection pooling built-in
 
-**macOS local dev:**
-```bash
-brew install eccodes
-```
-
-**Docker build:**
-```dockerfile
-# Build stage
-FROM golang:1.23 AS builder
-RUN apt-get update && apt-get install -y libeccodes-dev
-# ... build ...
-
-# Runtime stage
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y libeccodes0
-COPY --from=builder /app/serving /app/serving
+**Query pattern:**
+```sql
+SELECT value, lat, lon
+FROM grid_data
+WHERE variable = 'pm2p5'
+  AND source = 'cams'
+  AND timestamp = '2025-03-11 14:00:00'
+ORDER BY (lat - 52.52)*(lat - 52.52) + (lon - 13.40)*(lon - 13.40)
+LIMIT 1
 ```
 
 ### Source Selection
@@ -183,7 +168,7 @@ For MVP, source is hardcoded to CAMS in Go code. The serving layer is responsibl
 
 ### Coordinate Mapping
 
-Nearest neighbor interpolation for MVP. GRIB2 stores gridded data; eccodes handles finding the closest grid cell to the requested coordinates.
+Nearest neighbor via ClickHouse query. The `ORDER BY distance LIMIT 1` pattern finds the closest grid cell to the requested coordinates.
 
 ### Timestamp Handling
 
@@ -193,25 +178,41 @@ Nearest neighbor interpolation for MVP. GRIB2 stores gridded data; eccodes handl
 
 ## Database Access
 
-Queries `catalog.curated_files` joined with `catalog.raw_files` for lineage.
+### ClickHouse (Grid Data)
+
+Primary data source for environmental values.
+
+**Query pattern:**
+```sql
+SELECT value, lat, lon
+FROM grid_data
+WHERE variable = $1
+  AND source = $2
+  AND timestamp = $3
+ORDER BY (lat - $4)*(lat - $4) + (lon - $5)*(lon - $5)
+LIMIT 1
+```
+
+### Postgres (Lineage — Optional)
+
+Queries `catalog.curated_data` joined with `catalog.raw_files` for lineage metadata.
 
 **Example query pattern:**
 ```sql
 SELECT 
-  cf.s3_key,
-  cf.timestamp,
-  cf.variable,
+  cd.timestamp,
+  cd.variable,
   rf.id AS raw_file_id,
   rf.source,
   rf.dataset
-FROM catalog.curated_files cf
-JOIN catalog.raw_files rf ON cf.raw_file_id = rf.id
-WHERE cf.variable = $1
-  AND cf.timestamp <= $2
-  -- AND cf.timestamp >= $2 - interval '2 hours'  -- tolerance TBD
-ORDER BY cf.timestamp DESC
+FROM catalog.curated_data cd
+JOIN catalog.raw_files rf ON cd.raw_file_id = rf.id
+WHERE cd.variable = $1
+  AND cd.timestamp = $2
 LIMIT 1
 ```
+
+> **Note:** Lineage lookup may be optional depending on performance requirements. TBD.
 
 ## Configuration
 
@@ -221,29 +222,26 @@ Environment variables:
 # Server
 PORT=8080                    # HTTP port (default: 8080)
 
-# Postgres
+# ClickHouse (grid data)
+CLICKHOUSE_HOST=localhost
+CLICKHOUSE_PORT=9000
+CLICKHOUSE_USER=default
+CLICKHOUSE_PASSWORD=...
+CLICKHOUSE_DATABASE=jackfruit
+
+# Postgres (lineage metadata)
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_USER=jackfruit
 POSTGRES_PASSWORD=...
 POSTGRES_DB=jackfruit
-
-# S3/MinIO
-MINIO_ENDPOINT=localhost:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
-MINIO_CURATED_BUCKET=jackfruit-curated
-MINIO_USE_SSL=false
 ```
 
 ## Local Development
 
 ```bash
-# Install eccodes (macOS)
-brew install eccodes
-
 # Start infrastructure
-docker-compose up -d postgres minio
+docker-compose up -d postgres clickhouse
 
 # Run server
 go run ./cmd/serving
@@ -267,14 +265,12 @@ serving-go/
 │   │   ├── handler.go       # HTTP handlers
 │   │   ├── request.go       # Request parsing/validation
 │   │   └── response.go      # Response formatting
+│   ├── clickhouse/
+│   │   └── client.go        # ClickHouse queries for grid data
 │   ├── catalog/
-│   │   └── repository.go    # Postgres queries
+│   │   └── repository.go    # Postgres queries for lineage
 │   ├── domain/
 │   │   └── environmental.go # Business logic orchestration
-│   ├── grib/
-│   │   └── reader.go        # eccodes wrapper
-│   ├── storage/
-│   │   └── s3.go            # S3/MinIO client
 │   └── config/
 │       └── config.go        # Environment config
 ├── go.mod

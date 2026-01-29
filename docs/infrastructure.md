@@ -6,25 +6,31 @@ Pluggable backend services. Local dev uses Docker containers; production uses ma
 
 | Component | Local (Dev) | Production | Purpose |
 |-----------|-------------|------------|---------|
-| Object Storage | MinIO | S3 | Raw + curated data files |
-| Metadata DB | Postgres | RDS Postgres | Dataset catalog, tile index, run history |
+| Object Storage | MinIO | S3 | Raw data files (immutable) |
+| Metadata DB | Postgres | RDS Postgres | Dataset catalog, lineage, run history |
+| Grid Data Store | ClickHouse | ClickHouse Cloud | Curated grid data (query-optimized) |
 | Orchestration | Dagster (local) | Dagster Cloud / ECS | Pipeline scheduling and monitoring |
 
 All components expose standard APIs — application code doesn't change between environments.
 
+**Storage split:**
+- **Postgres** — metadata, lineage tracking, small relational data
+- **ClickHouse** — bulk grid data (lat/lon/value), optimized for point queries and time-series
+
 ## Object Storage
 
-**Buckets:**
+**Bucket:**
 
 | Bucket | Purpose |
 |--------|---------|
 | `jackfruit-raw` | Immutable, append-only, source-faithful |
-| `jackfruit-curated` | Processed, query-optimized |
 
-**Why separate buckets:**
-- Clear separation of concerns
-- Different lifecycle rules (raw kept longer, curated may be pruned)
-- Safety — transformation bugs can't corrupt raw data
+Raw data is stored in object storage. Curated (processed) data is stored in ClickHouse for query efficiency.
+
+**Why this split:**
+- Raw files are large, append-only, rarely read — S3/MinIO is ideal
+- Curated data needs point queries by coordinates — ClickHouse excels here
+- Clear separation: S3 = evidence/archive, ClickHouse = queryable data
 
 **Object key pattern (raw):**
 ```
@@ -53,11 +59,13 @@ Think of raw as **evidence**, not data.
 - Simple, battle-tested
 - Good enough for catalog/index queries
 - Native Dagster support
-- Not overkill (ClickHouse deferred until analytics needs arise)
+- Handles relational data (lineage, run history) well
+
+**Role:** Tracks file ingestion and lineage. Does NOT store grid data (that's ClickHouse).
 
 **Schema:** `catalog`
 
-The metadata database tracks all files in object storage and their lineage relationships. Schema is initialized via `migrations/init.sql` mounted into the Postgres container.
+The metadata database tracks all raw files ingested and their transformation lineage. Schema is initialized via `migrations/init.sql` mounted into the Postgres container.
 
 ### Tables
 
@@ -72,7 +80,7 @@ The metadata database tracks all files in object storage and their lineage relat
 | `s3_key` | TEXT (UNIQUE) | Full S3 key in `jackfruit-raw` bucket |
 | `created_at` | TIMESTAMPTZ | Record creation timestamp |
 
-**`catalog.curated_files`** — Processed files derived from raw files
+**`catalog.curated_data`** — Tracks transformation lineage to ClickHouse data
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -81,30 +89,62 @@ The metadata database tracks all files in object storage and their lineage relat
 | `variable` | TEXT | Variable name (e.g., 'pm2p5', 'pm10') |
 | `source` | TEXT | Data source (e.g., 'cams') |
 | `timestamp` | TIMESTAMPTZ | Valid time of data |
-| `s3_key` | TEXT (UNIQUE) | Full S3 key in `jackfruit-curated` bucket |
 | `created_at` | TIMESTAMPTZ | Record creation timestamp |
 
+> **Note:** The exact relationship between `catalog.curated_data` and ClickHouse rows is TBD. See task 06 (curated lineage design) for details.
+
 **Indexes:**
-- `idx_curated_files_lookup` on `(variable, timestamp)` — serving layer queries
-- `idx_curated_files_raw` on `(raw_file_id)` — lineage queries
+- `idx_curated_data_lookup` on `(variable, timestamp)` — serving layer queries
+- `idx_curated_data_raw` on `(raw_file_id)` — lineage queries
 
 ### Access Patterns
 
 | Operation | Query Pattern |
 |-----------|---------------|
 | Ingestion writes | Insert into `raw_files` after S3 upload |
-| Transformation writes | Insert into `curated_files` after S3 upload, linked via `raw_file_id` |
-| Serving reads | Query `curated_files` by variable + timestamp range to find S3 keys |
-| Lineage queries | Join `curated_files` → `raw_files` to trace provenance |
+| Transformation writes | Insert into `curated_data` after ClickHouse insert, linked via `raw_file_id` |
+| Serving reads | Query ClickHouse directly for grid values; Postgres for lineage if needed |
+| Lineage queries | Join `curated_data` → `raw_files` to trace provenance |
 
 **What it stores:**
 
-| Table (conceptual) | Purpose |
+| Table | Purpose |
 |--------------------|---------|
+| `catalog.raw_files` | Raw file metadata, S3 keys, ingestion history |
+| `catalog.curated_data` | Lineage: which raw files → which ClickHouse data |
 | `datasets` | Source definitions, schemas, refresh schedules (TBD) |
-| `ingestion_runs` | Run history, status, checksums (TBD — Dagster tracks this) |
-| `tiles` | Spatial/temporal index of curated chunks (TBD — may not need if GRIB covers this) |
-| `lineage` | Which raw files → which curated files (✅ via `raw_file_id` FK) |
+
+## Grid Data Store (ClickHouse)
+
+**Tech:** ClickHouse
+
+**Why ClickHouse:**
+- Column-oriented — only reads columns needed for query
+- Excellent compression (10-20x on repetitive lat/lon data)
+- Sub-10ms point queries on billions of rows
+- Native SQL — simple Go integration
+- No CGO dependencies (unlike eccodes for GRIB)
+
+**Role:** Stores curated grid data (environmental values at lat/lon/time). Serves point queries from the API.
+
+**What it stores:**
+- Grid data: variable, source, timestamp, lat, lon, value
+- One row per grid point per timestamp per variable
+
+**Schema:** TBD — see task 01 (ClickHouse setup) for design guidelines. You design the actual schema.
+
+**Typical query:**
+```sql
+SELECT value
+FROM grid_data
+WHERE variable = 'pm2p5'
+  AND timestamp = '2025-03-11 14:00:00'
+ORDER BY (lat - 52.52)*(lat - 52.52) + (lon - 13.40)*(lon - 13.40)
+LIMIT 1
+```
+
+**Local:** ClickHouse runs in container via `docker-compose up`
+**Production:** ClickHouse Cloud or self-hosted
 
 ## Orchestration
 
@@ -159,21 +199,27 @@ ENV=dev
 ADS_BASE_URL=https://ads.atmosphere.copernicus.eu/api/retrieve/v1
 ADS_API_KEY=...
 
-# Object Storage
+# Object Storage (raw files only)
 MINIO_ENDPOINT=minio:9000
 MINIO_ENDPOINT_URL=http://minio:9000
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
 MINIO_RAW_BUCKET=jackfruit-raw
-MINIO_CURATED_BUCKET=jackfruit-curated
 MINIO_USE_SSL=false
 
-# Metadata DB
+# Metadata DB (Postgres)
 POSTGRES_HOST=postgres
 POSTGRES_PORT=5432
 POSTGRES_USER=jackfruit
 POSTGRES_PASSWORD=...
 POSTGRES_DB=jackfruit
+
+# Grid Data Store (ClickHouse)
+CLICKHOUSE_HOST=clickhouse
+CLICKHOUSE_PORT=9000
+CLICKHOUSE_USER=default
+CLICKHOUSE_PASSWORD=...
+CLICKHOUSE_DATABASE=jackfruit
 ```
 
 ## Production Deployment
@@ -185,9 +231,11 @@ POSTGRES_DB=jackfruit
 
 ## Open Questions
 
-- [x] Postgres schema design — ✅ Done (`catalog.raw_files`, `catalog.curated_files`)
+- [x] Postgres schema design — ✅ Done (`catalog.raw_files`, `catalog.curated_data`)
 - [x] Lineage tracking — ✅ Done (via `raw_file_id` FK)
-- [ ] Tile indexing strategy (PostGIS for spatial?) — Deferred, GRIB2 self-describes coordinates
+- [x] Curated data storage — ✅ Decided: ClickHouse (not S3 + GRIB2)
+- [ ] ClickHouse schema design — see task 01
+- [ ] Curated lineage relationship — how `catalog.curated_data` relates to ClickHouse rows (see task 06)
 - [ ] Production deployment approach
 - [ ] Backup/restore strategy
 

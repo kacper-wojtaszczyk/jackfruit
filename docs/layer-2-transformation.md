@@ -1,6 +1,6 @@
 # Layer 2 — Transformation
 
-Read raw data, normalize schemas, compute quality flags, and write to curated storage.
+Read raw data, normalize schemas, compute quality flags, and write to ClickHouse.
 
 ## Status
 
@@ -8,9 +8,8 @@ Read raw data, normalize schemas, compute quality flags, and write to curated st
 |-----------|--------|
 | Dagster project setup | ✅ Done |
 | Dagster asset invoking Go ingestion | ✅ Done |
-| CAMS transformation asset | ✅ Done |
-| Curated partitioning scheme | ✅ Done |
-| Curated file format | ✅ GRIB2 |
+| CAMS transformation asset | 🔄 Needs migration to ClickHouse |
+| Curated storage | 🔄 Migrating: GRIB2 files → ClickHouse |
 | Error handling | ✅ Fail-fast |
 | Daily schedule (08:00 UTC) | ✅ Done |
 | Metadata storage | ✅ Postgres catalog |
@@ -23,9 +22,8 @@ Read raw data, normalize schemas, compute quality flags, and write to curated st
 - Geo-coordinate handling and validation
 - Null/missing value flagging
 - Provenance tagging (source, ingestion time)
-- Spatial + temporal chunking for query efficiency
-- Writing curated data to `jackfruit-curated` bucket
-- Recording lineage (which raw files → which curated files)
+- Writing curated grid data to ClickHouse
+- Recording lineage in Postgres (which raw files → which ClickHouse data)
 
 ## Does NOT Do
 
@@ -68,9 +66,9 @@ The Go ingestion layer is containerized and invoked by Dagster using `PipesDocke
 ## Storage
 
 **Input:** `jackfruit-raw` bucket (for API-sourced data)  
-**Output:** `jackfruit-curated` bucket
+**Output:** ClickHouse `grid_data` table (schema TBD)
 
-ETL reads raw (or public S3 directly for large datasets), writes curated. Never mutates raw.
+ETL reads raw (or public S3 directly for large datasets), writes to ClickHouse. Never mutates raw.
 
 **Raw path pattern:** `{source}/{dataset}/{YYYY-MM-DD}/{run_id}.{ext}`
 
@@ -82,105 +80,64 @@ ETL reads raw (or public S3 directly for large datasets), writes curated. Never 
 
 **Processing:**
 - Multi-variable GRIB files are read with `grib2io` (NOAA's GRIB2 library)
-- Each variable/timestamp is split into separate curated files
-- Single message per output file for serving layer simplicity
+- Grid data extracted to numpy arrays
+- Each variable/timestamp batch-inserted into ClickHouse
 
 ### Catalog Integration
 
-All file writes are recorded in the Postgres metadata catalog (`catalog` schema):
+All transformations are recorded in the Postgres metadata catalog (`catalog` schema):
 
 **Ingestion** writes to `catalog.raw_files`:
 - Record includes `run_id`, source, dataset, date, S3 key
 - Uses `ON CONFLICT DO NOTHING` for idempotency (re-runs don't duplicate)
 
-**Transformation** writes to `catalog.curated_files`:
-- Record includes variable, source, timestamp, S3 key, and `raw_file_id` for lineage
+**Transformation** writes to `catalog.curated_data`:
+- Record includes variable, source, timestamp, and `raw_file_id` for lineage
 - Uses `ON CONFLICT DO UPDATE` for reprocessing (latest metadata wins)
+- Relationship to ClickHouse rows: TBD (see task 06)
 
-**Connection reuse:** Transform assets use the catalog resource as a context manager to reuse database connections across multiple curated file inserts (reduces connection overhead).
+**Connection reuse:** Transform assets use resources as context managers to reuse database connections across multiple inserts (reduces connection overhead).
 
-**Error handling:** Catalog writes are non-fatal. If a catalog insert fails, the asset logs a warning but continues successfully. S3 is the source of truth; the catalog is a derived index.
+**Error handling:** Catalog writes are non-fatal. If a catalog insert fails, the asset logs a warning but continues successfully. ClickHouse is the source of truth for grid data; the catalog is a derived lineage index.
 
-## Curated File Format
+## Curated Data Output (ClickHouse)
 
-**Format:** GRIB2
+**Storage:** ClickHouse
 
-**Why GRIB2:**
-- Native format for gridded meteorological data — no conversion overhead
-- Coordinate-aware (lat/lon/time built-in)
-- Go serving layer can read via `eccodes` bindings
-- Compact and well-supported by ECMWF tools
+**Why ClickHouse:**
+- Column-oriented — efficient for point queries
+- Excellent compression on repetitive coordinate data
+- SQL interface — simple for both Python writes and Go reads
+- No CGO dependencies in serving layer (unlike eccodes for GRIB)
 
-**Alternatives considered:**
-- Zarr: Cloud-native but poor Go support
-- Parquet: Columnar, loses grid structure
-- NetCDF: Good but less cloud-optimized than GRIB2
+**Output pattern:**
+- One row per grid point per timestamp per variable
+- Batch inserts for efficiency (~120K points per grid)
 
-## Curated Partitioning
-
-**One file per variable per timestamp.** Path structure ends where granularity ends.
-
-### Key Structure (Plain Paths)
-
-```
-{variable}/{source}/{year}/{month}/{day}/{hour}/data.grib2   # hourly
-{variable}/{source}/{year}/{month}/{day}/data.grib2          # daily
-{variable}/{source}/{year}/W{week}/data.grib2                # weekly (ISO week)
+**Example insert (conceptual):**
+```python
+client.insert('grid_data',
+    data=[(var, source, ts, lat, lon, val) for ...],
+    column_names=['variable', 'source', 'timestamp', 'lat', 'lon', 'value']
+)
 ```
 
-### Examples by Source
-
-| Source | Granularity | Example Path |
-|--------|-------------|--------------|
-| CAMS | Hourly | `pm2p5/cams/2025/03/11/14/data.grib2` |
-| ERA5 | Hourly | `temperature/era5/2025/03/11/00/data.grib2` |
-| GloFAS | Daily | `discharge/glofas/2025/03/11/data.grib2` |
-| CGLS | Weekly | `ndvi/cgls/2025/W11/data.grib2` |
+**Schema:** TBD — you design it. See task 01 for guidelines on ClickHouse schema design for grid data.
 
 ### Design Principles
 
-- **Plain paths** — no `key=value` Hive-style, simpler key construction in Go
-- **Single timestamp per file** — serving layer fetches exactly one file per query
-- **Time-first partitioning** — most selective dimension for queries
-- **Granularity in path depth** — hourly paths deeper than daily, weekly uses ISO week
-- **Filename is always `data.grib2`** — time components are directories
+- **Batch inserts** — insert entire grid at once, not row-by-row
+- **Idempotent** — re-running transformation overwrites same data
+- **Single source of truth** — ClickHouse holds the queryable grid data
 
-### Why Single-Timestamp Files?
+### Why Not GRIB2 Files?
 
-Optimized for the serving layer query pattern:
+Previous approach stored curated data as GRIB2 files in S3. Problems:
+- Go serving layer needed eccodes (CGO) for parsing
+- Coordinate-to-value lookup required complex grid math
+- File-per-timestamp created many small files
 
-1. Client requests: "PM2.5 for Berlin at 2025-03-11T14:37:00Z"
-2. Server snaps to nearest hour: `14:00`
-3. Server constructs key: `pm2p5/cams/2025/03/11/14/data.grib2`
-4. Server fetches single file via direct S3 GET (no listing)
-5. Server extracts grid cell, returns value
-
-**Trade-offs accepted:**
-- More files (CAMS: ~88K files/year) — S3 handles this fine
-- Small file overhead (~5%) — acceptable for query simplicity
-- Write amplification in ETL (raw→many curated) — ETL runs once, serving queries many times
-
-### Serving Layer Key Construction (Go)
-
-```go
-// Hourly
-key := fmt.Sprintf("%s/%s/%04d/%02d/%02d/%02d/data.grib2",
-    variable, source, year, month, day, hour)
-
-// Daily
-key := fmt.Sprintf("%s/%s/%04d/%02d/%02d/data.grib2",
-    variable, source, year, month, day)
-
-// Weekly (ISO week)
-year, week := timestamp.ISOWeek()
-key := fmt.Sprintf("%s/%s/%04d/W%02d/data.grib2",
-    variable, source, year, week)
-```
-
-### Scope
-
-- **MVP:** Europe only (no spatial tiling needed)
-- **Future:** Add spatial partitioning if file sizes grow or global coverage added
+ClickHouse solves all three: SQL queries, no CGO, no file management.
 
 ## Multi-Resolution Sources
 
@@ -193,26 +150,24 @@ Different sources have different temporal resolutions. Each source has a defined
 | GloFAS | Daily | 1 day |
 | CGLS (NDVI) | Weekly | ISO week |
 
-**Granularity config:** Serving layer maintains a simple lookup (source → granularity) to snap query timestamps to the correct resolution.
+**Granularity handling:** Serving layer snaps query timestamps to the correct resolution before querying ClickHouse.
 
 ## Metadata
 
-GRIB2 files are self-describing (coordinates, units, CRS embedded). 
-
 ### Postgres Catalog (Implemented)
 
-All file writes are recorded in the Postgres metadata catalog (`catalog` schema).
+All transformations are recorded in the Postgres metadata catalog (`catalog` schema).
 
 **Schema:**
 - `catalog.raw_files` — tracks ingested files with run_id, source, dataset, date, S3 key
-- `catalog.curated_files` — tracks processed files with variable, timestamp, S3 key, lineage via `raw_file_id` FK
+- `catalog.curated_data` — tracks processed data with variable, timestamp, lineage via `raw_file_id` FK
 
 **Upsert behavior:**
 - `raw_files`: `ON CONFLICT DO NOTHING` (idempotent, re-runs don't duplicate)
-- `curated_files`: `ON CONFLICT DO UPDATE` (reprocessing updates metadata)
+- `curated_data`: `ON CONFLICT DO UPDATE` (reprocessing updates metadata)
 
 **Connection reuse:**
-Transform assets use the catalog resource as a context manager to reuse database connections across multiple inserts.
+Transform assets use resources as context managers to reuse database connections across multiple inserts.
 
 ### Dagster Metadata
 
@@ -223,34 +178,26 @@ return dg.MaterializeResult(
     metadata={
         "run_id": run_id,
         "raw_key": raw_key,
-        "curated_keys": curated_keys,  # list of output paths
         "variables_processed": variables,
+        "rows_inserted": row_count,
         "processing_version": "1.0.0",
     }
 )
 ```
 
-### Future: Postgres Catalog
-
-Migrate to Postgres for queryable metadata:
-- Which raw files → which curated files (lineage)
-- Processing version per curated file
-- Temporal/spatial bounds index for serving layer queries
-
-**Migration path:** Keep Dagster metadata structure consistent so it can be written to Postgres when ready.
 
 ## Error Handling
 
 **Strategy: Fail-fast, no partial updates.**
 
-If any variable fails to extract or write:
+If any variable fails to extract or insert:
 - Entire asset fails
-- No partial curated files written
+- No partial ClickHouse inserts committed
 - Retry processes all variables again
 
 **Rationale:**
 - Simpler to reason about — asset either succeeds completely or fails completely
-- Avoids inconsistent state in curated bucket
+- Avoids inconsistent state in ClickHouse
 - Can refine later if specific failure modes warrant partial success
 
 ## Daily Schedule
@@ -286,22 +233,30 @@ To materialize data for specific dates (e.g., historical backfill):
 
 ## Processing Libraries
 
-| Format | Library |
-|--------|---------|
-| GRIB2 | [`grib2io`](https://github.com/NOAA-MDL/grib2io) — NOAA's GRIB2 read/write library |
+| Purpose | Library |
+|---------|---------|
+| GRIB2 reading | [`grib2io`](https://github.com/NOAA-MDL/grib2io) — NOAA's GRIB2 read/write library |
+| ClickHouse client | [`clickhouse-connect`](https://github.com/ClickHouse/clickhouse-connect) — Official Python driver |
 
 **Why grib2io:**
-- Full GRIB2 read AND write support
+- Full GRIB2 read support
 - Native Python API with clean context managers
 - Python 3.10-3.14 support
 - Uses NCEP g2c library backend
 - Maintained by NOAA MDL — production-quality library
 
+**Why clickhouse-connect:**
+- Official ClickHouse Python driver
+- Efficient batch inserts with numpy/pandas support
+- Connection pooling built-in
+
 ## Idempotency
 
 Transformation jobs must be idempotent:
-- Re-running produces identical output
-- Can delete curated, re-run ETL, get same results
+- Re-running produces identical output in ClickHouse
+- Can delete ClickHouse data, re-run ETL, get same results
+
+**Implementation:** Use ClickHouse's `ReplacingMergeTree` or explicit delete-before-insert pattern. TBD in schema design.
 
 ---
 
@@ -311,4 +266,4 @@ Transformation jobs must be idempotent:
 - [ ] **Derived metrics** — compute here vs push to serving layer?
 - [ ] **Schema evolution strategy** — how to handle breaking changes
 - [ ] **Backfill strategy** — bulk historical data processing
-- [ ] **Spatial chunking** — add when needed for global coverage or large files
+- [ ] **ClickHouse materialized views** — pre-aggregate common query patterns
