@@ -189,7 +189,7 @@ FROM grid_data
 WHERE variable = $1
   AND source = $2
   AND timestamp = $3
-ORDER BY (lat - $4)*(lat - $4) + (lon - $5)*(lon - $5)
+ORDER BY greatCircleDistance(lat, lon, $4, $5)
 LIMIT 1
 ```
 
