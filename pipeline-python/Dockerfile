@@ -1,4 +1,3 @@
-# NOTE: grib2io 2.7.0 has a circular import bug, pinned to 2.6.0
 FROM python:3.14-slim
 
 WORKDIR /app
