@@ -9,7 +9,7 @@ dependencies = [
     "dagster-docker~=0.28",
     "dagster-postgres~=0.28",
     # NOTE: grib2io 2.7.0 has a circular import bug, pinned to 2.6.0
-    "grib2io==2.6.0",
+    "grib2io==2.7.0",
     "psycopg[binary]~=3.2",
 ]
 [dependency-groups]
