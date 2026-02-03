@@ -802,7 +802,7 @@ wheels = [
 
 [[package]]
 name = "grib2io"
-version = "2.6.0"
+version = "2.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -810,7 +810,7 @@ dependencies = [
     { name = "pyproj", version = "3.7.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pyproj", version = "3.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e3/65/fb05ddf3b37e6ce4f2e560745cb0723cb487a89455a3cb1010bd5686963d/grib2io-2.6.0.tar.gz", hash = "sha256:b50b3150661ebb642b19a70a585fbcaa3d52d985c5c4d34371d3011634f4a383", size = 1199256, upload-time = "2025-10-22T14:53:12.876Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/65/66/dfbd9e58ecdd30fe2aaf77ed969e45e27a4a96b68efe406172b2f8037898/grib2io-2.7.0.tar.gz", hash = "sha256:eda64382d589c50e421f414534490ae46e3600d27c4ea78929248276b8bb47fc", size = 1210542, upload-time = "2025-12-09T16:39:39.056Z" }
 
 [[package]]
 name = "grpcio"
@@ -1476,7 +1476,7 @@ requires-dist = [
     { name = "dagster", specifier = "~=1.12" },
     { name = "dagster-docker", specifier = "~=0.28" },
     { name = "dagster-postgres", specifier = "~=0.28" },
-    { name = "grib2io", specifier = "==2.6.0" },
+    { name = "grib2io", specifier = "==2.7.0" },
     { name = "psycopg", extras = ["binary"], specifier = "~=3.2" },
 ]
 
