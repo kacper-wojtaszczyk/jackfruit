@@ -15,8 +15,7 @@ from typing import Any
 
 import dagster as dg
 
-from pipeline_python.grib2io_patch import get_constituent_name  # noqa: F401  # Patch + helper
-import grib2io
+from pipeline_python.grib2 import grib2io, get_shortname
 
 from pipeline_python.defs.partitions import daily_partitions
 from pipeline_python.defs.resources import DockerIngestionClient, ObjectStorageResource, PostgresCatalogResource
@@ -127,7 +126,7 @@ def _extract_message_metadata(msg: Any, context: dg.AssetExecutionContext) -> di
         return None
 
     # Get variable name from constituent code
-    var_name = get_constituent_name(constituent_code)
+    var_name = get_shortname(constituent_code)
 
     # Use validDate (refDate + leadTime) for the actual forecast timestamp
     try:

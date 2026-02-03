@@ -60,6 +60,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_HOST: ${POSTGRES_HOST}
       POSTGRES_PORT: ${POSTGRES_PORT}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_HOST: ${CLICKHOUSE_HOST}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./pipeline-python:/app
@@ -75,17 +79,31 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
       - ./pipeline-python/migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       jackfruit:
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.1
+    ports:
+      - "8123:8123"
+      - "9097:9000"
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    networks:
+      - jackfruit
 
 networks:
     jackfruit:
 volumes:
   minio_data:
   postgres_data:
+  clickhouse_data:

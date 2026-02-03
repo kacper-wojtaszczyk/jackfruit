@@ -10,55 +10,15 @@ This patch adds support for PDT 4.40 by:
 2. Updating field indices for standard fields (shifted by +1 due to inserted field)
 3. Registering ProductDefinitionTemplate40 in grib2io's template registry
 
-Usage:
-    import pipeline_python.grib2io_patch  # noqa: F401  # Apply patch
-    import grib2io
-
-    # Now grib2io can read CAMS GRIB files with PDT 4.40
-
 Reference:
     https://www.nco.ncep.noaa.gov/pmb/docs/grib2/grib2_doc/grib2_temp4-40.shtml
 """
 
 from dataclasses import dataclass, field
 
-import grib2io.templates as templates
-
-
-# GRIB2 Table 4.230 - Atmospheric Chemical Constituent Type
-# Reference: https://www.nco.ncep.noaa.gov/pmb/docs/grib2/grib2_doc/grib2_table4-230.shtml
-# Note: ECMWF/CAMS uses local codes (40xxx) that differ from WMO standard codes (62xxx)
-CONSTITUENT_TYPE_NAMES: dict[int, str] = {
-    # WMO standard codes
-    0: "ozone",
-    1: "water_vapour",
-    2: "methane",
-    3: "carbon_dioxide",
-    4: "carbon_monoxide",
-    5: "nitrogen_dioxide",
-    6: "nitrous_oxide",
-    7: "formaldehyde",
-    8: "sulphur_dioxide",
-    9: "ammonia",
-    10: "ammonium",
-    11: "nitrogen_monoxide",
-    62099: "pm1p0",   # PM1.0 (WMO)
-    62100: "pm2p5",   # PM2.5 (WMO)
-    62101: "pm10",    # PM10 (WMO)
-    # ECMWF/CAMS local codes
-    40008: "pm10",    # PM10 (ECMWF local)
-    40009: "pm2p5",   # PM2.5 (ECMWF local)
-}
-
-
-def get_constituent_name(code: int) -> str:
-    """
-    Get short variable name for atmospheric chemical constituent type.
-
-    Returns a lowercase, underscore-separated name suitable for file paths.
-    Falls back to 'constituent_{code}' for unknown codes.
-    """
-    return CONSTITUENT_TYPE_NAMES.get(code, f"constituent_{code}")
+# Import grib2io first to ensure full initialization before accessing submodules
+import grib2io  # noqa: F401
+from grib2io import templates
 
 
 class AtmosphericChemicalConstituentType:
