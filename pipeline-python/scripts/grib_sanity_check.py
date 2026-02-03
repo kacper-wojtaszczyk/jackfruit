@@ -28,9 +28,7 @@ import tempfile
 from pathlib import Path
 
 # Apply PDT 4.40 patch and import shared mappings
-from pipeline_python.grib2io_patch import get_constituent_name
-
-import grib2io
+from pipeline_python.grib2 import grib2io, get_shortname
 
 
 def create_s3_client():
@@ -80,9 +78,9 @@ def get_display_name(code: int) -> str:
     """
     Get human-readable display name for constituent type.
 
-    Uses the short name from grib2io_patch but formats it nicely for display.
+    Uses the short name from grib2 module but formats it nicely for display.
     """
-    short_name = get_constituent_name(code)
+    short_name = get_shortname(code)
 
     # Map short names to display names
     display_names = {
