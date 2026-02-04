@@ -9,31 +9,26 @@ import uuid
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch, PropertyMock
 
-import dagster as dg
 import pytest
 
 from pipeline_python.defs.assets import (
-    CAMS_CONSTITUENT_CODES,
     _extract_message_metadata,
     _write_curated_grib,
 )
 from pipeline_python.defs.models import RawFileRecord, CuratedFileRecord
 
 
-# Global state for tracking mock calls
-_catalog_curated_inserts = []
-
-
-class MockObjectStorageResource(dg.ConfigurableResource):
+class MockObjectStorageResource:
     """
     Mock storage resource for testing.
-    
+
     Stores uploaded files in memory for verification.
     """
-    
-    uploaded_files: list = []
-    raw_file_path: str = ""
-    
+
+    def __init__(self):
+        self.uploaded_files = []
+        self.raw_file_path = ""
+
     def download_raw(self, key: str, local_path: Path) -> None:
         """Mock download - copy from test fixture if available."""
         if self.raw_file_path and Path(self.raw_file_path).exists():
@@ -42,7 +37,7 @@ class MockObjectStorageResource(dg.ConfigurableResource):
         else:
             # Create an empty file if no fixture provided
             local_path.touch()
-    
+
     def upload_curated(self, local_path: Path, key: str) -> None:
         """Mock upload - track uploaded files."""
         self.uploaded_files.append({
@@ -52,14 +47,16 @@ class MockObjectStorageResource(dg.ConfigurableResource):
         })
 
 
-class MockCatalogResource(dg.ConfigurableResource):
+class MockCatalogResource:
     """
     Mock catalog resource for testing.
 
-    Tracks insert calls for verification in tests.
+    Tracks insert calls using instance state instead of module globals.
     """
 
-    should_fail: bool = False
+    def __init__(self, should_fail: bool = False):
+        self.should_fail = should_fail
+        self.inserted_curated_files = []
 
     def insert_raw_file(self, raw_file: RawFileRecord) -> None:
         """Record the insert call."""
@@ -67,8 +64,8 @@ class MockCatalogResource(dg.ConfigurableResource):
             raise Exception("Mock catalog failure")
 
     def insert_curated_file(self, curated_file: CuratedFileRecord) -> None:
-        """Record the insert call."""
-        _catalog_curated_inserts.append(curated_file)
+        """Record the insert call in instance list."""
+        self.inserted_curated_files.append(curated_file)
         if self.should_fail:
             raise Exception("Mock catalog failure")
 
@@ -81,9 +78,7 @@ def mock_storage():
 
 @pytest.fixture
 def mock_catalog():
-    """Provide a mock catalog resource."""
-    global _catalog_curated_inserts
-    _catalog_curated_inserts = []
+    """Provide a mock catalog resource with clean state."""
     return MockCatalogResource()
 
 
@@ -139,7 +134,7 @@ class TestExtractMessageMetadata:
         assert result["hour"] == 6
 
     def test_skips_unknown_constituent_codes(self, mock_context):
-        """Should return None for constituent codes not in CAMS_CONSTITUENT_CODES."""
+        """Should return None for constituent codes not in configured codes."""
         mock_msg = Mock()
         mock_msg.atmosphericChemicalConstituentType.value = 99999  # Unknown
 
@@ -211,9 +206,6 @@ class TestWriteCuratedGrib:
 
     def test_inserts_catalog_record_when_provided(self, mock_storage, mock_catalog, mock_context):
         """Should insert a curated file record when catalog is provided."""
-        global _catalog_curated_inserts
-        _catalog_curated_inserts = []
-
         mock_msg = Mock()
         metadata = {
             "constituent_code": 40009,
@@ -242,9 +234,9 @@ class TestWriteCuratedGrib:
         expected_key = "pm2p5/cams/2025/01/15/12/data.grib2"
         assert result == expected_key
 
-        # Verify catalog insert was called
-        assert len(_catalog_curated_inserts) == 1
-        curated_record = _catalog_curated_inserts[0]
+        # Verify catalog insert was called using instance state
+        assert len(mock_catalog.inserted_curated_files) == 1
+        curated_record = mock_catalog.inserted_curated_files[0]
         assert curated_record.raw_file_id == raw_file_id
         assert curated_record.variable == "pm2p5"
         assert curated_record.source == "cams"
@@ -317,9 +309,6 @@ class TestWriteCuratedGrib:
 
     def test_continues_on_catalog_failure(self, mock_storage, mock_context):
         """Should return curated key even if catalog insert fails (non-fatal)."""
-        global _catalog_curated_inserts
-        _catalog_curated_inserts = []
-
         mock_msg = Mock()
         metadata = {
             "constituent_code": 40009,
@@ -358,16 +347,3 @@ class TestWriteCuratedGrib:
         # Verify warning was logged
         mock_context.log.warning.assert_called_once()
         assert "Failed to record curated file in catalog" in str(mock_context.log.warning.call_args)
-
-
-class TestCamsConstituentCodes:
-    """Tests for the CAMS_CONSTITUENT_CODES constant."""
-    
-    def test_contains_expected_codes(self):
-        """CAMS_CONSTITUENT_CODES should contain the ECMWF local codes."""
-        assert 40008 in CAMS_CONSTITUENT_CODES  # PM10
-        assert 40009 in CAMS_CONSTITUENT_CODES  # PM2.5
-    
-    def test_is_a_set(self):
-        """CAMS_CONSTITUENT_CODES should be a set for O(1) lookup."""
-        assert isinstance(CAMS_CONSTITUENT_CODES, set)

@@ -4,10 +4,7 @@ Tests for grib2.shortnames module.
 Pure Python tests — no grib2io dependency required.
 """
 
-from pipeline_python.grib2.shortnames import (
-    CONSTITUENT_TYPE_NAMES,
-    get_shortname,
-)
+from pipeline_python.grib2.shortnames import get_shortname
 
 
 class TestGetShortname:
@@ -41,33 +38,9 @@ class TestGetShortname:
         """Should handle code 0 (Ozone) correctly."""
         assert get_shortname(0) == "ozone"
 
-
-class TestConstituentTypeNames:
-    """Tests for CONSTITUENT_TYPE_NAMES dictionary."""
-
-    def test_is_dict(self):
-        """CONSTITUENT_TYPE_NAMES should be a dictionary."""
-        assert isinstance(CONSTITUENT_TYPE_NAMES, dict)
-
-    def test_contains_expected_entries(self):
-        """Should contain expected WMO and ECMWF entries."""
-        expected_entries = {
-            0: "ozone",
-            4: "carbon_monoxide",
-            5: "nitrogen_dioxide",
-            8: "sulphur_dioxide",
-            40008: "pm10",
-            40009: "pm2p5",
-            62100: "pm2p5",
-            62101: "pm10",
-        }
-
-        for code, name in expected_entries.items():
-            assert CONSTITUENT_TYPE_NAMES.get(code) == name
-
-    def test_no_duplicate_values_for_important_codes(self):
-        """PM codes should map to consistent names."""
-        # ECMWF PM10 and WMO PM10 should map to same name
-        assert CONSTITUENT_TYPE_NAMES[40008] == CONSTITUENT_TYPE_NAMES[62101]
-        # ECMWF PM2.5 and WMO PM2.5 should map to same name
-        assert CONSTITUENT_TYPE_NAMES[40009] == CONSTITUENT_TYPE_NAMES[62100]
+    def test_ecmwf_and_wmo_pm_codes_are_consistent(self):
+        """ECMWF and WMO PM codes should resolve to the same short names."""
+        # PM10: ECMWF 40008 and WMO 62101
+        assert get_shortname(40008) == get_shortname(62101) == "pm10"
+        # PM2.5: ECMWF 40009 and WMO 62100
+        assert get_shortname(40009) == get_shortname(62100) == "pm2p5"

@@ -17,7 +17,7 @@ as needed.
 # GRIB2 Table 4.230 - Atmospheric Chemical Constituent Type
 # Reference: https://www.nco.ncep.noaa.gov/pmb/docs/grib2/grib2_doc/grib2_table4-230.shtml
 # Note: ECMWF/CAMS uses local codes (40xxx) that differ from WMO standard codes (62xxx)
-CONSTITUENT_TYPE_NAMES: dict[int, str] = {
+_CONSTITUENT_TYPE_NAMES: dict[int, str] = {
     # WMO standard codes
     0: "ozone",
     1: "water_vapour",
@@ -59,4 +59,4 @@ def get_shortname(code: int) -> str:
         >>> get_shortname(99999)
         'constituent_99999'
     """
-    return CONSTITUENT_TYPE_NAMES.get(code, f"constituent_{code}")
+    return _CONSTITUENT_TYPE_NAMES.get(code, f"constituent_{code}")
