@@ -59,7 +59,7 @@ class MockCatalogResource:
         self.inserted_curated_files = []
 
     def insert_raw_file(self, raw_file: RawFileRecord) -> None:
-        """Record the insert call."""
+        """Raise if configured to fail; otherwise no-op."""
         if self.should_fail:
             raise Exception("Mock catalog failure")
 
