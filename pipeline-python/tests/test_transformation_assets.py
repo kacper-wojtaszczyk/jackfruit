@@ -65,9 +65,9 @@ class MockCatalogResource:
 
     def insert_curated_file(self, curated_file: CuratedFileRecord) -> None:
         """Record the insert call in instance list."""
-        self.inserted_curated_files.append(curated_file)
         if self.should_fail:
             raise Exception("Mock catalog failure")
+        self.inserted_curated_files.append(curated_file)
 
 
 @pytest.fixture
