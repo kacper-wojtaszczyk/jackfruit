@@ -89,7 +89,7 @@ def ingest_cams_data(
 # GRIB2 Table 4.230 constituent type codes we want to process
 # Note: ECMWF/CAMS uses local codes (40xxx) that differ from WMO standard codes (62xxx)
 # Reference: https://www.nco.ncep.noaa.gov/pmb/docs/grib2/grib2_doc/grib2_table4-230.shtml
-CAMS_CONSTITUENT_CODES = {
+_CAMS_CONSTITUENT_CODES = {
     40008,  # PM10 (ECMWF local) -> "pm10"
     40009,  # PM2.5 (ECMWF local) -> "pm2p5"
     # Add more as needed (check ECMWF local codes for CAMS data):
@@ -121,7 +121,7 @@ def _extract_message_metadata(msg: Any, context: dg.AssetExecutionContext) -> di
         )
         return None
 
-    if constituent_code not in CAMS_CONSTITUENT_CODES:
+    if constituent_code not in _CAMS_CONSTITUENT_CODES:
         context.log.debug(f"Skipping constituent code: {constituent_code}")
         return None
 
@@ -363,7 +363,7 @@ def transform_cams_data(
     if len(curated_keys) == 0 and num_messages > 0:
         context.log.warning(
             f"No curated files were written despite {num_messages} messages in the GRIB file. "
-            f"This may indicate that no messages matched the configured CAMS constituent codes: {CAMS_CONSTITUENT_CODES}"
+            f"This may indicate that no messages matched the configured CAMS constituent codes: {_CAMS_CONSTITUENT_CODES}"
         )
 
     return dg.MaterializeResult(

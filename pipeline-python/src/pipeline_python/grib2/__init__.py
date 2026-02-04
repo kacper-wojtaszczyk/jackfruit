@@ -23,18 +23,9 @@ import pipeline_python.grib2.pdt40  # noqa: F401
 import grib2io
 
 # Re-export shortname utilities
-from pipeline_python.grib2.shortnames import CONSTITUENT_TYPE_NAMES, get_shortname
-
-# Re-export patch internals for testing
-from pipeline_python.grib2.pdt40 import (
-    AtmosphericChemicalConstituentType,
-    ProductDefinitionTemplate40,
-)
+from pipeline_python.grib2.shortnames import get_shortname
 
 __all__ = [
     "grib2io",
     "get_shortname",
-    "CONSTITUENT_TYPE_NAMES",
-    "AtmosphericChemicalConstituentType",
-    "ProductDefinitionTemplate40",
 ]

@@ -5,7 +5,7 @@ Tests the PDT 4.40 patch for atmospheric chemical constituents.
 These tests require grib2io to be installed.
 """
 
-from pipeline_python.grib2 import (
+from pipeline_python.grib2.pdt40 import (
     AtmosphericChemicalConstituentType,
     ProductDefinitionTemplate40,
 )
