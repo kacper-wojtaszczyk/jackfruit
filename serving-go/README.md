@@ -140,6 +140,24 @@ GET /v1/environmental?lat={lat}&lon={lon}&time={timestamp}&vars={var1,var2}
 
 ## Technology
 
+### Grid Storage Abstraction
+
+The domain service depends on a `GridStore` interface, not ClickHouse directly:
+
+```go
+// internal/domain/store.go
+type GridStore interface {
+    GetValue(ctx context.Context, variable, source string, timestamp time.Time, lat, lon float32) (*GridValue, error)
+    Close() error
+}
+```
+
+This enables:
+- Unit testing with mock `GridStore` (no ClickHouse needed)
+- Future storage backend swaps without changing domain logic
+
+See [ADR 001](../docs/ADR/001-grid-data-storage.md) for the storage decision.
+
 ### Grid Data: ClickHouse
 
 **Library:** `github.com/ClickHouse/clickhouse-go/v2`

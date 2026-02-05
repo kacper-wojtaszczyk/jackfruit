@@ -30,6 +30,16 @@ Curated output: ClickHouse `grid_data` table
 - Batch inserts for efficiency
 </storage_rules>
 
+<grid_storage_abstraction>
+Grid storage is accessed via the `GridStore` Protocol (`src/pipeline_python/storage/protocol.py`):
+- `ClickHouseGridStore` — production implementation
+- `InMemoryGridStore` — for unit testing
+
+Transform code should depend on `GridStore`, not ClickHouse directly. This enables testing without external dependencies and future storage swaps.
+
+See [ADR 001](docs/ADR/001-grid-data-storage.md) for storage decision context.
+</grid_storage_abstraction>
+
 <metadata>
 Metadata stored in Dagster `MaterializeResult.metadata`:
 - run_id, raw_key, variables_processed, rows_inserted, processing_version

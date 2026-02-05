@@ -37,14 +37,24 @@ internal/
 │   ├── request.go            # Request parsing/validation
 │   └── response.go           # Response formatting
 ├── clickhouse/
-│   └── client.go             # ClickHouse queries for grid data
+│   └── client.go             # ClickHouse queries (implements GridStore)
 ├── catalog/
 │   └── repository.go         # Postgres queries for lineage
 ├── domain/
+│   ├── store.go              # GridStore interface
 │   └── environmental.go      # Business logic orchestration
 └── config/
     └── config.go             # Environment config (exists)
 ```
+
+### Grid Storage Abstraction
+
+Grid storage uses the `GridStore` interface (`internal/domain/store.go`):
+- Defined in domain package (consumer-side, idiomatic Go)
+- `internal/clickhouse/Client` implements `GridStore`
+- Mock implementations for unit testing
+
+Domain service depends on `GridStore`, not ClickHouse directly. See [ADR 001](../docs/ADR/001-grid-data-storage.md) for storage decision context.
 
 ### Request Flow (Planned)
 

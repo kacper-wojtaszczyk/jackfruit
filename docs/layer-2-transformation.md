@@ -139,6 +139,27 @@ Previous approach stored curated data as GRIB2 files in S3. Problems:
 
 ClickHouse solves all three: SQL queries, no CGO, no file management.
 
+See [ADR 001](ADR/001-grid-data-storage.md) for the full decision record.
+
+### Grid Storage Abstraction
+
+The transformation code depends on a `GridStore` Protocol, not ClickHouse directly:
+
+```python
+from pipeline_python.storage import GridStore
+from pipeline_python.storage.clickhouse import ClickHouseGridStore
+
+# Asset code uses the protocol
+store: GridStore = ClickHouseGridStore(client)
+store.insert_grids(grids)
+```
+
+This abstraction enables:
+- Unit testing with `InMemoryGridStore` (no ClickHouse needed)
+- Future storage backend swaps without changing pipeline logic
+
+See [Task 04](guides/tasks/04-transform-insert-clickhouse.md) for implementation details.
+
 ## Multi-Resolution Sources
 
 Different sources have different temporal resolutions. Each source has a defined granularity.

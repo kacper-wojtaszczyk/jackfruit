@@ -4,6 +4,14 @@ Dagster-based data pipeline for ingestion orchestration and transformation.
 
 **Output:** Grid data is written to ClickHouse (replacing previous GRIB2 file output to S3).
 
+## Grid Storage Abstraction
+
+Transformation code uses a `GridStore` Protocol (`src/pipeline_python/storage/protocol.py`):
+- `ClickHouseGridStore` — production implementation
+- `InMemoryGridStore` — for unit testing (no external dependencies)
+
+This abstraction enables testing without ClickHouse and future storage backend swaps. See [ADR 001](../docs/ADR/001-grid-data-storage.md) for the storage decision.
+
 ## Getting started
 
 ### Installing dependencies

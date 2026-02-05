@@ -96,6 +96,17 @@ LIMIT 1
 ```
 </clickhouse>
 
+<grid_storage_abstraction>
+Grid storage is accessed via `GridStore` interface (`internal/domain/store.go`):
+- Interface defined in domain package (consumer-side, idiomatic Go)
+- `internal/clickhouse/Client` implements `GridStore`
+- Mock implementations for unit testing
+
+Domain service depends on `GridStore`, not ClickHouse directly. This enables testing without external dependencies and future storage swaps.
+
+See [ADR 001](docs/ADR/001-grid-data-storage.md) for storage decision context.
+</grid_storage_abstraction>
+
 <database>
 **ClickHouse (grid data):**
 - Primary data source for environmental values
@@ -126,9 +137,11 @@ serving-go/
 ├── cmd/serving/main.go      # Entry point
 ├── internal/
 │   ├── api/                 # HTTP handlers, request/response
-│   ├── clickhouse/          # ClickHouse client for grid data
+│   ├── clickhouse/          # ClickHouse client (implements GridStore)
 │   ├── catalog/             # Postgres repository for lineage
-│   ├── domain/              # Business logic (environmental.go)
+│   ├── domain/
+│   │   ├── store.go         # GridStore interface
+│   │   └── environmental.go # Business logic
 │   └── config/              # Environment config
 ```
 </project_structure>

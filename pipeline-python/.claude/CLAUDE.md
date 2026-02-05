@@ -66,6 +66,14 @@ transform_cams_data (Python)
 - **ObjectStorageResource** — boto3-based S3/MinIO client. Methods: `download_raw()`, `upload_curated()`, `key_exists()`. grib2io requires local files, so raw data is downloaded to temp files.
 - **PostgresCatalogResource** — psycopg3 client with context manager for connection reuse. `insert_raw_file()` uses `ON CONFLICT DO NOTHING`, `insert_curated_file()` uses `ON CONFLICT DO UPDATE`.
 
+### Grid Storage Abstraction
+
+Grid storage uses the `GridStore` Protocol (`src/pipeline_python/storage/protocol.py`):
+- `ClickHouseGridStore` — production implementation
+- `InMemoryGridStore` — for unit testing (no external dependencies)
+
+Transform code depends on the protocol, not ClickHouse directly. See [ADR 001](../docs/ADR/001-grid-data-storage.md) for storage decision context.
+
 ### GRIB2 PDT 4.40 Patch
 
 CAMS air quality data uses PDT 4.40 (Atmospheric Chemical Constituents) which grib2io 2.6.0 doesn't support natively. The patch in `grib2/pdt40.py`:

@@ -62,7 +62,7 @@ docker-compose up -d
 | L2: Transformation | Python + Dagster | 🔄 Migrating to ClickHouse |
 | L3: Serving | Go | ⏳ Planned |
 
-See `docs/` for details.
+See `docs/` for details. Key decisions are documented in `docs/ADR/`.
 
 ## Project Structure
 

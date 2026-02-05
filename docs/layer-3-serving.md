@@ -44,6 +44,29 @@ Expose query interfaces for client projects. Abstracts storage backend from cons
 
 The API contract stays the same regardless of storage backend.
 
+### Grid Storage Abstraction
+
+The domain service depends on a `GridStore` interface, not ClickHouse directly:
+
+```go
+// internal/domain/store.go
+type GridStore interface {
+    GetValue(ctx context.Context, variable, source string, timestamp time.Time, lat, lon float32) (*GridValue, error)
+    Close() error
+}
+
+// Service uses the interface
+type Service struct {
+    store GridStore  // Could be ClickHouse, in-memory, etc.
+}
+```
+
+This abstraction enables:
+- Unit testing with mock `GridStore` (no ClickHouse needed)
+- Future storage backend swaps without changing domain logic
+
+See [ADR 001](ADR/001-grid-data-storage.md) for the storage decision record and [Task 07](guides/tasks/07-clickhouse-go-client.md) for implementation.
+
 ### ClickHouse Query Pattern
 
 **Point query (exact grid match):**
