@@ -4,12 +4,12 @@ Pluggable backend services. Local dev uses Docker containers; production uses ma
 
 ## Components
 
-| Component | Local (Dev) | Production | Purpose |
-|-----------|-------------|------------|---------|
-| Object Storage | MinIO | S3 | Raw data files (immutable) |
-| Metadata DB | Postgres | RDS Postgres | Dataset catalog, lineage, run history |
-| Grid Data Store | ClickHouse | ClickHouse Cloud | Curated grid data (query-optimized) |
-| Orchestration | Dagster (local) | Dagster Cloud / ECS | Pipeline scheduling and monitoring |
+| Component       | Local (Dev)     | Production          | Purpose                               |
+|-----------------|-----------------|---------------------|---------------------------------------|
+| Object Storage  | MinIO           | S3                  | Raw data files (immutable)            |
+| Metadata DB     | Postgres        | RDS Postgres        | Dataset catalog, lineage, run history |
+| Grid Data Store | ClickHouse      | ClickHouse Cloud    | Curated grid data (query-optimized)   |
+| Orchestration   | Dagster (local) | Dagster Cloud / ECS | Pipeline scheduling and monitoring    |
 
 All components expose standard APIs — application code doesn't change between environments.
 
@@ -21,8 +21,8 @@ All components expose standard APIs — application code doesn't change between 
 
 **Bucket:**
 
-| Bucket | Purpose |
-|--------|---------|
+| Bucket          | Purpose                                 |
+|-----------------|-----------------------------------------|
 | `jackfruit-raw` | Immutable, append-only, source-faithful |
 
 Raw data is stored in object storage. Curated (processed) data is stored in ClickHouse for query efficiency.
@@ -65,54 +65,35 @@ Think of raw as **evidence**, not data.
 
 **Schema:** `catalog`
 
-The metadata database tracks all raw files ingested and their transformation lineage. Schema is initialized via `migrations/init.sql` mounted into the Postgres container.
+The metadata database tracks all raw files ingested and their transformation lineage. Schema is initialized via `migrations/postgres/init.sql` mounted into the Postgres container.
 
 ### Tables
 
 **`catalog.raw_files`** — Raw files ingested from external sources
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | UUID (PK) | Run ID from ingestion (UUIDv7) |
-| `source` | TEXT | Data source (e.g., 'ads') |
-| `dataset` | TEXT | Dataset identifier (e.g., 'cams-europe-air-quality-forecasts-forecast') |
-| `date` | DATE | Partition date |
-| `s3_key` | TEXT (UNIQUE) | Full S3 key in `jackfruit-raw` bucket |
-| `created_at` | TIMESTAMPTZ | Record creation timestamp |
-
-**`catalog.curated_data`** — Tracks transformation lineage to ClickHouse data
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | UUID (PK) | Generated UUIDv7 |
-| `raw_file_id` | UUID (FK) | References `catalog.raw_files(id)` for lineage |
-| `variable` | TEXT | Variable name (e.g., 'pm2p5', 'pm10') |
-| `source` | TEXT | Data source (e.g., 'cams') |
-| `timestamp` | TIMESTAMPTZ | Valid time of data |
-| `created_at` | TIMESTAMPTZ | Record creation timestamp |
-
-> **Note:** The exact relationship between `catalog.curated_data` and ClickHouse rows is TBD. See task 06 (curated lineage design) for details.
-
-**Indexes:**
-- `idx_curated_data_lookup` on `(variable, timestamp)` — serving layer queries
-- `idx_curated_data_raw` on `(raw_file_id)` — lineage queries
+| Column       | Type          | Description                                                             |
+|--------------|---------------|-------------------------------------------------------------------------|
+| `id`         | UUID (PK)     | Run ID from ingestion (UUIDv7)                                          |
+| `source`     | TEXT          | Data source (e.g., 'ads')                                               |
+| `dataset`    | TEXT          | Dataset identifier (e.g., 'cams-europe-air-quality-forecasts-forecast') |
+| `date`       | DATE          | Partition date                                                          |
+| `s3_key`     | TEXT (UNIQUE) | Full S3 key in `jackfruit-raw` bucket                                   |
+| `created_at` | TIMESTAMPTZ   | Record creation timestamp                                               |
 
 ### Access Patterns
 
-| Operation | Query Pattern |
-|-----------|---------------|
-| Ingestion writes | Insert into `raw_files` after S3 upload |
-| Transformation writes | Insert into `curated_data` after ClickHouse insert, linked via `raw_file_id` |
-| Serving reads | Query ClickHouse directly for grid values; Postgres for lineage if needed |
-| Lineage queries | Join `curated_data` → `raw_files` to trace provenance |
+| Operation        | Query Pattern                                                             |
+|------------------|---------------------------------------------------------------------------|
+| Ingestion writes | Insert into `raw_files` after S3 upload                                   |
+| Serving reads    | Query ClickHouse directly for grid values; Postgres for lineage if needed |
+| Lineage queries  | Join CH grid data → `raw_files` over `raw_file_id` to trace provenance    |
 
 **What it stores:**
 
-| Table | Purpose |
-|--------------------|---------|
-| `catalog.raw_files` | Raw file metadata, S3 keys, ingestion history |
-| `catalog.curated_data` | Lineage: which raw files → which ClickHouse data |
-| `datasets` | Source definitions, schemas, refresh schedules (TBD) |
+| Table                  | Purpose                                              |
+|------------------------|------------------------------------------------------|
+| `catalog.raw_files`    | Raw file metadata, S3 keys, ingestion history        |
+| `datasets`             | Source definitions, schemas, refresh schedules (TBD) |
 
 ## Grid Data Store (ClickHouse)
 
@@ -130,6 +111,7 @@ The metadata database tracks all raw files ingested and their transformation lin
 **What it stores:**
 - Grid data: variable, source, timestamp, lat, lon, value
 - One row per grid point per timestamp per variable
+- `raw_file_id` reference to postgres `catalog.raw_files` for lineage tracking
 
 **Schema:** TBD — see task 01 (ClickHouse setup) for design guidelines. You design the actual schema.
 
@@ -158,10 +140,10 @@ LIMIT 1
 
 **Job execution model:**
 
-| Layer | Execution | Rationale |
-|-------|-----------|-----------|
-| Ingestion (Go) | Sibling container via `docker compose run` | Isolated binary, different language |
-| Transformation (Python) | In Dagster container | Same runtime, simpler, faster iteration |
+| Layer                   | Execution                                  | Rationale                               |
+|-------------------------|--------------------------------------------|-----------------------------------------|
+| Ingestion (Go)          | Sibling container via `docker compose run` | Isolated binary, different language     |
+| Transformation (Python) | In Dagster container                       | Same runtime, simpler, faster iteration |
 
 Dagster container mounts host Docker socket to spawn ingestion containers as siblings (not nested).
 
@@ -231,11 +213,9 @@ CLICKHOUSE_DATABASE=jackfruit
 
 ## Open Questions
 
-- [x] Postgres schema design — ✅ Done (`catalog.raw_files`, `catalog.curated_data`)
+- [x] Postgres schema design — ✅ Done (`catalog.raw_files`)
 - [x] Lineage tracking — ✅ Done (via `raw_file_id` FK)
 - [x] Curated data storage — ✅ Decided: ClickHouse (not S3 + GRIB2)
 - [ ] ClickHouse schema design — see task 01
-- [ ] Curated lineage relationship — how `catalog.curated_data` relates to ClickHouse rows (see task 06)
 - [ ] Production deployment approach
 - [ ] Backup/restore strategy
-

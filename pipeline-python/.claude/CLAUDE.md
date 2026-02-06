@@ -97,7 +97,7 @@ Constituent codes used: 40008 (PM10), 40009 (PM2.5) — these are ECMWF/CAMS loc
 
 ### Database Schema
 
-Postgres schema initialized via `migrations/init.sql` (mounted into container at startup):
+Postgres schema initialized via `migrations/postgres/init.sql` (mounted into container at startup):
 - `catalog.raw_files` — tracks ingested files (id=UUIDv7 run_id, s3_key is UNIQUE)
 - `catalog.curated_files` — transformation lineage (raw_file_id FK, variable+timestamp indexed for serving)
 
