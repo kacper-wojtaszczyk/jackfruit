@@ -35,7 +35,7 @@ Design a custom binary format optimized for point queries with JSON sidecar for 
 
 **Option C: ClickHouse**
 
-Store grid data as rows in ClickHouse: `(variable, source, timestamp, lat, lon, value)`.
+Store grid data as rows in ClickHouse: `(variable, timestamp, lat, lon, value, unit, catalog_id, inserted_at)`.
 
 - ✅ SQL queries replace complex file parsing
 - ✅ Built-in nearest-neighbor via `ORDER BY greatCircleDistance(...) LIMIT 1`
