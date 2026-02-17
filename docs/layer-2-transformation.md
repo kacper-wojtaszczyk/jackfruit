@@ -66,7 +66,7 @@ The Go ingestion layer is containerized and invoked by Dagster using `PipesDocke
 ## Storage
 
 **Input:** `jackfruit-raw` bucket (for API-sourced data)  
-**Output:** ClickHouse `grid_data` table (schema TBD)
+**Output:** ClickHouse `jackfruit.grid_data` table — columns: `(variable, timestamp, lat, lon, value, unit, catalog_id, inserted_at)`
 
 ETL reads raw (or public S3 directly for large datasets), writes to ClickHouse. Never mutates raw.
 
@@ -114,15 +114,17 @@ All transformations are recorded in the Postgres metadata catalog (`catalog` sch
 - One row per grid point per timestamp per variable
 - Batch inserts for efficiency (~120K points per grid)
 
-**Example insert (conceptual):**
+**Example insert (columnar format):**
 ```python
+# GridData.to_columnar() returns dict of numpy arrays — no Python loops
+columnar = grid.to_columnar()
 client.insert('grid_data',
-    data=[(var, source, ts, lat, lon, val) for ...],
-    column_names=['variable', 'source', 'timestamp', 'lat', 'lon', 'value']
+    data=list(columnar.values()),
+    column_names=['variable', 'timestamp', 'lat', 'lon', 'value', 'unit', 'catalog_id']
 )
 ```
 
-**Schema:** TBD — you design it. See task 01 for guidelines on ClickHouse schema design for grid data.
+**Schema:** See task 01 for ClickHouse schema design. `inserted_at` is auto-filled by `DEFAULT now64(3)`.
 
 ### Design Principles
 
@@ -143,22 +145,27 @@ See [ADR 001](ADR/001-grid-data-storage.md) for the full decision record.
 
 ### Grid Storage Abstraction
 
-The transformation code depends on a `GridStore` Protocol, not ClickHouse directly:
+The transformation code depends on a `GridStoreResource` abstract base class, not ClickHouse directly. The resource is injected by Dagster:
 
 ```python
-from pipeline_python.storage import GridStore
-from pipeline_python.storage.clickhouse import ClickHouseGridStore
+from pipeline_python.storage.grid_store import GridStoreResource
 
-# Asset code uses the protocol
-store: GridStore = ClickHouseGridStore(client)
-store.insert_grids(grids)
+# Asset receives GridStoreResource — doesn't know it's ClickHouse
+@dg.asset(...)
+def transform_cams_data(
+    context, storage, catalog,
+    grid_store: GridStoreResource,  # Abstract type
+):
+    grids = _extract_grids_from_grib(raw_path)
+    grid_store.insert_grids(grids)
 ```
 
 This abstraction enables:
 - Unit testing with `InMemoryGridStore` (no ClickHouse needed)
 - Future storage backend swaps without changing pipeline logic
+- Dagster resource lifecycle management (connection pooling, teardown)
 
-See [Task 04](guides/tasks/04-transform-insert-clickhouse.md) for implementation details.
+See [Task 02](guides/tasks/02-clickhouse-python-client.md) for resource design and [Task 04](guides/tasks/04-transform-insert-clickhouse.md) for insertion details.
 
 ## Multi-Resolution Sources
 

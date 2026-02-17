@@ -10,11 +10,11 @@ CREATE TABLE catalog.raw_files (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Metadata and lineage for curated grid data stored in ClickHouse.
+-- Metadata and lineage for curated data stored in ClickHouse.
 -- Each row represents one (variable, timestamp) grid written to ClickHouse.
--- ClickHouse grid_data rows reference this table via catalog_id = grid_data.id.
+-- ClickHouse grid_data rows reference this table via catalog_id = curated_data.id.
 -- The serving layer uses catalog_id from CH to look up lineage here.
-CREATE TABLE catalog.grid_data (
+CREATE TABLE catalog.curated_data (
     id              UUID PRIMARY KEY,           -- app-generated UUIDv7, referenced by CH grid_data.catalog_id
     raw_file_id     UUID NOT NULL REFERENCES catalog.raw_files(id),
     variable        TEXT NOT NULL,              -- e.g., 'pm2p5', 'pm10'
@@ -23,5 +23,5 @@ CREATE TABLE catalog.grid_data (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Index for lineage queries (find all grid data derived from a raw file)
-CREATE INDEX idx_grid_data_raw ON catalog.grid_data (raw_file_id);
+-- Index for lineage queries (find all curated data derived from a raw file)
+CREATE INDEX idx_curated_data_raw ON catalog.curated_data (raw_file_id);
