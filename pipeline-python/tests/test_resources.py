@@ -14,7 +14,7 @@ import pytest
 from botocore.exceptions import ClientError
 
 from pipeline_python.defs.resources import ObjectStorageResource, PostgresCatalogResource
-from pipeline_python.defs.models import CuratedFileRecord, RawFileRecord
+from pipeline_python.defs.models import CuratedDataRecord, RawFileRecord
 
 
 @pytest.fixture
@@ -244,7 +244,7 @@ class TestPostgresCatalogResource:
     def test_insert_curated_file_uses_dataclass(self, psycopg_mocks):
         """Should insert curated file using typed dataclass fields."""
         resource = PostgresCatalogResource(dsn="postgresql://localhost:5432/db")
-        curated = CuratedFileRecord(
+        curated = CuratedDataRecord(
             id=uuid.uuid4(),
             raw_file_id=uuid.uuid4(),
             variable="pm2p5",
@@ -254,7 +254,7 @@ class TestPostgresCatalogResource:
         )
 
         with patch("pipeline_python.defs.resources.psycopg.connect", psycopg_mocks["connect"]):
-            resource.insert_curated_file(curated)
+            resource.insert_curated_data(curated)
 
         psycopg_mocks["connect"].assert_called_once_with("postgresql://localhost:5432/db")
         psycopg_mocks["cursor"].execute.assert_called_once()

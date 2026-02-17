@@ -1,6 +1,6 @@
-from .models import CuratedFileRecord, RawFileRecord
+from .models import CuratedDataRecord, RawFileRecord
 
 __all__ = [
-    "CuratedFileRecord",
+    "CuratedDataRecord",
     "RawFileRecord",
 ]

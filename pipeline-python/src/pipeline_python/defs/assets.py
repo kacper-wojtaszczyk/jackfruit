@@ -19,7 +19,7 @@ from pipeline_python.grib2 import grib2io, get_shortname
 
 from pipeline_python.defs.partitions import daily_partitions
 from pipeline_python.defs.resources import DockerIngestionClient, ObjectStorageResource, PostgresCatalogResource
-from pipeline_python.defs.models import RawFileRecord, CuratedFileRecord
+from pipeline_python.defs.models import RawFileRecord, CuratedDataRecord
 
 
 class IngestionConfig(dg.Config):
@@ -212,7 +212,7 @@ def _write_curated_grib(
         return None
 
     # Record curated file in catalog
-    curated_record = CuratedFileRecord(
+    curated_record = CuratedDataRecord(
         id=uuid.uuid7(),
         raw_file_id=raw_file_id,
         variable=var_name,
@@ -221,7 +221,7 @@ def _write_curated_grib(
         s3_key=curated_key,
     )
     try:
-        catalog.insert_curated_file(curated_record)
+        catalog.insert_curated_data(curated_record)
         context.log.debug(f"Recorded curated file in catalog: {curated_key}")
     except Exception as e:
         context.log.warning(f"Failed to record curated file in catalog: {e}")

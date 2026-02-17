@@ -17,12 +17,11 @@ class RawFileRecord:
 
 
 @dataclass(frozen=True)
-class CuratedFileRecord:
+class CuratedDataRecord:
     """Row model for catalog.curated_files."""
 
     id: UUID
     raw_file_id: UUID
     variable: str
-    source: str
+    unit: str
     timestamp: datetime
-    s3_key: str

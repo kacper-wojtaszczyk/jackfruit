@@ -13,7 +13,7 @@ import pytest
 
 from pipeline_python.defs.assets import IngestionConfig, ingest_cams_data
 from pipeline_python.defs.resources import DockerIngestionClient
-from pipeline_python.defs.models import RawFileRecord, CuratedFileRecord
+from pipeline_python.defs.models import RawFileRecord, CuratedDataRecord
 
 
 
@@ -38,7 +38,7 @@ class MockCatalogResource(dg.ConfigurableResource):
         if self.should_fail:
             raise Exception("Mock catalog failure")
 
-    def insert_curated_file(self, curated_file: CuratedFileRecord) -> None:
+    def insert_curated_file(self, curated_file: CuratedDataRecord) -> None:
         """Record the insert call."""
         _catalog_curated_inserts.append(curated_file)
         if self.should_fail:

@@ -68,11 +68,11 @@ transform_cams_data (Python)
 
 ### Grid Storage Abstraction
 
-Grid storage uses the `GridStore` Protocol (`src/pipeline_python/storage/protocol.py`):
-- `ClickHouseGridStore` — production implementation
-- `InMemoryGridStore` — for unit testing (no external dependencies)
+Grid storage uses the `GridStoreResource` abstract base class (`src/pipeline_python/storage/grid_store.py`):
+- `ClickHouseGridStore` (`storage/clickhouse.py`) — production Dagster resource, registered as `"grid_store"`
+- `InMemoryGridStore` (`storage/memory.py`) — for unit testing (no external dependencies)
 
-Transform code depends on the protocol, not ClickHouse directly. See [ADR 001](../docs/ADR/001-grid-data-storage.md) for storage decision context.
+The `GridStoreResource` extends `dg.ConfigurableResource` (not a Protocol — Protocols can't carry Dagster config). Transform code depends on the abstract base class, not ClickHouse directly. See [ADR 001](../docs/ADR/001-grid-data-storage.md) for storage decision context.
 
 ### GRIB2 PDT 4.40 Patch
 
@@ -99,7 +99,7 @@ Constituent codes used: 40008 (PM10), 40009 (PM2.5) — these are ECMWF/CAMS loc
 
 Postgres schema initialized via `migrations/postgres/init.sql` (mounted into container at startup):
 - `catalog.raw_files` — tracks ingested files (id=UUIDv7 run_id, s3_key is UNIQUE)
-- `catalog.curated_files` — transformation lineage (raw_file_id FK, variable+timestamp indexed for serving)
+- `catalog.curated_data` — transformation lineage (id=UUIDv7 catalog_id referenced by CH, raw_file_id FK, variable+timestamp for serving)
 
 ## Testing Patterns
 

@@ -15,7 +15,7 @@ from pipeline_python.defs.assets import (
     _extract_message_metadata,
     _write_curated_grib,
 )
-from pipeline_python.defs.models import RawFileRecord, CuratedFileRecord
+from pipeline_python.defs.models import RawFileRecord, CuratedDataRecord
 
 
 class MockObjectStorageResource:
@@ -63,7 +63,7 @@ class MockCatalogResource:
         if self.should_fail:
             raise Exception("Mock catalog failure")
 
-    def insert_curated_file(self, curated_file: CuratedFileRecord) -> None:
+    def insert_curated_file(self, curated_file: CuratedDataRecord) -> None:
         """Record the insert call in instance list."""
         if self.should_fail:
             raise Exception("Mock catalog failure")

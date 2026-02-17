@@ -51,7 +51,7 @@ The domain service depends on a `GridStore` interface, not ClickHouse directly:
 ```go
 // internal/domain/store.go
 type GridStore interface {
-    GetValue(ctx context.Context, variable, source string, timestamp time.Time, lat, lon float32) (*GridValue, error)
+    GetValue(ctx context.Context, variable string, timestamp time.Time, lat, lon float64) (*GridValue, error)
     Close() error
 }
 
@@ -71,10 +71,9 @@ See [ADR 001](ADR/001-grid-data-storage.md) for the storage decision record and 
 
 **Point query (exact grid match):**
 ```sql
-SELECT value
+SELECT value, unit, catalog_id
 FROM grid_data
 WHERE variable = 'pm2p5'
-  AND source = 'cams'
   AND timestamp = '2025-03-11 14:00:00'
   AND lat = 52.25
   AND lon = 13.50
@@ -82,14 +81,15 @@ WHERE variable = 'pm2p5'
 
 **Nearest-neighbor query (recommended):**
 ```sql
-SELECT value, lat, lon
-FROM grid_data
+SELECT value, unit, lat, lon, catalog_id
+FROM grid_data FINAL
 WHERE variable = 'pm2p5'
-  AND source = 'cams'
   AND timestamp = '2025-03-11 14:00:00'
 ORDER BY greatCircleDistance(lat, lon, 52.52, 13.40)
 LIMIT 1
 ```
+
+Note: `source` is not in the CH `grid_data` table — it lives in Postgres `catalog.raw_files`. The serving layer uses `catalog_id` from the CH result to look up source/dataset lineage in Postgres.
 
 ### Query Flow
 

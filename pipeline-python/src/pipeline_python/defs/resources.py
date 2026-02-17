@@ -34,7 +34,7 @@ import psycopg
 from pydantic import PrivateAttr
 
 import dagster as dg
-from .models import CuratedFileRecord, RawFileRecord
+from .models import CuratedDataRecord, RawFileRecord
 
 
 # Environment variables to forward to the ingestion container
@@ -406,11 +406,11 @@ class PostgresCatalogResource(dg.ConfigurableResource):
             ))
         conn.commit()
 
-    def insert_curated_file(self, curated_file: CuratedFileRecord) -> None:
+    def insert_curated_data(self, curated_file: CuratedDataRecord) -> None:
         """
         Insert a curated file record into the database.
 
-        Uses ON CONFLICT DO UPDATE - if a file with the same S3 key already exists,
+        Uses ON CONFLICT DO UPDATE - if a file with the same id already exists,
         its metadata is updated with the new values. This allows reprocessing without
         manual cleanup.
 
@@ -418,12 +418,12 @@ class PostgresCatalogResource(dg.ConfigurableResource):
             curated_file: Curated file record to insert or update
         """
         query = """
-        INSERT INTO catalog.curated_files (id, raw_file_id, variable, source, timestamp, s3_key, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        ON CONFLICT (s3_key) DO UPDATE SET
+        INSERT INTO catalog.curated_data (id, raw_file_id, variable, unit, timestamp)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (id) DO UPDATE SET
             raw_file_id = EXCLUDED.raw_file_id,
             variable = EXCLUDED.variable,
-            source = EXCLUDED.source,
+            unit = EXCLUDED.unit,
             timestamp = EXCLUDED.timestamp;
         """
         conn = self.get_connection()
@@ -432,9 +432,8 @@ class PostgresCatalogResource(dg.ConfigurableResource):
                 str(curated_file.id),
                 str(curated_file.raw_file_id),
                 curated_file.variable,
-                curated_file.source,
+                curated_file.unit,
                 curated_file.timestamp,
-                curated_file.s3_key,
             ))
         conn.commit()
 
@@ -448,3 +447,4 @@ def catalog_resources():
             )
         }
     )
+

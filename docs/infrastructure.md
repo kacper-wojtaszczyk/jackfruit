@@ -109,9 +109,9 @@ The metadata database tracks all raw files ingested and their transformation lin
 **Role:** Stores curated grid data (environmental values at lat/lon/time). Serves point queries from the API.
 
 **What it stores:**
-- Grid data: variable, source, timestamp, lat, lon, value
+- Grid data: variable, timestamp, lat, lon, value, unit, catalog_id
 - One row per grid point per timestamp per variable
-- `raw_file_id` reference to postgres `catalog.raw_files` for lineage tracking
+- `catalog_id` references Postgres `catalog.curated_data` for lineage tracking (not `raw_file_id` directly — join through `curated_data`)
 
 **Schema:** TBD — see task 01 (ClickHouse setup) for design guidelines. You design the actual schema.
 
