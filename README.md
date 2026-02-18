@@ -13,7 +13,7 @@ Environmental data platform. Ingests, transforms, and serves weather, air qualit
 - [x] Ingestion asset (runs Go CLI via docker compose)
 - [x] CAMS transformation asset — needs migration to ClickHouse
 - [x] Metadata DB (Postgres)
-- [ ] ClickHouse setup — in progress
+- [x] ClickHouse setup
 - [ ] Transform to ClickHouse — in progress
 - [ ] Serving API — planned
 
