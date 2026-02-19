@@ -51,7 +51,7 @@ The domain service depends on a `GridStore` interface, not ClickHouse directly:
 ```go
 // internal/domain/store.go
 type GridStore interface {
-    GetValue(ctx context.Context, variable string, timestamp time.Time, lat, lon float64) (*GridValue, error)
+    GetValue(ctx context.Context, variable string, timestamp time.Time, lat, lon float32) (*GridValue, error)
     Close() error
 }
 

@@ -1,6 +1,7 @@
 import clickhouse_connect
 import numpy as np
 from clickhouse_connect.driver import Client
+from dagster import InitResourceContext
 from pydantic import PrivateAttr
 
 from pipeline_python.storage.grid_store import GridStore, GridData
@@ -31,8 +32,8 @@ class ClickHouseGridStore(GridStore):
         lon_flat = lon_grid.ravel()
         val_flat = grid.values.ravel()
 
-        lat_filtered = lat_flat.astype(np.float64)
-        lon_filtered = lon_flat.astype(np.float64)
+        lat_filtered = lat_flat.astype(np.float32)
+        lon_filtered = lon_flat.astype(np.float32)
         val_filtered = val_flat.astype(np.float32)
         n = grid.row_count
 
@@ -47,8 +48,8 @@ class ClickHouseGridStore(GridStore):
         }
 
 
-    def insert_grid(self, grid_data: GridData) -> int:
-        data = self._to_columnar(grid_data)
+    def insert_grid(self, grid: GridData) -> int:
+        data = self._to_columnar(grid)
         return self._get_client().insert(
             table="grid_data",
             column_names=["variable", "timestamp", "lat", "lon", "value", "unit", "catalog_id"],
@@ -63,3 +64,8 @@ class ClickHouseGridStore(GridStore):
                 data["catalog_id"].tolist(),
             ],
         ).written_rows
+
+    def teardown_after_execution(self, context: InitResourceContext) -> None:
+        if self._client is not None:
+            self._client.close()
+            self._client = None

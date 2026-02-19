@@ -72,6 +72,47 @@ The script includes a monkey-patch for PDT 4.40 (Atmospheric Chemical Constituen
 
 > **Note:** GRIB files are read for transformation, but output goes to ClickHouse (not GRIB2 files).
 
+## Testing
+
+### Structure
+
+```
+tests/
+  unit/          # no external deps, runs by default
+  integration/   # requires Docker infra, opt-in
+  fixtures/      # real GRIB file for integration tests
+  .env.test      # test-specific env vars (localhost endpoints, isolated namespaces)
+```
+
+### Running
+
+```bash
+uv run pytest                  # unit only (default via addopts)
+uv run pytest -m integration   # integration only
+uv run pytest -m ""            # everything
+uv run pytest -m integration -s  # integration with stdout (good for debugger)
+```
+
+### Integration test infra
+
+Needs the docker-compose stack running (`docker-compose up -d`). Tests use isolated namespaces so they don't touch production data:
+- MinIO bucket: `jackfruit-raw-test`
+- Postgres schema: `test_catalog`
+- ClickHouse DB: `jackfruit_test`
+
+Session-scoped fixtures in `tests/integration/conftest.py` create these on first run. Per-test autouse fixtures truncate them before each test. Tests are auto-skipped if ClickHouse isn't reachable on `localhost:8123`.
+
+The `.env.test` file is loaded by conftest before anything else — no env vars needed in the run config (useful for GoLand debug runs).
+
+### PyCharm debugger
+
+`Run > Edit Configurations > + > pytest`, set:
+- Script path: `tests/integration/test_transform_cams.py`
+- Additional args: `-m integration -s`
+- Working dir: `pipeline-python/`
+
+Set breakpoints anywhere in test or implementation code, run with the bug icon.
+
 ## Learn more
 
 To learn more about Dagster:

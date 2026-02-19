@@ -14,8 +14,8 @@ CREATE DATABASE IF NOT EXISTS jackfruit;
 CREATE TABLE IF NOT EXISTS jackfruit.grid_data (
     variable     LowCardinality(String),
     timestamp    DateTime,
-    lat          Float64,
-    lon          Float64,
+    lat          Float32,
+    lon          Float32,
     value        Float32,
     unit         LowCardinality(String),
     catalog_id   UUID,

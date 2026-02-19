@@ -35,6 +35,7 @@ from pydantic import PrivateAttr
 
 import dagster as dg
 from .models import CuratedDataRecord, RawFileRecord
+from pipeline_python.storage.clickhouse import ClickHouseGridStore
 
 
 # Environment variables to forward to the ingestion container
@@ -137,26 +138,6 @@ class DockerIngestionClient(dg.ConfigurableResource):
             }
         )
 
-
-# -----------------------------------------------------------------------------
-# Resource Definitions - Wired up for use by assets
-# -----------------------------------------------------------------------------
-
-@dg.definitions
-def ingestion_resources():
-    """
-    Register the ingestion_client resource.
-
-    Uses DockerIngestionClient for local development.
-    """
-    return dg.Definitions(
-        resources={
-            "ingestion_client": DockerIngestionClient(
-                image="jackfruit-ingestion:latest",
-                network="jackfruit_jackfruit",
-            ),
-        }
-    )
 
 # -----------------------------------------------------------------------------
 # Storage resources
@@ -280,34 +261,6 @@ class ObjectStorageResource(dg.ConfigurableResource):
             return False
 
 
-# Resource factory for Dagster definitions
-@dg.definitions
-def storage_resources():
-    """
-    Register the storage resource.
-
-    Reads configuration from environment variables. The following environment
-    variables are REQUIRED:
-    - MINIO_ACCESS_KEY: S3/MinIO access key (required, no default)
-    - MINIO_SECRET_KEY: S3/MinIO secret key (required, no default)
-
-    Optional environment variables with defaults:
-    - MINIO_ENDPOINT_URL: S3/MinIO endpoint URL (default: 'http://minio:9000')
-    - MINIO_RAW_BUCKET: Raw data bucket name (default: 'jackfruit-raw')
-    - MINIO_CURATED_BUCKET: Curated data bucket name (default: 'jackfruit-curated')
-    """
-    return dg.Definitions(
-        resources={
-            "storage": ObjectStorageResource(
-                endpoint_url=os.environ.get("MINIO_ENDPOINT_URL", "http://minio:9000"),
-                access_key=dg.EnvVar("MINIO_ACCESS_KEY"),
-                secret_key=dg.EnvVar("MINIO_SECRET_KEY"),
-                raw_bucket=os.environ.get("MINIO_RAW_BUCKET", "jackfruit-raw"),
-                curated_bucket=os.environ.get("MINIO_CURATED_BUCKET", "jackfruit-curated"),
-            ),
-        }
-    )
-
 # -----------------------------------------------------------------------------
 # Catalog resources
 # -----------------------------------------------------------------------------
@@ -347,11 +300,13 @@ class PostgresCatalogResource(dg.ConfigurableResource):
 
     Attributes:
         dsn: Postgres DSN (e.g., postgresql://user:password@host:port/dbname)
+        schema: Postgres schema name (e.g., "catalog" in prod, "test_catalog" in tests)
     """
     dsn: str
+    schema: str
     _connection: psycopg.Connection | None = PrivateAttr(default=None)
 
-    def get_connection(self) -> psycopg.Connection:
+    def _get_connection(self) -> psycopg.Connection:
         """
         Get or create a database connection.
 
@@ -390,12 +345,12 @@ class PostgresCatalogResource(dg.ConfigurableResource):
         Args:
             raw_file: Raw file record to insert
         """
-        query = """
-        INSERT INTO catalog.raw_files (id, source, dataset, date, s3_key, created_at)
+        query = f"""
+        INSERT INTO {self.schema}.raw_files (id, source, dataset, date, s3_key, created_at)
         VALUES (%s, %s, %s, %s, %s, NOW())
         ON CONFLICT (id) DO NOTHING;
         """
-        conn = self.get_connection()
+        conn = self._get_connection()
         with conn.cursor() as cur:
             cur.execute(query, (
                 str(raw_file.id),
@@ -417,8 +372,8 @@ class PostgresCatalogResource(dg.ConfigurableResource):
         Args:
             curated_file: Curated file record to insert or update
         """
-        query = """
-        INSERT INTO catalog.curated_data (id, raw_file_id, variable, unit, timestamp)
+        query = f"""
+        INSERT INTO {self.schema}.curated_data (id, raw_file_id, variable, unit, timestamp)
         VALUES (%s, %s, %s, %s, %s)
         ON CONFLICT (id) DO UPDATE SET
             raw_file_id = EXCLUDED.raw_file_id,
@@ -426,7 +381,7 @@ class PostgresCatalogResource(dg.ConfigurableResource):
             unit = EXCLUDED.unit,
             timestamp = EXCLUDED.timestamp;
         """
-        conn = self.get_connection()
+        conn = self._get_connection()
         with conn.cursor() as cur:
             cur.execute(query, (
                 str(curated_file.id),
@@ -438,13 +393,35 @@ class PostgresCatalogResource(dg.ConfigurableResource):
         conn.commit()
 
 
+# -----------------------------------------------------------------------------
+# Resource Definitions - Wired up for use by assets
+# -----------------------------------------------------------------------------
+
 @dg.definitions
-def catalog_resources():
+def resources():
     return dg.Definitions(
         resources={
+            "ingestion_client": DockerIngestionClient(
+                image="jackfruit-ingestion:latest",
+                network="jackfruit_jackfruit",
+            ),
+            "storage": ObjectStorageResource(
+                endpoint_url=os.environ.get("MINIO_ENDPOINT_URL", "http://minio:9000"),
+                access_key=dg.EnvVar("MINIO_ACCESS_KEY"),
+                secret_key=dg.EnvVar("MINIO_SECRET_KEY"),
+                raw_bucket=os.environ.get("MINIO_RAW_BUCKET", "jackfruit-raw"),
+                curated_bucket=os.environ.get("MINIO_CURATED_BUCKET", "jackfruit-curated"),
+            ),
             "catalog": PostgresCatalogResource(
-                dsn=_postgres_dsn_from_env()
-            )
+                dsn=_postgres_dsn_from_env(),
+                schema=os.environ["POSTGRES_SCHEMA"],
+            ),
+            "grid_store": ClickHouseGridStore(
+                host=os.environ.get("CLICKHOUSE_HOST", "clickhouse"),
+                username=dg.EnvVar("CLICKHOUSE_USER"),
+                password=dg.EnvVar("CLICKHOUSE_PASSWORD"),
+                database=os.environ.get("CLICKHOUSE_DB", "jackfruit"),
+            ),
         }
     )
 
