@@ -188,7 +188,6 @@ def transform_cams_data(
             raise dg.Failure(f"Failed to download {raw_key}: {e}")
         with grib2io.open(tmp_raw_path) as grib_file:
             for message in grib_file:
-                message.pdtn
                 constituent_code = message.atmosphericChemicalConstituentType.value
 
 

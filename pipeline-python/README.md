@@ -87,9 +87,9 @@ tests/
 ### Running
 
 ```bash
-uv run pytest                  # unit only (default via addopts)
+uv run pytest                  # everything
+uv run pytest -m unit          # unit only
 uv run pytest -m integration   # integration only
-uv run pytest -m ""            # everything
 uv run pytest -m integration -s  # integration with stdout (good for debugger)
 ```
 

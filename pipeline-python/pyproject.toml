@@ -29,9 +29,9 @@ force-include = { "pyproject.toml" = "pyproject.toml" }
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
+    "unit: tests with no external dependencies",
     "integration: requires running Docker infrastructure (MinIO, Postgres, ClickHouse)",
 ]
-addopts = "-m 'not integration'"
 
 [tool.dg]
 directory_type = "project"

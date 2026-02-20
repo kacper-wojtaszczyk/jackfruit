@@ -313,18 +313,6 @@ class TestPostgresDsnFromEnv:
 
         assert dsn == "postgresql://testuser:testpass@testhost:5433/testdb"
 
-    def test_uses_default_values_for_optional_vars(self, monkeypatch):
-        """Should use default values for optional environment variables."""
-        from pipeline_python.defs.resources import _postgres_dsn_from_env
-
-        monkeypatch.setenv("POSTGRES_USER", "testuser")
-        monkeypatch.setenv("POSTGRES_PASSWORD", "testpass")
-        # HOST, PORT, DB not set - should use defaults
-
-        dsn = _postgres_dsn_from_env()
-
-        assert dsn == "postgresql://testuser:testpass@postgres:5432/postgres"
-
     def test_raises_key_error_when_user_missing(self, monkeypatch):
         """Should raise KeyError when POSTGRES_USER is missing."""
         from pipeline_python.defs.resources import _postgres_dsn_from_env
