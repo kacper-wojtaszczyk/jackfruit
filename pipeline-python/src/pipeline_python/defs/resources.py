@@ -361,7 +361,7 @@ class PostgresCatalogResource(dg.ConfigurableResource):
             ))
         conn.commit()
 
-    def insert_curated_data(self, curated_file: CuratedDataRecord) -> None:
+    def insert_curated_data(self, curated_data: CuratedDataRecord) -> None:
         """
         Insert a curated file record into the database.
 
@@ -370,7 +370,7 @@ class PostgresCatalogResource(dg.ConfigurableResource):
         manual cleanup.
 
         Args:
-            curated_file: Curated file record to insert or update
+            curated_data: Curated file record to insert or update
         """
         query = f"""
         INSERT INTO {self.schema}.curated_data (id, raw_file_id, variable, unit, timestamp)
@@ -384,11 +384,11 @@ class PostgresCatalogResource(dg.ConfigurableResource):
         conn = self._get_connection()
         with conn.cursor() as cur:
             cur.execute(query, (
-                str(curated_file.id),
-                str(curated_file.raw_file_id),
-                curated_file.variable,
-                curated_file.unit,
-                curated_file.timestamp,
+                str(curated_data.id),
+                str(curated_data.raw_file_id),
+                curated_data.variable,
+                curated_data.unit,
+                curated_data.timestamp,
             ))
         conn.commit()
 
@@ -414,7 +414,7 @@ def resources():
             ),
             "catalog": PostgresCatalogResource(
                 dsn=_postgres_dsn_from_env(),
-                schema=os.environ["POSTGRES_SCHEMA"],
+                schema=os.environ.get("POSTGRES_SCHEMA"),
             ),
             "grid_store": ClickHouseGridStore(
                 host=os.environ.get("CLICKHOUSE_HOST", "clickhouse"),

@@ -12,8 +12,10 @@ import uuid
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import dagster as dg
+from grib2io import Grib2Message
 
 from pipeline_python.grib2 import grib2io, get_shortname
 
@@ -21,6 +23,7 @@ from pipeline_python.defs.partitions import daily_partitions
 from pipeline_python.defs.resources import DockerIngestionClient, ObjectStorageResource, PostgresCatalogResource
 from pipeline_python.defs.models import RawFileRecord, CuratedDataRecord
 from pipeline_python.storage import GridStore
+from pipeline_python.storage.grid_store import GridData
 
 
 class IngestionConfig(dg.Config):
@@ -179,6 +182,9 @@ def transform_cams_data(
     raw_file_id = uuid.UUID(run_id)
     raw_key = f"ads/{dataset}/{partition_date}/{run_id}.grib"
     context.log.info(f"Processing {raw_key}")
+    curated_keys: list[UUID] = []
+    variables_processed: list[str] = []
+    rows_inserted: int = 0
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_dir = Path(tmp_dir)
         tmp_raw_path = tmp_dir / "raw.grib"
@@ -188,17 +194,40 @@ def transform_cams_data(
             raise dg.Failure(f"Failed to download {raw_key}: {e}")
         with grib2io.open(tmp_raw_path) as grib_file:
             for message in grib_file:
+                catalog_id = uuid.uuid7()
                 constituent_code = message.atmosphericChemicalConstituentType.value
-
-
+                values = message.data
+                unit = message.units
+                if unit == "kg m-3":
+                    values = values * 1e9
+                    unit = "µg/m³"
+                variable_name = get_shortname(constituent_code)
+                timestamp = message.refDate + message.leadTime
+                rows_inserted += grid_store.insert_grid(GridData(
+                    variable=variable_name,
+                    unit=unit,
+                    timestamp=timestamp,
+                    lats=message.lats,
+                    lons=message.lons,
+                    values=values,
+                    catalog_id=catalog_id,
+                ))
+                catalog.insert_curated_data(CuratedDataRecord(
+                    id=catalog_id,
+                    raw_file_id=raw_file_id,
+                    variable=variable_name,
+                    unit=unit,
+                    timestamp=timestamp,
+                ))
+                curated_keys.append(catalog_id)
+                variables_processed.append(variable_name)
 
     return dg.MaterializeResult(
         metadata={
             "run_id": run_id,
             "date": partition_date,
-            "curated_keys": curated_keys,
-            "variables_processed": list(set(k.split("/")[0] for k in curated_keys)) if curated_keys else [],
-            "files_written": len(curated_keys),
-            "total_messages": num_messages,
+            "curated_keys": [str(key) for key in curated_keys],
+            "variables_processed": list(set(variables_processed)),
+            "inserted_rows": rows_inserted,
         }
     )

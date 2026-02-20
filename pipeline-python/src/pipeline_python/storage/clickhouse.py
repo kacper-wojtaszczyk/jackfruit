@@ -26,10 +26,8 @@ class ClickHouseGridStore(GridStore):
 
     @staticmethod
     def _to_columnar(grid: GridData) -> dict[str, np.ndarray] | None:
-        lon_grid, lat_grid = np.meshgrid(grid.lons, grid.lats)
-
-        lat_flat = lat_grid.ravel()
-        lon_flat = lon_grid.ravel()
+        lat_flat = grid.lats.ravel()
+        lon_flat = grid.lons.ravel()
         val_flat = grid.values.ravel()
 
         lat_filtered = lat_flat.astype(np.float32)

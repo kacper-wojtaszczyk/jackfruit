@@ -10,7 +10,17 @@ import numpy as np
 
 @dataclass(frozen=True)
 class GridData:
-    """Data class representing a collection of geographic points and associated values"""
+    """
+    Extracted grid data ready for ClickHouse insertion.
+
+    All arrays are 2D of the same shape (M, K) — one element per grid point.
+    grib2io returns lats, lons, and data() as 2D arrays; GridData preserves this.
+    Flattening to 1D happens in the storage layer (_to_columnar in clickhouse.py).
+    Values are stored in µg/m³ (converted from CAMS kg m**-3 during extraction).
+
+    Fields align with CH jackfruit.grid_data columns:
+    (variable, timestamp, lat, lon, value, unit, catalog_id)
+    """
 
     variable: str
     unit: str
@@ -21,18 +31,17 @@ class GridData:
     catalog_id: UUID
 
     def __post_init__(self) -> None:
-        if self.lats.ndim != 1:
-            raise ValueError(f"lats must be 1-dimensional, got shape {self.lats.shape}")
-        if self.lons.ndim != 1:
-            raise ValueError(f"lons must be 1-dimensional, got shape {self.lons.shape}")
-        if self.values.ndim != 1:
-            raise ValueError(f"values must be 1-dimensional, got shape {self.values.shape}")
-        if self.lons.size != self.lats.size != self.values.size:
-            raise ValueError(f"values, lats and lons must have the same size, got ({self.values.size}, {self.lats.size}, {self.lons.size})")
+        if self.values.ndim != 2:
+            raise ValueError(f"values must be 2-dimensional, got shape {self.lats.shape}")
+        if not (self.lats.shape == self.lons.shape == self.values.shape):
+            raise ValueError(
+                f"All arrays must have the same shape, "
+                f"got lats={self.lats.shape}, lons={self.lons.shape}, values={self.values.shape}"
+            )
 
     @property
     def row_count(self) -> int:
-        """Returns the number of rows (points) in the grid data."""
+        """Total number of grid points."""
         return self.values.size
 
 

@@ -7,10 +7,14 @@ This test anchors "same inputs → same outputs" regardless of implementation ch
 Requires Docker infrastructure (MinIO, ClickHouse, Postgres).
 Run with: uv run pytest -m integration
 """
+import datetime
 import os
+import uuid
 from pathlib import Path
 
 import dagster as dg
+
+from pipeline_python.defs import RawFileRecord
 from pipeline_python.defs.assets import transform_cams_data
 
 FIXTURE_GRIB = Path(__file__).parent.parent / "fixtures" / "019c2817-c7a9-745a-8d4d-508b9983ae65.grib"
@@ -24,6 +28,13 @@ def test_transform_inserts_grid_data_to_clickhouse(s3_client, ch_client, storage
     """Raw GRIB in MinIO → download → extract → insert → rows in ClickHouse."""
     # Arrange: upload fixture GRIB to test bucket
     s3_client.upload_file(str(FIXTURE_GRIB), os.environ["MINIO_RAW_BUCKET"], RAW_KEY)
+    catalog.insert_raw_file(RawFileRecord(
+        id=uuid.UUID(RUN_ID),
+        source="ads",
+        dataset=DATASET,
+        date=datetime.datetime.fromisoformat(PARTITION),
+        s3_key=RAW_KEY
+    ))
 
     # Arrange: fake upstream materialization so transform_cams_data can read
     # run_id and dataset from context.instance.get_latest_materialization_event()

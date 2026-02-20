@@ -2,15 +2,13 @@
 Integration test infrastructure fixtures.
 
 Loads .env.test before any imports so all resources pick up test config.
-Auto-marks tests in this directory as 'integration' and skips them when
-Docker infrastructure is not reachable.
+Auto-marks tests in this directory as 'integration'
 
 DDL in session fixtures mirrors production migrations — keep in sync:
   - ClickHouse: migrations/clickhouse/init.sql
   - Postgres: migrations/postgres/init.sql
 """
 import os
-import socket
 
 import boto3
 import clickhouse_connect
@@ -25,24 +23,11 @@ load_dotenv(Path(__file__).parent.parent / ".env.test", override=True)
 from pipeline_python.defs.resources import ObjectStorageResource, PostgresCatalogResource
 from pipeline_python.storage.clickhouse import ClickHouseGridStore
 
-
-def _is_reachable(host: str, port: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(1)
-        return s.connect_ex((host, port)) == 0
-
-
 def pytest_collection_modifyitems(config, items):
-    """Auto-mark all tests in this directory as integration; skip if infra unavailable."""
+    """Auto-mark all tests in this directory as integration."""
     for item in items:
         if "integration" in str(item.fspath):
             item.add_marker(pytest.mark.integration)
-
-    if not _is_reachable("localhost", 8123):
-        skip = pytest.mark.skip(reason="Docker infrastructure not available")
-        for item in items:
-            if "integration" in str(item.fspath):
-                item.add_marker(skip)
 
 
 # ---------------------------------------------------------------------------
