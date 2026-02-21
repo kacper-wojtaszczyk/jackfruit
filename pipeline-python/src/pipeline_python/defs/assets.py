@@ -117,16 +117,21 @@ def transform_cams_data(
     """
     partition_date = context.partition_key
     upstream_key = ingest_cams_data.key
-    materialization_event = context.instance.get_latest_materialization_event(
-        upstream_key
+    records = context.instance.get_event_records(
+        event_records_filter=dg.EventRecordsFilter(
+            event_type=dg.DagsterEventType.ASSET_MATERIALIZATION,
+            asset_key=upstream_key,
+            asset_partitions=[partition_date],
+        ),
+        limit=1,
     )
-    if materialization_event is None:
+    if not records:
         raise dg.Failure(
             f"No materialization found for upstream asset {upstream_key} partition {context.partition_key}. "
             f"Please ensure the ingestion asset has been materialized for this partition before running transformation."
         )
 
-    ingest_metadata = materialization_event.asset_materialization.metadata
+    ingest_metadata = records[0].asset_materialization.metadata
     context.log.info(f"Upstream metadata: {ingest_metadata}")
     run_id = ingest_metadata["run_id"].value
     dataset = ingest_metadata["dataset"].value
