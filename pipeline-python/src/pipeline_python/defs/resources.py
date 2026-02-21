@@ -174,7 +174,7 @@ class ObjectStorageResource(dg.ConfigurableResource):
         
         Raises:
             ValueError: If key is empty or contains invalid characters
-            ClientError: If the S3 download fails (e.g., file not found, permission denied)
+            FileNotFoundError: If the S3 download fails (e.g., file not found, permission denied)
         """
         if not key or not key.strip():
             raise ValueError("S3 key cannot be empty")

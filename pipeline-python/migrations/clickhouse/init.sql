@@ -4,7 +4,7 @@ CREATE DATABASE IF NOT EXISTS jackfruit;
 -- Each row is a single (variable, timestamp, lat, lon) measurement.
 -- Serves point queries: nearest grid point for a given variable + time.
 --
--- catalog_id references catalog.grid_data.id in Postgres (lineage/metadata).
+-- catalog_id references catalog.curated_data.id in Postgres (lineage/metadata).
 -- The serving layer queries CH for values, then optionally looks up
 -- catalog_id in Postgres for lineage (source, dataset, raw file).
 --

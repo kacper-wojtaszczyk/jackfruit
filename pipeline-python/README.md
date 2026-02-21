@@ -77,8 +77,8 @@ The script includes a monkey-patch for PDT 4.40 (Atmospheric Chemical Constituen
 
 ```
 tests/
-  unit/          # no external deps, runs by default
-  integration/   # requires Docker infra, opt-in
+  unit/          # no external deps
+  integration/   # requires Docker infra
   fixtures/      # real GRIB file for integration tests
   .env.test      # test-specific env vars (localhost endpoints, isolated namespaces)
 ```

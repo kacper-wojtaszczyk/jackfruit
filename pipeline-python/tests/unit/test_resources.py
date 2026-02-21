@@ -155,7 +155,7 @@ class TestPostgresCatalogResource:
             id=uuid.uuid4(),
             raw_file_id=uuid.uuid4(),
             variable="pm2p5",
-            unit="kg m**-3",
+            unit="µg/m³",
             timestamp=datetime(2025, 1, 2, 12, 0, 0),
         )
 
@@ -170,7 +170,7 @@ class TestPostgresCatalogResource:
             str(curated.id),
             str(curated.raw_file_id),
             "pm2p5",
-            "kg m**-3",
+            "µg/m³",
             datetime(2025, 1, 2, 12, 0, 0),
         )
 

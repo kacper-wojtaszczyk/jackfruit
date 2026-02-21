@@ -3,7 +3,7 @@ from datetime import datetime
 from uuid import UUID
 
 import dagster as dg
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 
 import numpy as np
 
@@ -14,8 +14,7 @@ class GridData:
     Extracted grid data ready for ClickHouse insertion.
 
     All arrays are 2D of the same shape (M, K) — one element per grid point.
-    grib2io returns lats, lons, and data() as 2D arrays; GridData preserves this.
-    Flattening to 1D happens in the storage layer (_to_columnar in clickhouse_grid_store.py).
+    Flattening to 1D happens in the storage layer.
     Units are source-dependent; conversion (if any) happens during extraction.
 
     Fields align with CH jackfruit.grid_data columns:
@@ -45,7 +44,7 @@ class GridData:
         return self.values.size
 
 
-class GridStore(dg.ConfigurableResource):
+class GridStore(dg.ConfigurableResource, ABC):
     """
     Abstract base class for grid data storage backends.
 
