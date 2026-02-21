@@ -42,6 +42,7 @@ def ch_client():
         host=os.environ["CLICKHOUSE_HOST"],
         username=os.environ["CLICKHOUSE_USER"],
         password=os.environ["CLICKHOUSE_PASSWORD"],
+        port=int(os.environ["CLICKHOUSE_PORT"]),
     )
     client.command("CREATE DATABASE IF NOT EXISTS jackfruit_test")
     client.command("""
@@ -105,6 +106,7 @@ def s3_client():
         endpoint_url=os.environ["MINIO_ENDPOINT_URL"],
         aws_access_key_id=os.environ["MINIO_ACCESS_KEY"],
         aws_secret_access_key=os.environ["MINIO_SECRET_KEY"],
+        use_ssl=os.environ.get("MINIO_USE_SSL", "false").lower() in {"true", "1", "yes", "on"},
     )
     bucket = os.environ["MINIO_RAW_BUCKET"]
     try:
@@ -154,6 +156,7 @@ def grid_store():
         username=os.environ["CLICKHOUSE_USER"],
         password=os.environ["CLICKHOUSE_PASSWORD"],
         database=os.environ["CLICKHOUSE_DB"],
+        port=int(os.environ["CLICKHOUSE_PORT"]),
     )
 
 
@@ -164,6 +167,7 @@ def storage():
         access_key=os.environ["MINIO_ACCESS_KEY"],
         secret_key=os.environ["MINIO_SECRET_KEY"],
         raw_bucket=os.environ["MINIO_RAW_BUCKET"],
+        use_ssl=os.environ.get("MINIO_USE_SSL", "false").lower() in {"true", "1", "yes", "on"},
     )
 
 

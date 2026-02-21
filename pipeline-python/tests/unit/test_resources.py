@@ -86,8 +86,7 @@ class TestObjectStorageResourceDownloadRaw:
             storage_resource.download_raw("   ", Path("/tmp/file.grib"))
 
     def test_raises_error_for_missing_file(self, storage_resource, mock_s3_client):
-        """Should raise ClientError for missing S3 file."""
-        # Simulate S3 NoSuchKey error
+        """Should raise FileNotFoundError for missing S3 file."""
         error_response = {"Error": {"Code": "NoSuchKey", "Message": "Not found"}}
         mock_s3_client.download_file.side_effect = ClientError(error_response, "download_file")
 
@@ -95,7 +94,7 @@ class TestObjectStorageResourceDownloadRaw:
             with tempfile.TemporaryDirectory() as tmpdir:
                 local_path = Path(tmpdir) / "file.grib"
 
-                with pytest.raises(ClientError, match="NoSuchKey"):
+                with pytest.raises(FileNotFoundError, match="test-raw"):
                     storage_resource.download_raw("missing/file.grib", local_path)
 
 
@@ -103,18 +102,7 @@ class TestObjectStorageResourceDownloadRaw:
 class TestObjectStorageResourceConfig:
     """Tests for ObjectStorageResource configuration."""
 
-    def test_has_default_values(self):
-        """Should have sensible default values."""
-        resource = ObjectStorageResource(
-            endpoint_url="http://localhost:9000",
-            access_key="key",
-            secret_key="secret",
-        )
-
-        assert resource.raw_bucket == "jackfruit-raw"
-        assert resource.use_ssl is False
-
-    def test_accepts_custom_values(self):
+    def test_create_object_storage(self):
         """Should accept custom configuration values."""
         resource = ObjectStorageResource(
             endpoint_url="https://s3.amazonaws.com",
@@ -186,8 +174,27 @@ class TestPostgresCatalogResource:
             datetime(2025, 1, 2, 12, 0, 0),
         )
 
-    def test_context_manager_reuses_connection(self, psycopg_mocks):
-        """Should reuse same connection when used as context manager."""
+    def test_teardown_closes_connection(self, psycopg_mocks):
+        """teardown_after_execution should close the connection."""
+        resource = PostgresCatalogResource(dsn="postgresql://localhost:5432/db", schema="catalog")
+        raw = RawFileRecord(
+            id=uuid.uuid4(),
+            source="ads",
+            dataset="test-dataset",
+            date=date(2025, 1, 2),
+            s3_key="ads/test/2025-01-02/run1.grib",
+        )
+
+        with patch("pipeline_python.defs.resources.psycopg.connect", psycopg_mocks["connect"]):
+            resource.insert_raw_file(raw)
+            resource.teardown_after_execution(None)
+
+        # Connection should be created once and closed by teardown
+        psycopg_mocks["connect"].assert_called_once_with("postgresql://localhost:5432/db")
+        psycopg_mocks["conn"].close.assert_called_once()
+
+    def test_reuses_connection_across_calls(self, psycopg_mocks):
+        """Multiple inserts within one execution should reuse the same connection."""
         resource = PostgresCatalogResource(dsn="postgresql://localhost:5432/db", schema="catalog")
         raw1 = RawFileRecord(
             id=uuid.uuid4(),
@@ -205,14 +212,11 @@ class TestPostgresCatalogResource:
         )
 
         with patch("pipeline_python.defs.resources.psycopg.connect", psycopg_mocks["connect"]):
-            with resource:
-                resource.insert_raw_file(raw1)
-                resource.insert_raw_file(raw2)
+            resource.insert_raw_file(raw1)
+            resource.insert_raw_file(raw2)
 
-        # Connection should be created once and reused
+        # psycopg.connect should only be called once despite two inserts
         psycopg_mocks["connect"].assert_called_once_with("postgresql://localhost:5432/db")
-        # Close should be called on exit
-        psycopg_mocks["conn"].close.assert_called_once()
 
 
 class TestPostgresDsnFromEnv:

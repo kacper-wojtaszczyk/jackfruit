@@ -32,7 +32,7 @@ class GridData:
 
     def __post_init__(self) -> None:
         if self.values.ndim != 2:
-            raise ValueError(f"values must be 2-dimensional, got shape {self.lats.shape}")
+            raise ValueError(f"values must be 2-dimensional, got shape {self.values.shape}")
         if not (self.lats.shape == self.lons.shape == self.values.shape):
             raise ValueError(
                 f"All arrays must have the same shape, "

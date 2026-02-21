@@ -145,14 +145,10 @@ class DockerIngestionClient(dg.ConfigurableResource):
 
 class ObjectStorageResource(dg.ConfigurableResource):
     """
-    S3/MinIO client for raw and curated buckets.
+    S3/MinIO client for the raw data bucket.
 
     Provides explicit download/upload methods optimized for large files.
     Uses boto3 with local temp files (grib2io requires local file access).
-
-    **SECURITY**: Credentials must ALWAYS be sourced from secure stores (environment
-    variables, secrets manager, etc.) and NEVER hardcoded. The `access_key` and
-    `secret_key` fields use `EnvVar` to prevent credential exposure in logs and UI.
 
     Attributes:
         endpoint_url: S3/MinIO endpoint URL (e.g., 'http://minio:9000')
@@ -173,8 +169,8 @@ class ObjectStorageResource(dg.ConfigurableResource):
     endpoint_url: str
     access_key: str
     secret_key: str
-    raw_bucket: str = "jackfruit-raw"
-    use_ssl: bool = False
+    raw_bucket: str
+    use_ssl: bool
 
     def _get_client(self):
         """Create boto3 S3 client configured for MinIO/S3."""
@@ -208,9 +204,8 @@ class ObjectStorageResource(dg.ConfigurableResource):
             client.download_file(self.raw_bucket, key, str(local_path))
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "Unknown")
-            if error_code == "404" or error_code == "NoSuchKey":
-                # Add more context to the error message
-                e.response["Error"]["Message"] = f"Object not found in bucket '{self.raw_bucket}': {key}"
+            if error_code in {"404", "NoSuchKey"}:
+                raise FileNotFoundError(f"Object not found in bucket '{self.raw_bucket}': {key}") from e
             raise
 
 
@@ -233,24 +228,16 @@ class PostgresCatalogResource(dg.ConfigurableResource):
     Resource for interacting with the Postgres metadata catalog.
 
     This resource manages connections to the catalog database and provides methods
-    for inserting raw and curated file metadata. Supports context manager protocol
-    for efficient connection reuse across multiple operations.
+    for inserting raw and curated file metadata. The connection is opened lazily
+    on first use and closed by Dagster at the end of each asset execution via
+    teardown_after_execution.
 
     **Security Note**: The DSN contains database credentials. Always source these
     from environment variables or secure credential stores, never hardcode them.
 
     **Upsert Behavior**:
     - `insert_raw_file`: Uses ON CONFLICT DO NOTHING (idempotent)
-    - `insert_curated_file`: Uses ON CONFLICT DO UPDATE (latest metadata wins)
-
-    **Usage**:
-        # Single insert (creates new connection)
-        catalog.insert_raw_file(record)
-
-        # Multiple inserts (reuses connection)
-        with catalog:
-            for record in records:
-                catalog.insert_curated_file(record)
+    - `insert_curated_data`: Uses ON CONFLICT DO UPDATE (latest metadata wins)
 
     Attributes:
         dsn: Postgres DSN (e.g., postgresql://user:password@host:port/dbname)
@@ -261,33 +248,16 @@ class PostgresCatalogResource(dg.ConfigurableResource):
     _connection: psycopg.Connection | None = PrivateAttr(default=None)
 
     def _get_connection(self) -> psycopg.Connection:
-        """
-        Get or create a database connection.
-
-        Returns existing connection if available, otherwise creates a new one.
-        When using the context manager, the connection is reused across operations.
-
-        Returns:
-            Active Postgres connection
-        """
+        """Get or create a database connection. Reused across calls within one execution."""
         if self._connection is None:
             self._connection = psycopg.connect(self.dsn)
         return self._connection
 
-    def close(self) -> None:
-        """Close the database connection if open."""
+    def teardown_after_execution(self, context: dg.InitResourceContext) -> None:
+        """Close the database connection. Called by Dagster at end of each asset execution."""
         if self._connection is not None:
             self._connection.close()
             self._connection = None
-
-    def __enter__(self):
-        """Enter context manager - prepares connection for reuse."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Exit context manager - closes connection."""
-        self.close()
-        return False
 
     def insert_raw_file(self, raw_file: RawFileRecord) -> None:
         """
@@ -364,13 +334,15 @@ def resources():
                 access_key=dg.EnvVar("MINIO_ACCESS_KEY"),
                 secret_key=dg.EnvVar("MINIO_SECRET_KEY"),
                 raw_bucket=os.environ.get("MINIO_RAW_BUCKET", "jackfruit-raw"),
+                use_ssl=os.environ.get("MINIO_USE_SSL", "false").lower() in {"true", "1", "yes", "on"},
             ),
             "catalog": PostgresCatalogResource(
                 dsn=_postgres_dsn_from_env(),
-                schema=os.environ.get("POSTGRES_SCHEMA"),
+                schema=os.environ.get("POSTGRES_SCHEMA", "catalog"),
             ),
             "grid_store": ClickHouseGridStore(
                 host=os.environ.get("CLICKHOUSE_HOST", "clickhouse"),
+                port=int(os.environ.get("CLICKHOUSE_PORT", 8123)),
                 username=dg.EnvVar("CLICKHOUSE_USER"),
                 password=dg.EnvVar("CLICKHOUSE_PASSWORD"),
                 database=os.environ.get("CLICKHOUSE_DB", "jackfruit"),

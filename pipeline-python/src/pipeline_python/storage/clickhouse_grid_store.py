@@ -9,6 +9,7 @@ from pipeline_python.storage.grid_store import GridStore, GridData
 
 class ClickHouseGridStore(GridStore):
     host: str
+    port: int
     username: str
     password: str
     database: str
@@ -21,6 +22,7 @@ class ClickHouseGridStore(GridStore):
                 username=self.username,
                 password=self.password,
                 database=self.database,
+                port=self.port,
             )
         return self._client
 
