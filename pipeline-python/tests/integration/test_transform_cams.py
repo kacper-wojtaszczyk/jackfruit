@@ -17,8 +17,8 @@ import dagster as dg
 from pipeline_python.defs import RawFileRecord
 from pipeline_python.defs.assets import transform_cams_data
 
-FIXTURE_GRIB = Path(__file__).parent.parent / "fixtures" / "019c2817-c7a9-745a-8d4d-508b9983ae65.grib"
-RUN_ID = "019c2817-c7a9-745a-8d4d-508b9983ae65"
+FIXTURE_GRIB = Path(__file__).parent.parent / "fixtures" / "019c7f73-419f-727c-8e56-95880501e36b.grib"
+RUN_ID = "019c7f73-419f-727c-8e56-95880501e36b"
 DATASET = "cams-europe-air-quality-forecasts-forecast"
 PARTITION = "2026-02-04"
 RAW_KEY = f"ads/{DATASET}/{PARTITION}/{RUN_ID}.grib"

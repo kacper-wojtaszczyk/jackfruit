@@ -90,69 +90,6 @@ def ingest_cams_data(
 
     return result
 
-# GRIB2 Table 4.230 constituent type codes we want to process
-# Note: ECMWF/CAMS uses local codes (40xxx) that differ from WMO standard codes (62xxx)
-# Reference: https://www.nco.ncep.noaa.gov/pmb/docs/grib2/grib2_doc/grib2_table4-230.shtml
-_CAMS_CONSTITUENT_CODES = {
-    40008,  # PM10 (ECMWF local) -> "pm10"
-    40009,  # PM2.5 (ECMWF local) -> "pm2p5"
-    # Add more as needed (check ECMWF local codes for CAMS data):
-    # WMO codes if you're using non-ECMWF data:
-    # 62100,  # PM2.5 (WMO)
-    # 62101,  # PM10 (WMO)
-}
-
-
-def _extract_message_metadata(msg: Any, context: dg.AssetExecutionContext) -> dict | None:
-    """
-    Extract metadata from a GRIB message.
-    
-    Args:
-        msg: GRIB message object (grib2io message type)
-        context: Dagster execution context for logging
-    
-    Returns:
-        Dictionary with constituent_code, var_name, year, month, day, hour
-        or None if the message should be skipped
-    """
-    # Get constituent type code from PDT 4.40
-    try:
-        constituent_code = msg.atmosphericChemicalConstituentType.value
-    except AttributeError:
-        context.log.warning(
-            f"Message does not have atmosphericChemicalConstituentType attribute. "
-            f"This may not be a PDT 4.40 message. Skipping."
-        )
-        return None
-
-    if constituent_code not in _CAMS_CONSTITUENT_CODES:
-        context.log.debug(f"Skipping constituent code: {constituent_code}")
-        return None
-
-    # Get variable name from constituent code
-    var_name = get_shortname(constituent_code)
-
-    # Use validDate (refDate + leadTime) for the actual forecast timestamp
-    try:
-        valid_date = msg.validDate  # datetime object
-        year, month, day, hour = valid_date.year, valid_date.month, valid_date.day, valid_date.hour
-    except Exception as e:
-        context.log.warning(
-            f"Failed to extract validDate from message for constituent {constituent_code}: {e}. Skipping."
-        )
-        return None
-    
-    return {
-        "constituent_code": constituent_code,
-        "var_name": var_name,
-        "year": year,
-        "month": month,
-        "day": day,
-        "hour": hour,
-    }
-
-
-
 @dg.asset(
     partitions_def=daily_partitions,
     deps=[ingest_cams_data],
