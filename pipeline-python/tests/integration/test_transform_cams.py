@@ -171,10 +171,13 @@ def test_catalog_id_links_ch_and_pg(s3_client, ch_client, storage, grid_store, c
 # Partition isolation
 # ---------------------------------------------------------------------------
 
-def test_transform_uses_correct_partition_metadata(s3_client, ch_client, storage, grid_store, catalog):
+def test_transform_uses_correct_partition_metadata(s3_client, storage, grid_store, catalog):
     """Transform should use metadata from its own partition, not the latest across all partitions."""
     _arrange_raw_file(s3_client, catalog)
     instance = dg.DagsterInstance.ephemeral()
+
+    # Report the correct partition's materialization
+    _report_upstream(instance)
 
     # Report a DIFFERENT partition's materialization with a wrong run_id (reported AFTER ours)
     wrong_run_id = str(uuid.uuid7())
@@ -185,9 +188,6 @@ def test_transform_uses_correct_partition_metadata(s3_client, ch_client, storage
             partition="2026-02-22",
         )
     )
-
-    # Report the correct partition's materialization
-    _report_upstream(instance)
 
     # Run transform for PARTITION (2026-02-21)
     result = transform_cams_data(_make_context(instance), storage, catalog, grid_store)
