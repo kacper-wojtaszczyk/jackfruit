@@ -92,7 +92,7 @@ External APIs (Copernicus ADS, etc.)
 - Raw bucket (`jackfruit-raw`) is **immutable, append-only** — ETL reads raw, writes to ClickHouse
 - Raw key pattern: `{source}/{dataset}/{YYYY-MM-DD}/{run_id}.{ext}`
 - ClickHouse stores curated grid data as rows: (variable, timestamp, lat, lon, value, unit, catalog_id)
-- **Grid storage is abstracted** — both Python (`GridStoreResource` abstract base class in `storage/grid_store.py`) and Go (`GridStore` interface) depend on abstractions, not ClickHouse directly. The Python `ClickHouseGridStore` is registered as a Dagster resource (`"grid_store"`). See [ADR 001](docs/ADR/001-grid-data-storage.md).
+- **Grid storage is abstracted** — both Python (`GridStore` abstract base class in `storage/grid_store.py`) and Go (`GridStore` interface) depend on abstractions, not ClickHouse directly. The Python `ClickHouseGridStore` is registered as a Dagster resource (`"grid_store"`). See [ADR 001](docs/ADR/001-grid-data-storage.md).
 - Serving API queries ClickHouse with nearest-neighbor: `ORDER BY greatCircleDistance(...) LIMIT 1`
 - One query per variable, fetched in parallel via goroutines + errgroup
 - CAMS GRIB data uses PDT 4.40 which requires a monkey-patch in `pipeline-python/src/pipeline_python/grib2/pdt40.py`

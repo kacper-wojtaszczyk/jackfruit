@@ -21,7 +21,7 @@ from pathlib import Path
 load_dotenv(Path(__file__).parent.parent / ".env.test", override=True)
 
 from pipeline_python.defs.resources import ObjectStorageResource, PostgresCatalogResource
-from pipeline_python.storage.clickhouse import ClickHouseGridStore
+from pipeline_python.storage.clickhouse_grid_store import ClickHouseGridStore
 
 def pytest_collection_modifyitems(config, items):
     """Auto-mark all tests in this directory as integration."""

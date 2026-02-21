@@ -35,7 +35,7 @@ from pydantic import PrivateAttr
 
 import dagster as dg
 from .models import CuratedDataRecord, RawFileRecord
-from pipeline_python.storage.clickhouse import ClickHouseGridStore
+from pipeline_python.storage.clickhouse_grid_store import ClickHouseGridStore
 
 
 # Environment variables to forward to the ingestion container
@@ -159,7 +159,6 @@ class ObjectStorageResource(dg.ConfigurableResource):
         access_key: S3/MinIO access key (sourced from environment variable)
         secret_key: S3/MinIO secret key (sourced from environment variable)
         raw_bucket: Name of the raw data bucket (default: 'jackfruit-raw')
-        curated_bucket: Name of the curated data bucket (default: 'jackfruit-curated')
         use_ssl: Whether to use SSL for connections (default: False)
 
     Example usage in an asset:
@@ -169,14 +168,12 @@ class ObjectStorageResource(dg.ConfigurableResource):
                 local_path = Path(tmpdir) / "raw.grib"
                 storage.download_raw("ads/cams/.../file.grib", local_path)
                 # ... process ...
-                storage.upload_curated(output_path, "pm2p5/cams/.../data.grib2")
     """
 
     endpoint_url: str
     access_key: str
     secret_key: str
     raw_bucket: str = "jackfruit-raw"
-    curated_bucket: str = "jackfruit-curated"
     use_ssl: bool = False
 
     def _get_client(self):
@@ -216,49 +213,6 @@ class ObjectStorageResource(dg.ConfigurableResource):
                 e.response["Error"]["Message"] = f"Object not found in bucket '{self.raw_bucket}': {key}"
             raise
 
-    def upload_curated(self, local_path: Path, key: str) -> None:
-        """
-        Upload a local file to the curated bucket.
-
-        Uses multipart upload for large files automatically.
-
-        Args:
-            local_path: Local file path to upload
-            key: S3 key (e.g., "pm2p5/cams/2025/03/11/14/data.grib2")
-
-        Raises:
-            ValueError: If key is empty or local_path doesn't exist
-            ClientError: If the S3 upload fails
-        """
-        if not key or not key.strip():
-            raise ValueError("S3 key cannot be empty")
-        
-        if not local_path.exists():
-            raise ValueError(f"Local file does not exist: {local_path}")
-        
-        if not local_path.is_file():
-            raise ValueError(f"Path is not a file: {local_path}")
-        
-        client = self._get_client()
-        client.upload_file(str(local_path), self.curated_bucket, key)
-
-    def key_exists(self, bucket: str, key: str) -> bool:
-        """
-        Check if a key exists in the specified bucket.
-
-        Args:
-            bucket: Bucket name to check
-            key: S3 key to check for existence
-
-        Returns:
-            True if key exists, False otherwise
-        """
-        client = self._get_client()
-        try:
-            client.head_object(Bucket=bucket, Key=key)
-            return True
-        except ClientError:
-            return False
 
 
 # -----------------------------------------------------------------------------
@@ -410,7 +364,6 @@ def resources():
                 access_key=dg.EnvVar("MINIO_ACCESS_KEY"),
                 secret_key=dg.EnvVar("MINIO_SECRET_KEY"),
                 raw_bucket=os.environ.get("MINIO_RAW_BUCKET", "jackfruit-raw"),
-                curated_bucket=os.environ.get("MINIO_CURATED_BUCKET", "jackfruit-curated"),
             ),
             "catalog": PostgresCatalogResource(
                 dsn=_postgres_dsn_from_env(),

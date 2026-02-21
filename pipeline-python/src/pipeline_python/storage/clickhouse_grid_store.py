@@ -24,42 +24,19 @@ class ClickHouseGridStore(GridStore):
             )
         return self._client
 
-    @staticmethod
-    def _to_columnar(grid: GridData) -> dict[str, np.ndarray] | None:
-        lat_flat = grid.lats.ravel()
-        lon_flat = grid.lons.ravel()
-        val_flat = grid.values.ravel()
-
-        lat_filtered = lat_flat.astype(np.float32)
-        lon_filtered = lon_flat.astype(np.float32)
-        val_filtered = val_flat.astype(np.float32)
-        n = grid.row_count
-
-        return {
-            "variable": np.full(n, grid.variable, dtype=object),
-            "timestamp": np.full(n, grid.timestamp, dtype=object),
-            "lat": lat_filtered,
-            "lon": lon_filtered,
-            "value": val_filtered,
-            "unit": np.full(n, grid.unit, dtype=object),
-            "catalog_id": np.full(n, grid.catalog_id, dtype=object),
-        }
-
-
     def insert_grid(self, grid: GridData) -> int:
-        data = self._to_columnar(grid)
         return self._get_client().insert(
             table="grid_data",
             column_names=["variable", "timestamp", "lat", "lon", "value", "unit", "catalog_id"],
             column_oriented=True,
             data=[
-                data["variable"].tolist(),
-                data["timestamp"].tolist(),
-                data["lat"].tolist(),
-                data["lon"].tolist(),
-                data["value"].tolist(),
-                data["unit"].tolist(),
-                data["catalog_id"].tolist(),
+                np.full(grid.row_count, grid.variable, dtype=object),
+                np.full(grid.row_count, grid.timestamp, dtype=object),
+                grid.lats.ravel().astype(np.float32),
+                grid.lons.ravel().astype(np.float32),
+                grid.values.ravel().astype(np.float32),
+                np.full(grid.row_count, grid.unit, dtype=object),
+                np.full(grid.row_count, grid.catalog_id, dtype=object),
             ],
         ).written_rows
 

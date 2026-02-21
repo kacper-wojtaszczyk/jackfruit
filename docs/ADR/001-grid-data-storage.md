@@ -73,12 +73,11 @@ The operational overhead is acceptable given:
 
 ### Mitigations
 
-- **Abstraction layer**: Both Python (`GridStoreResource` abstract base class) and Go (interface) code depends on a `GridStore` abstraction, not ClickHouse directly. This makes future storage changes possible by swapping implementations.
+- **Abstraction layer**: Both Python (`GridStore` abstract base class) and Go (interface) code depends on a `GridStore` abstraction, not ClickHouse directly. This makes future storage changes possible by swapping implementations.
 - **Schema design**: Proper partitioning and sorting keys minimize query overhead.
 
 ## References
 
-- Python abstraction: `src/pipeline_python/storage/grid_store.py` (GridStoreResource abstract base class)
-- Python implementation: `src/pipeline_python/storage/clickhouse.py` (ClickHouseGridStore)
+- Python abstraction: `src/pipeline_python/storage/grid_store.py` (GridStore abstract base class)
+- Python implementation: `src/pipeline_python/storage/clickhouse_grid_store.py` (ClickHouseGridStore)
 - Go abstraction: `internal/domain/store.go` (GridStore interface)
-- Schema design guidelines: `docs/guides/tasks/01-clickhouse-setup.md`

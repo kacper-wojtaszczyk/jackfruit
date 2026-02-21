@@ -9,13 +9,11 @@ See docs/layer-1-ingestion.md for details.
 """
 import tempfile
 import uuid
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
-from typing import Any
 from uuid import UUID
 
 import dagster as dg
-from grib2io import Grib2Message
 
 from pipeline_python.grib2 import grib2io, get_shortname
 
@@ -116,7 +114,6 @@ def transform_cams_data(
     context.log.info(f"Upstream metadata: {ingest_metadata}")
     run_id = ingest_metadata["run_id"].value
     dataset = ingest_metadata["dataset"].value
-    raw_file_id = uuid.UUID(run_id)
     raw_key = f"ads/{dataset}/{partition_date}/{run_id}.grib"
     context.log.info(f"Processing {raw_key}")
     curated_keys: list[UUID] = []
@@ -151,7 +148,7 @@ def transform_cams_data(
                 ))
                 catalog.insert_curated_data(CuratedDataRecord(
                     id=catalog_id,
-                    raw_file_id=raw_file_id,
+                    raw_file_id=uuid.UUID(run_id),
                     variable=variable_name,
                     unit=unit,
                     timestamp=timestamp,

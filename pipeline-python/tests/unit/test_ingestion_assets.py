@@ -13,14 +13,13 @@ import pytest
 
 from pipeline_python.defs.assets import IngestionConfig, ingest_cams_data
 from pipeline_python.defs.resources import DockerIngestionClient
-from pipeline_python.defs.models import RawFileRecord, CuratedDataRecord
+from pipeline_python.defs.models import RawFileRecord
 
 
 
 # Global state for tracking mock calls (used during tests)
 _mock_calls = []
 _catalog_raw_inserts = []
-_catalog_curated_inserts = []
 
 
 class MockCatalogResource(dg.ConfigurableResource):
@@ -35,12 +34,6 @@ class MockCatalogResource(dg.ConfigurableResource):
     def insert_raw_file(self, raw_file: RawFileRecord) -> None:
         """Record the insert call."""
         _catalog_raw_inserts.append(raw_file)
-        if self.should_fail:
-            raise Exception("Mock catalog failure")
-
-    def insert_curated_file(self, curated_file: CuratedDataRecord) -> None:
-        """Record the insert call."""
-        _catalog_curated_inserts.append(curated_file)
         if self.should_fail:
             raise Exception("Mock catalog failure")
 
@@ -90,19 +83,17 @@ class StatefulMockIngestionClient(dg.ConfigurableResource):
 @pytest.fixture
 def mock_ingestion_client():
     """Fixture providing a fresh mock client for each test."""
-    global _mock_calls, _catalog_raw_inserts, _catalog_curated_inserts
+    global _mock_calls, _catalog_raw_inserts
     _mock_calls = []
     _catalog_raw_inserts = []
-    _catalog_curated_inserts = []
     return StatefulMockIngestionClient()
 
 
 @pytest.fixture
 def mock_catalog():
     """Fixture providing a fresh mock catalog for each test."""
-    global _catalog_raw_inserts, _catalog_curated_inserts
+    global _catalog_raw_inserts
     _catalog_raw_inserts = []
-    _catalog_curated_inserts = []
     return MockCatalogResource()
 
 

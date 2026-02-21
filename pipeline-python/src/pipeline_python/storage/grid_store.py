@@ -15,7 +15,7 @@ class GridData:
 
     All arrays are 2D of the same shape (M, K) — one element per grid point.
     grib2io returns lats, lons, and data() as 2D arrays; GridData preserves this.
-    Flattening to 1D happens in the storage layer (_to_columnar in clickhouse.py).
+    Flattening to 1D happens in the storage layer (_to_columnar in clickhouse_grid_store.py).
     Values are stored in µg/m³ (converted from CAMS kg m**-3 during extraction).
 
     Fields align with CH jackfruit.grid_data columns:

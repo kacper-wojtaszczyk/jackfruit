@@ -6,11 +6,10 @@ Dagster-based data pipeline for ingestion orchestration and transformation.
 
 ## Grid Storage Abstraction
 
-Transformation code uses a `GridStore` Protocol (`src/pipeline_python/storage/protocol.py`):
+Transformation code uses a `GridStore` ABC (`src/pipeline_python/storage/grid_store.py`):
 - `ClickHouseGridStore` — production implementation
-- `InMemoryGridStore` — for unit testing (no external dependencies)
 
-This abstraction enables testing without ClickHouse and future storage backend swaps. See [ADR 001](../docs/ADR/001-grid-data-storage.md) for the storage decision.
+This abstraction enables future storage backend swaps. See [ADR 001](../docs/ADR/001-grid-data-storage.md) for the storage decision.
 
 ## Getting started
 

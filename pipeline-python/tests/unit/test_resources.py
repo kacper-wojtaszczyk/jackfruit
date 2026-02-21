@@ -31,7 +31,6 @@ def storage_resource():
         access_key="test-access-key",
         secret_key="test-secret-key",
         raw_bucket="test-raw",
-        curated_bucket="test-curated",
         use_ssl=False,
     )
 
@@ -100,83 +99,6 @@ class TestObjectStorageResourceDownloadRaw:
                     storage_resource.download_raw("missing/file.grib", local_path)
 
 
-class TestObjectStorageResourceUploadCurated:
-    """Tests for upload_curated method."""
-
-    def test_uploads_file_successfully(self, storage_resource, mock_s3_client):
-        """Should upload file to curated bucket."""
-        with patch("pipeline_python.defs.resources.boto3.client", return_value=mock_s3_client):
-            with tempfile.NamedTemporaryFile(delete=False) as f:
-                local_path = Path(f.name)
-
-            try:
-                storage_resource.upload_curated(
-                    local_path,
-                    "pm2p5/cams/2025/01/15/12/data.grib2"
-                )
-
-                mock_s3_client.upload_file.assert_called_once_with(
-                    str(local_path),
-                    "test-curated",
-                    "pm2p5/cams/2025/01/15/12/data.grib2",
-                )
-            finally:
-                local_path.unlink()
-
-    def test_raises_error_for_empty_key(self, storage_resource):
-        """Should raise ValueError for empty key."""
-        with tempfile.NamedTemporaryFile() as f:
-            local_path = Path(f.name)
-
-            with pytest.raises(ValueError, match="cannot be empty"):
-                storage_resource.upload_curated(local_path, "")
-
-            with pytest.raises(ValueError, match="cannot be empty"):
-                storage_resource.upload_curated(local_path, "   ")
-
-    def test_raises_error_for_nonexistent_file(self, storage_resource):
-        """Should raise ValueError if local file doesn't exist."""
-        with pytest.raises(ValueError, match="does not exist"):
-            storage_resource.upload_curated(
-                Path("/nonexistent/file.grib"),
-                "pm2p5/cams/2025/01/15/12/data.grib2"
-            )
-
-    def test_raises_error_for_directory(self, storage_resource):
-        """Should raise ValueError if path is a directory."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with pytest.raises(ValueError, match="not a file"):
-                storage_resource.upload_curated(
-                    Path(tmpdir),
-                    "pm2p5/cams/2025/01/15/12/data.grib2"
-                )
-
-
-class TestObjectStorageResourceKeyExists:
-    """Tests for key_exists method."""
-
-    def test_returns_true_for_existing_key(self, storage_resource, mock_s3_client):
-        """Should return True if key exists."""
-        with patch("pipeline_python.defs.resources.boto3.client", return_value=mock_s3_client):
-            result = storage_resource.key_exists("test-raw", "ads/dataset/file.grib")
-
-            assert result is True
-            mock_s3_client.head_object.assert_called_once_with(
-                Bucket="test-raw",
-                Key="ads/dataset/file.grib"
-            )
-
-    def test_returns_false_for_missing_key(self, storage_resource, mock_s3_client):
-        """Should return False if key doesn't exist."""
-        mock_s3_client.head_object.side_effect = ClientError(
-            {"Error": {"Code": "404"}}, "head_object"
-        )
-
-        with patch("pipeline_python.defs.resources.boto3.client", return_value=mock_s3_client):
-            result = storage_resource.key_exists("test-raw", "missing/file.grib")
-
-            assert result is False
-
 
 class TestObjectStorageResourceConfig:
     """Tests for ObjectStorageResource configuration."""
@@ -190,7 +112,6 @@ class TestObjectStorageResourceConfig:
         )
 
         assert resource.raw_bucket == "jackfruit-raw"
-        assert resource.curated_bucket == "jackfruit-curated"
         assert resource.use_ssl is False
 
     def test_accepts_custom_values(self):
@@ -200,7 +121,6 @@ class TestObjectStorageResourceConfig:
             access_key="custom-key",
             secret_key="custom-secret",
             raw_bucket="my-raw-bucket",
-            curated_bucket="my-curated-bucket",
             use_ssl=True,
         )
 
@@ -208,7 +128,6 @@ class TestObjectStorageResourceConfig:
         assert resource.access_key == "custom-key"
         assert resource.secret_key == "custom-secret"
         assert resource.raw_bucket == "my-raw-bucket"
-        assert resource.curated_bucket == "my-curated-bucket"
         assert resource.use_ssl is True
 
 
@@ -241,7 +160,7 @@ class TestPostgresCatalogResource:
             "ads/cams/2025-01-02/run.grib",
         )
 
-    def test_insert_curated_file_uses_dataclass(self, psycopg_mocks):
+    def test_insert_curated_data_uses_dataclass(self, psycopg_mocks):
         """Should insert curated file using typed dataclass fields."""
         resource = PostgresCatalogResource(dsn="postgresql://localhost:5432/db", schema="catalog")
         curated = CuratedDataRecord(

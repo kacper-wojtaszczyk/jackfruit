@@ -20,7 +20,7 @@ from pipeline_python.defs.assets import transform_cams_data
 FIXTURE_GRIB = Path(__file__).parent.parent / "fixtures" / "019c7f73-419f-727c-8e56-95880501e36b.grib"
 RUN_ID = "019c7f73-419f-727c-8e56-95880501e36b"
 DATASET = "cams-europe-air-quality-forecasts-forecast"
-PARTITION = "2026-02-04"
+PARTITION = "2026-02-21"
 RAW_KEY = f"ads/{DATASET}/{PARTITION}/{RUN_ID}.grib"
 
 
@@ -60,5 +60,8 @@ def test_transform_inserts_grid_data_to_clickhouse(s3_client, ch_client, storage
         "SELECT variable, count() FROM jackfruit_test.grid_data FINAL GROUP BY variable"
     )
     rows = {r[0]: r[1] for r in result.result_rows}
+    assert len(rows) == 2
     assert "pm2p5" in rows
     assert "pm10" in rows
+    assert rows["pm2p5"] == 1176000 # 420x700 grid x 4 timestamps in the grib file
+    assert rows["pm10"] == 1176000
