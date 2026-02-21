@@ -90,10 +90,10 @@ The metadata database tracks all raw files ingested and their transformation lin
 
 **What it stores:**
 
-| Table                  | Purpose                                              |
-|------------------------|------------------------------------------------------|
-| `catalog.raw_files`    | Raw file metadata, S3 keys, ingestion history        |
-| `datasets`             | Source definitions, schemas, refresh schedules (TBD) |
+| Table                   | Purpose                                               |
+|-------------------------|-------------------------------------------------------|
+| `catalog.raw_files`     | Raw file metadata, S3 keys, ingestion history         |
+| `catalog.curated_data`  | Transformation lineage (variable, timestamp, raw_file_id FK, catalog_id referenced by CH) |
 
 ## Grid Data Store (ClickHouse)
 
@@ -113,7 +113,7 @@ The metadata database tracks all raw files ingested and their transformation lin
 - One row per grid point per timestamp per variable
 - `catalog_id` references Postgres `catalog.curated_data` for lineage tracking (not `raw_file_id` directly — join through `curated_data`)
 
-**Schema:** TBD — see task 01 (ClickHouse setup) for design guidelines. You design the actual schema.
+**Schema:** `jackfruit.grid_data` — columns: `(variable, timestamp, lat, lon, value, unit, catalog_id, inserted_at)`. Engine: `ReplacingMergeTree` ordered by `(variable, timestamp, lat, lon)`.
 
 **Typical query:**
 ```sql
@@ -216,6 +216,6 @@ CLICKHOUSE_DATABASE=jackfruit
 - [x] Postgres schema design — ✅ Done (`catalog.raw_files`)
 - [x] Lineage tracking — ✅ Done (via `raw_file_id` FK)
 - [x] Curated data storage — ✅ Decided: ClickHouse (not S3 + GRIB2)
-- [ ] ClickHouse schema design — see task 01
+- [x] ClickHouse schema design — ✅ Done (`jackfruit.grid_data`, `ReplacingMergeTree`)
 - [ ] Production deployment approach
 - [ ] Backup/restore strategy

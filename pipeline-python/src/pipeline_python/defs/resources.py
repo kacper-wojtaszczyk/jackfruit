@@ -1,28 +1,10 @@
 """
-Dagster resources for ingestion execution and object storage.
+Dagster resources for pipeline execution.
 
-This module provides:
-1. DockerIngestionClient: Run Go ingestion container via Dagster Pipes
-2. ObjectStorageResource: S3/MinIO client for raw and curated buckets
-
-INGESTION EXECUTION:
-The Go ingestion container uses Dagster Pipes in "external process" mode — it
-launches the container, waits for exit, and captures logs. No bidirectional comms.
-
-DOCKER SIBLING PATTERN:
-When Dagster runs inside a container with Docker socket mounted, PipesDockerClient
-spawns containers as *siblings* on the host Docker daemon (not nested). We must
-explicitly configure:
-- Network: attach to 'jackfruit' network so container can reach MinIO
-- Env vars: pass through from Dagster container's environment
-
-OBJECT STORAGE:
-ObjectStorageResource provides download/upload methods optimized for large GRIB
-files. Uses boto3 with local temp files (grib2io requires local file access).
-
-DEPRECATION NOTICE:
-The Go-based ingestion will be replaced with Python-native ingestion using cdsapi.
-See docs/layer-1-ingestion.md for details.
+Resources defined here:
+- DockerIngestionClient: run Go ingestion container via Dagster Pipes
+- ObjectStorageResource: S3/MinIO client for the raw data bucket
+- PostgresCatalogResource: Postgres metadata catalog (raw files, curated data lineage)
 """
 import os
 from pathlib import Path
@@ -35,6 +17,7 @@ from pydantic import PrivateAttr
 
 import dagster as dg
 from .models import CuratedDataRecord, RawFileRecord
+from pipeline_python.storage.clickhouse_grid_store import ClickHouseGridStore
 
 
 # Environment variables to forward to the ingestion container
@@ -139,46 +122,21 @@ class DockerIngestionClient(dg.ConfigurableResource):
 
 
 # -----------------------------------------------------------------------------
-# Resource Definitions - Wired up for use by assets
-# -----------------------------------------------------------------------------
-
-@dg.definitions
-def ingestion_resources():
-    """
-    Register the ingestion_client resource.
-
-    Uses DockerIngestionClient for local development.
-    """
-    return dg.Definitions(
-        resources={
-            "ingestion_client": DockerIngestionClient(
-                image="jackfruit-ingestion:latest",
-                network="jackfruit_jackfruit",
-            ),
-        }
-    )
-
-# -----------------------------------------------------------------------------
 # Storage resources
 # -----------------------------------------------------------------------------
 
 class ObjectStorageResource(dg.ConfigurableResource):
     """
-    S3/MinIO client for raw and curated buckets.
+    S3/MinIO client for the raw data bucket.
 
     Provides explicit download/upload methods optimized for large files.
     Uses boto3 with local temp files (grib2io requires local file access).
-
-    **SECURITY**: Credentials must ALWAYS be sourced from secure stores (environment
-    variables, secrets manager, etc.) and NEVER hardcoded. The `access_key` and
-    `secret_key` fields use `EnvVar` to prevent credential exposure in logs and UI.
 
     Attributes:
         endpoint_url: S3/MinIO endpoint URL (e.g., 'http://minio:9000')
         access_key: S3/MinIO access key (sourced from environment variable)
         secret_key: S3/MinIO secret key (sourced from environment variable)
         raw_bucket: Name of the raw data bucket (default: 'jackfruit-raw')
-        curated_bucket: Name of the curated data bucket (default: 'jackfruit-curated')
         use_ssl: Whether to use SSL for connections (default: False)
 
     Example usage in an asset:
@@ -188,15 +146,13 @@ class ObjectStorageResource(dg.ConfigurableResource):
                 local_path = Path(tmpdir) / "raw.grib"
                 storage.download_raw("ads/cams/.../file.grib", local_path)
                 # ... process ...
-                storage.upload_curated(output_path, "pm2p5/cams/.../data.grib2")
     """
 
     endpoint_url: str
     access_key: str
     secret_key: str
-    raw_bucket: str = "jackfruit-raw"
-    curated_bucket: str = "jackfruit-curated"
-    use_ssl: bool = False
+    raw_bucket: str
+    use_ssl: bool
 
     def _get_client(self):
         """Create boto3 S3 client configured for MinIO/S3."""
@@ -218,7 +174,7 @@ class ObjectStorageResource(dg.ConfigurableResource):
         
         Raises:
             ValueError: If key is empty or contains invalid characters
-            ClientError: If the S3 download fails (e.g., file not found, permission denied)
+            FileNotFoundError: If the S3 download fails (e.g., file not found, permission denied)
         """
         if not key or not key.strip():
             raise ValueError("S3 key cannot be empty")
@@ -230,83 +186,11 @@ class ObjectStorageResource(dg.ConfigurableResource):
             client.download_file(self.raw_bucket, key, str(local_path))
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "Unknown")
-            if error_code == "404" or error_code == "NoSuchKey":
-                # Add more context to the error message
-                e.response["Error"]["Message"] = f"Object not found in bucket '{self.raw_bucket}': {key}"
+            if error_code in {"404", "NoSuchKey"}:
+                raise FileNotFoundError(f"Object not found in bucket '{self.raw_bucket}': {key}") from e
             raise
 
-    def upload_curated(self, local_path: Path, key: str) -> None:
-        """
-        Upload a local file to the curated bucket.
 
-        Uses multipart upload for large files automatically.
-
-        Args:
-            local_path: Local file path to upload
-            key: S3 key (e.g., "pm2p5/cams/2025/03/11/14/data.grib2")
-
-        Raises:
-            ValueError: If key is empty or local_path doesn't exist
-            ClientError: If the S3 upload fails
-        """
-        if not key or not key.strip():
-            raise ValueError("S3 key cannot be empty")
-        
-        if not local_path.exists():
-            raise ValueError(f"Local file does not exist: {local_path}")
-        
-        if not local_path.is_file():
-            raise ValueError(f"Path is not a file: {local_path}")
-        
-        client = self._get_client()
-        client.upload_file(str(local_path), self.curated_bucket, key)
-
-    def key_exists(self, bucket: str, key: str) -> bool:
-        """
-        Check if a key exists in the specified bucket.
-
-        Args:
-            bucket: Bucket name to check
-            key: S3 key to check for existence
-
-        Returns:
-            True if key exists, False otherwise
-        """
-        client = self._get_client()
-        try:
-            client.head_object(Bucket=bucket, Key=key)
-            return True
-        except ClientError:
-            return False
-
-
-# Resource factory for Dagster definitions
-@dg.definitions
-def storage_resources():
-    """
-    Register the storage resource.
-
-    Reads configuration from environment variables. The following environment
-    variables are REQUIRED:
-    - MINIO_ACCESS_KEY: S3/MinIO access key (required, no default)
-    - MINIO_SECRET_KEY: S3/MinIO secret key (required, no default)
-
-    Optional environment variables with defaults:
-    - MINIO_ENDPOINT_URL: S3/MinIO endpoint URL (default: 'http://minio:9000')
-    - MINIO_RAW_BUCKET: Raw data bucket name (default: 'jackfruit-raw')
-    - MINIO_CURATED_BUCKET: Curated data bucket name (default: 'jackfruit-curated')
-    """
-    return dg.Definitions(
-        resources={
-            "storage": ObjectStorageResource(
-                endpoint_url=os.environ.get("MINIO_ENDPOINT_URL", "http://minio:9000"),
-                access_key=dg.EnvVar("MINIO_ACCESS_KEY"),
-                secret_key=dg.EnvVar("MINIO_SECRET_KEY"),
-                raw_bucket=os.environ.get("MINIO_RAW_BUCKET", "jackfruit-raw"),
-                curated_bucket=os.environ.get("MINIO_CURATED_BUCKET", "jackfruit-curated"),
-            ),
-        }
-    )
 
 # -----------------------------------------------------------------------------
 # Catalog resources
@@ -326,59 +210,36 @@ class PostgresCatalogResource(dg.ConfigurableResource):
     Resource for interacting with the Postgres metadata catalog.
 
     This resource manages connections to the catalog database and provides methods
-    for inserting raw and curated file metadata. Supports context manager protocol
-    for efficient connection reuse across multiple operations.
+    for inserting raw and curated file metadata. The connection is opened lazily
+    on first use and closed by Dagster at the end of each asset execution via
+    teardown_after_execution.
 
     **Security Note**: The DSN contains database credentials. Always source these
     from environment variables or secure credential stores, never hardcode them.
 
     **Upsert Behavior**:
     - `insert_raw_file`: Uses ON CONFLICT DO NOTHING (idempotent)
-    - `insert_curated_file`: Uses ON CONFLICT DO UPDATE (latest metadata wins)
-
-    **Usage**:
-        # Single insert (creates new connection)
-        catalog.insert_raw_file(record)
-
-        # Multiple inserts (reuses connection)
-        with catalog:
-            for record in records:
-                catalog.insert_curated_file(record)
+    - `insert_curated_data`: Uses ON CONFLICT DO UPDATE (latest metadata wins)
 
     Attributes:
         dsn: Postgres DSN (e.g., postgresql://user:password@host:port/dbname)
+        schema: Postgres schema name (e.g., "catalog" in prod, "test_catalog" in tests)
     """
     dsn: str
+    schema: str
     _connection: psycopg.Connection | None = PrivateAttr(default=None)
 
-    def get_connection(self) -> psycopg.Connection:
-        """
-        Get or create a database connection.
-
-        Returns existing connection if available, otherwise creates a new one.
-        When using the context manager, the connection is reused across operations.
-
-        Returns:
-            Active Postgres connection
-        """
+    def _get_connection(self) -> psycopg.Connection:
+        """Get or create a database connection. Reused across calls within one execution."""
         if self._connection is None:
             self._connection = psycopg.connect(self.dsn)
         return self._connection
 
-    def close(self) -> None:
-        """Close the database connection if open."""
+    def teardown_after_execution(self, context: dg.InitResourceContext) -> None:
+        """Close the database connection. Called by Dagster at end of each asset execution."""
         if self._connection is not None:
             self._connection.close()
             self._connection = None
-
-    def __enter__(self):
-        """Enter context manager - prepares connection for reuse."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Exit context manager - closes connection."""
-        self.close()
-        return False
 
     def insert_raw_file(self, raw_file: RawFileRecord) -> None:
         """
@@ -390,12 +251,12 @@ class PostgresCatalogResource(dg.ConfigurableResource):
         Args:
             raw_file: Raw file record to insert
         """
-        query = """
-        INSERT INTO catalog.raw_files (id, source, dataset, date, s3_key, created_at)
+        query = f"""
+        INSERT INTO {self.schema}.raw_files (id, source, dataset, date, s3_key, created_at)
         VALUES (%s, %s, %s, %s, %s, NOW())
         ON CONFLICT (id) DO NOTHING;
         """
-        conn = self.get_connection()
+        conn = self._get_connection()
         with conn.cursor() as cur:
             cur.execute(query, (
                 str(raw_file.id),
@@ -406,7 +267,7 @@ class PostgresCatalogResource(dg.ConfigurableResource):
             ))
         conn.commit()
 
-    def insert_curated_data(self, curated_file: CuratedDataRecord) -> None:
+    def insert_curated_data(self, curated_data: CuratedDataRecord) -> None:
         """
         Insert a curated file record into the database.
 
@@ -415,10 +276,10 @@ class PostgresCatalogResource(dg.ConfigurableResource):
         manual cleanup.
 
         Args:
-            curated_file: Curated file record to insert or update
+            curated_data: Curated file record to insert or update
         """
-        query = """
-        INSERT INTO catalog.curated_data (id, raw_file_id, variable, unit, timestamp)
+        query = f"""
+        INSERT INTO {self.schema}.curated_data (id, raw_file_id, variable, unit, timestamp)
         VALUES (%s, %s, %s, %s, %s)
         ON CONFLICT (id) DO UPDATE SET
             raw_file_id = EXCLUDED.raw_file_id,
@@ -426,25 +287,48 @@ class PostgresCatalogResource(dg.ConfigurableResource):
             unit = EXCLUDED.unit,
             timestamp = EXCLUDED.timestamp;
         """
-        conn = self.get_connection()
+        conn = self._get_connection()
         with conn.cursor() as cur:
             cur.execute(query, (
-                str(curated_file.id),
-                str(curated_file.raw_file_id),
-                curated_file.variable,
-                curated_file.unit,
-                curated_file.timestamp,
+                str(curated_data.id),
+                str(curated_data.raw_file_id),
+                curated_data.variable,
+                curated_data.unit,
+                curated_data.timestamp,
             ))
         conn.commit()
 
 
+# -----------------------------------------------------------------------------
+# Resource Definitions - Wired up for use by assets
+# -----------------------------------------------------------------------------
+
 @dg.definitions
-def catalog_resources():
+def resources():
     return dg.Definitions(
         resources={
+            "ingestion_client": DockerIngestionClient(
+                image="jackfruit-ingestion:latest",
+                network="jackfruit_jackfruit",
+            ),
+            "storage": ObjectStorageResource(
+                endpoint_url=os.environ.get("MINIO_ENDPOINT_URL", "http://minio:9000"),
+                access_key=dg.EnvVar("MINIO_ACCESS_KEY"),
+                secret_key=dg.EnvVar("MINIO_SECRET_KEY"),
+                raw_bucket=os.environ.get("MINIO_RAW_BUCKET", "jackfruit-raw"),
+                use_ssl=os.environ.get("MINIO_USE_SSL", "false").lower() in {"true", "1", "yes", "on"},
+            ),
             "catalog": PostgresCatalogResource(
-                dsn=_postgres_dsn_from_env()
-            )
+                dsn=_postgres_dsn_from_env(),
+                schema=os.environ.get("POSTGRES_SCHEMA", "catalog"),
+            ),
+            "grid_store": ClickHouseGridStore(
+                host=os.environ.get("CLICKHOUSE_HOST", "clickhouse"),
+                port=int(os.environ.get("CLICKHOUSE_PORT", 8123)),
+                username=dg.EnvVar("CLICKHOUSE_USER"),
+                password=dg.EnvVar("CLICKHOUSE_PASSWORD"),
+                database=os.environ.get("CLICKHOUSE_DB", "jackfruit"),
+            ),
         }
     )
 

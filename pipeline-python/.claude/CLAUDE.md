@@ -12,7 +12,7 @@ Dagster-based data pipeline for orchestrating ingestion (Go CLI via Docker) and 
 uv sync                              # Install dependencies
 uv run dg dev                        # Start Dagster dev server (localhost:3000)
 uv run pytest                        # Run all tests
-uv run pytest tests/test_resources.py # Run single test file
+uv run pytest tests/unit/test_resources.py # Run single test file
 uv run pytest -k "test_schedule"     # Run tests matching pattern
 
 # GRIB validation tool
@@ -36,7 +36,7 @@ src/pipeline_python/
 │   ├── resources.py        # DockerIngestionClient, ObjectStorageResource, PostgresCatalogResource
 │   ├── schedules.py        # cams_daily_schedule (08:00 UTC daily)
 │   ├── partitions.py       # Daily partitions (start 2026-01-01, UTC, end_offset=1)
-│   └── models.py           # RawFileRecord, CuratedFileRecord (frozen dataclasses)
+│   └── models.py           # RawFileRecord, CuratedDataRecord (frozen dataclasses)
 └── grib2/
     ├── __init__.py          # Imports pdt40 FIRST, then grib2io (order matters)
     ├── pdt40.py             # Monkey-patch for PDT 4.40 support
@@ -63,16 +63,15 @@ transform_cams_data (Python)
 ### Resources
 
 - **DockerIngestionClient** — Spawns Go ingestion container as Docker sibling (not nested). Forwards `ADS_*` and `MINIO_*` env vars. Network: `jackfruit_jackfruit`.
-- **ObjectStorageResource** — boto3-based S3/MinIO client. Methods: `download_raw()`, `upload_curated()`, `key_exists()`. grib2io requires local files, so raw data is downloaded to temp files.
-- **PostgresCatalogResource** — psycopg3 client with context manager for connection reuse. `insert_raw_file()` uses `ON CONFLICT DO NOTHING`, `insert_curated_file()` uses `ON CONFLICT DO UPDATE`.
+- **ObjectStorageResource** — boto3-based S3/MinIO client. Methods: `download_raw()`. grib2io requires local files, so raw data is downloaded to temp files.
+- **PostgresCatalogResource** — psycopg3 client with context manager for connection reuse. `insert_raw_file()` uses `ON CONFLICT DO NOTHING`, `insert_curated_data()` uses `ON CONFLICT DO UPDATE`.
 
 ### Grid Storage Abstraction
 
-Grid storage uses the `GridStoreResource` abstract base class (`src/pipeline_python/storage/grid_store.py`):
-- `ClickHouseGridStore` (`storage/clickhouse.py`) — production Dagster resource, registered as `"grid_store"`
-- `InMemoryGridStore` (`storage/memory.py`) — for unit testing (no external dependencies)
+Grid storage uses the `GridStore` abstract base class (`src/pipeline_python/storage/grid_store.py`):
+- `ClickHouseGridStore` (`storage/clickhouse_grid_store.py`) — production Dagster resource, registered as `"grid_store"`
 
-The `GridStoreResource` extends `dg.ConfigurableResource` (not a Protocol — Protocols can't carry Dagster config). Transform code depends on the abstract base class, not ClickHouse directly. See [ADR 001](../docs/ADR/001-grid-data-storage.md) for storage decision context.
+`GridStore` extends `dg.ConfigurableResource` (not a Protocol — Protocols can't carry Dagster config). Transform code depends on the abstract base class, not ClickHouse directly. See [ADR 001](../docs/ADR/001-grid-data-storage.md) for storage decision context.
 
 ### GRIB2 PDT 4.40 Patch
 
@@ -114,7 +113,7 @@ result = dg.materialize(
 assert result.success
 ```
 
-Helper functions (`_extract_message_metadata`, `_write_curated_grib`) are tested directly with mock GRIB messages.
+Integration tests in `tests/integration/` test the full asset pipeline against real infrastructure.
 
 ## Conventions
 

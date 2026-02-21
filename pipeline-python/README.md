@@ -6,11 +6,10 @@ Dagster-based data pipeline for ingestion orchestration and transformation.
 
 ## Grid Storage Abstraction
 
-Transformation code uses a `GridStore` Protocol (`src/pipeline_python/storage/protocol.py`):
+Transformation code uses a `GridStore` ABC (`src/pipeline_python/storage/grid_store.py`):
 - `ClickHouseGridStore` — production implementation
-- `InMemoryGridStore` — for unit testing (no external dependencies)
 
-This abstraction enables testing without ClickHouse and future storage backend swaps. See [ADR 001](../docs/ADR/001-grid-data-storage.md) for the storage decision.
+This abstraction enables future storage backend swaps. See [ADR 001](../docs/ADR/001-grid-data-storage.md) for the storage decision.
 
 ## Getting started
 
@@ -71,6 +70,47 @@ docker compose run dagster uv run scripts/grib_sanity_check.py data/file.grib
 The script includes a monkey-patch for PDT 4.40 (Atmospheric Chemical Constituents) which `grib2io` 2.6.0 doesn't support natively. CAMS air quality data uses this template.
 
 > **Note:** GRIB files are read for transformation, but output goes to ClickHouse (not GRIB2 files).
+
+## Testing
+
+### Structure
+
+```
+tests/
+  unit/          # no external deps
+  integration/   # requires Docker infra
+  fixtures/      # real GRIB file for integration tests
+  .env.test      # test-specific env vars (localhost endpoints, isolated namespaces)
+```
+
+### Running
+
+```bash
+uv run pytest                  # everything
+uv run pytest -m unit          # unit only
+uv run pytest -m integration   # integration only
+uv run pytest -m integration -s  # integration with stdout (good for debugger)
+```
+
+### Integration test infra
+
+Needs the docker-compose stack running (`docker-compose up -d`). Tests use isolated namespaces so they don't touch production data:
+- MinIO bucket: `jackfruit-raw-test`
+- Postgres schema: `test_catalog`
+- ClickHouse DB: `jackfruit_test`
+
+Session-scoped fixtures in `tests/integration/conftest.py` create these on first run. Per-test autouse fixtures truncate them before each test. ClickHouse must be reachable on `localhost:8123` or integration tests will fail.
+
+The `.env.test` file is loaded by conftest before anything else — no env vars needed in the run config (useful for GoLand debug runs).
+
+### PyCharm debugger
+
+`Run > Edit Configurations > + > pytest`, set:
+- Script path: `tests/integration/test_transform_cams.py`
+- Additional args: `-m integration -s`
+- Working dir: `pipeline-python/`
+
+Set breakpoints anywhere in test or implementation code, run with the bug icon.
 
 ## Learn more
 

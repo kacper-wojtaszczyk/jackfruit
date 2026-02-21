@@ -18,7 +18,7 @@ class RawFileRecord:
 
 @dataclass(frozen=True)
 class CuratedDataRecord:
-    """Row model for catalog.curated_files."""
+    """Row model for catalog.curated_data."""
 
     id: UUID
     raw_file_id: UUID

@@ -31,11 +31,10 @@ Curated output: ClickHouse `grid_data` table
 </storage_rules>
 
 <grid_storage_abstraction>
-Grid storage is accessed via the `GridStore` Protocol (`src/pipeline_python/storage/protocol.py`):
-- `ClickHouseGridStore` — production implementation
-- `InMemoryGridStore` — for unit testing
+Grid storage is accessed via the `GridStore` ABC (`src/pipeline_python/storage/grid_store.py`):
+- `ClickHouseGridStore` (`storage/clickhouse_grid_store.py`) — production implementation
 
-Transform code should depend on `GridStore`, not ClickHouse directly. This enables testing without external dependencies and future storage swaps.
+Transform code should depend on `GridStore`, not ClickHouse directly. This enables future storage swaps.
 
 See [ADR 001](docs/ADR/001-grid-data-storage.md) for storage decision context.
 </grid_storage_abstraction>
@@ -63,7 +62,7 @@ Lineage tracked in Postgres `catalog.curated_data` table.
 
 <grib2io>
 CAMS air quality data uses PDT 4.40 (Atmospheric Chemical Constituents) which grib2io 2.6.0 doesn't support.
-A monkey-patch in `scripts/grib_sanity_check.py` adds this support — extract to shared module if needed in ETL.
+The monkey-patch lives in `src/pipeline_python/grib2/pdt40.py` — imported via `grib2/__init__.py` before grib2io.
 
 Note: grib2io is used for READING raw GRIB files only. Output goes to ClickHouse, not GRIB2 files.
 </grib2io>
