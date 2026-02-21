@@ -99,7 +99,7 @@ Needs the docker-compose stack running (`docker-compose up -d`). Tests use isola
 - Postgres schema: `test_catalog`
 - ClickHouse DB: `jackfruit_test`
 
-Session-scoped fixtures in `tests/integration/conftest.py` create these on first run. Per-test autouse fixtures truncate them before each test. Tests are auto-skipped if ClickHouse isn't reachable on `localhost:8123`.
+Session-scoped fixtures in `tests/integration/conftest.py` create these on first run. Per-test autouse fixtures truncate them before each test. ClickHouse must be reachable on `localhost:8123` or integration tests will fail.
 
 The `.env.test` file is loaded by conftest before anything else — no env vars needed in the run config (useful for GoLand debug runs).
 
