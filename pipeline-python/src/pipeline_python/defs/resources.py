@@ -1,28 +1,10 @@
 """
-Dagster resources for ingestion execution and object storage.
+Dagster resources for pipeline execution.
 
-This module provides:
-1. DockerIngestionClient: Run Go ingestion container via Dagster Pipes
-2. ObjectStorageResource: S3/MinIO client for raw and curated buckets
-
-INGESTION EXECUTION:
-The Go ingestion container uses Dagster Pipes in "external process" mode — it
-launches the container, waits for exit, and captures logs. No bidirectional comms.
-
-DOCKER SIBLING PATTERN:
-When Dagster runs inside a container with Docker socket mounted, PipesDockerClient
-spawns containers as *siblings* on the host Docker daemon (not nested). We must
-explicitly configure:
-- Network: attach to 'jackfruit' network so container can reach MinIO
-- Env vars: pass through from Dagster container's environment
-
-OBJECT STORAGE:
-ObjectStorageResource provides download/upload methods optimized for large GRIB
-files. Uses boto3 with local temp files (grib2io requires local file access).
-
-DEPRECATION NOTICE:
-The Go-based ingestion will be replaced with Python-native ingestion using cdsapi.
-See docs/layer-1-ingestion.md for details.
+Resources defined here:
+- DockerIngestionClient: run Go ingestion container via Dagster Pipes
+- ObjectStorageResource: S3/MinIO client for the raw data bucket
+- PostgresCatalogResource: Postgres metadata catalog (raw files, curated data lineage)
 """
 import os
 from pathlib import Path

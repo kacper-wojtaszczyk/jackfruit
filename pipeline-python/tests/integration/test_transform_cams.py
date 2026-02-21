@@ -47,7 +47,7 @@ def _arrange_raw_file(s3_client, catalog) -> None:
         id=uuid.UUID(RUN_ID),
         source="ads",
         dataset=DATASET,
-        date=datetime.datetime.fromisoformat(PARTITION),
+        date=datetime.date.fromisoformat(PARTITION),
         s3_key=RAW_KEY,
     ))
 
@@ -92,7 +92,7 @@ def test_transform_fails_on_missing_raw_file(storage, catalog, grid_store):
         id=uuid.UUID(RUN_ID),
         source="ads",
         dataset=DATASET,
-        date=datetime.datetime.fromisoformat(PARTITION),
+        date=datetime.date.fromisoformat(PARTITION),
         s3_key=RAW_KEY,
     ))
     instance = dg.DagsterInstance.ephemeral()

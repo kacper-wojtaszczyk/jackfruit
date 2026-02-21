@@ -4,15 +4,15 @@ Read raw data, normalize schemas, compute quality flags, and write to ClickHouse
 
 ## Status
 
-| Component | Status |
-|-----------|--------|
-| Dagster project setup | ✅ Done |
-| Dagster asset invoking Go ingestion | ✅ Done |
-| CAMS transformation asset | 🔄 Needs migration to ClickHouse |
-| Curated storage | 🔄 Migrating: GRIB2 files → ClickHouse |
-| Error handling | ✅ Fail-fast |
-| Daily schedule (08:00 UTC) | ✅ Done |
-| Metadata storage | ✅ Postgres catalog |
+| Component                           | Status              |
+|-------------------------------------|---------------------|
+| Dagster project setup               | ✅ Done              |
+| Dagster asset invoking Go ingestion | ✅ Done              |
+| CAMS transformation asset           | ✅ Done              |
+| Curated storage                     | ✅ Done (ClickHouse) |
+| Error handling                      | ✅ Fail-fast         |
+| Daily schedule (08:00 UTC)          | ✅ Done              |
+| Metadata storage                    | ✅ Postgres catalog  |
 
 ## Responsibilities
 
@@ -94,9 +94,9 @@ All transformations are recorded in the Postgres metadata catalog (`catalog` sch
 **Transformation** writes to `catalog.curated_data`:
 - Record includes variable, source, timestamp, and `raw_file_id` for lineage
 - Uses `ON CONFLICT DO UPDATE` for reprocessing (latest metadata wins)
-- Relationship to ClickHouse rows: TBD (see task 06)
+- Linked to ClickHouse rows via `catalog_id` column (each CH row references a `curated_data` record)
 
-**Connection reuse:** Transform assets use resources as context managers to reuse database connections across multiple inserts (reduces connection overhead).
+**Connection reuse:** Transform assets use resources with lazy connections (Dagster calls teardown_after_execution) to reuse database connections across multiple inserts (reduces connection overhead).
 
 **Error handling:** Catalog writes are non-fatal. If a catalog insert fails, the asset logs a warning but continues successfully. ClickHouse is the source of truth for grid data; the catalog is a derived lineage index.
 
@@ -116,15 +116,27 @@ All transformations are recorded in the Postgres metadata catalog (`catalog` sch
 
 **Example insert (columnar format):**
 ```python
-# GridData.to_columnar() returns dict of numpy arrays — no Python loops
-columnar = grid.to_columnar()
-client.insert('grid_data',
-    data=list(columnar.values()),
-    column_names=['variable', 'timestamp', 'lat', 'lon', 'value', 'unit', 'catalog_id']
+# insert_grid() flattens 2D arrays to 1D and inserts column-oriented — no Python loops
+grid_store.insert_grid(grid)
+
+# Under the hood (ClickHouseGridStore.insert_grid):
+client.insert(
+    table="grid_data",
+    column_names=["variable", "timestamp", "lat", "lon", "value", "unit", "catalog_id"],
+    column_oriented=True,
+    data=[
+        np.full(grid.row_count, grid.variable, dtype=object),
+        np.full(grid.row_count, grid.timestamp, dtype=object),
+        grid.lats.ravel().astype(np.float32),
+        grid.lons.ravel().astype(np.float32),
+        grid.values.ravel().astype(np.float32),
+        np.full(grid.row_count, grid.unit, dtype=object),
+        np.full(grid.row_count, grid.catalog_id, dtype=object),
+    ],
 )
 ```
 
-**Schema:** See task 01 for ClickHouse schema design. `inserted_at` is auto-filled by `DEFAULT now64(3)`.
+**Schema:** `inserted_at` is auto-filled by `DEFAULT now64(3)`.
 
 ### Design Principles
 
@@ -145,38 +157,38 @@ See [ADR 001](ADR/001-grid-data-storage.md) for the full decision record.
 
 ### Grid Storage Abstraction
 
-The transformation code depends on a `GridStoreResource` abstract base class, not ClickHouse directly. The resource is injected by Dagster:
+The transformation code depends on the `GridStore` abstract base class, not ClickHouse directly. The resource is injected by Dagster:
 
 ```python
-from pipeline_python.storage.grid_store import GridStoreResource
+from pipeline_python.storage import GridStore
 
-# Asset receives GridStoreResource — doesn't know it's ClickHouse
+# Asset receives GridStore — doesn't know it's ClickHouse
 @dg.asset(...)
 def transform_cams_data(
     context, storage, catalog,
-    grid_store: GridStoreResource,  # Abstract type
+    grid_store: GridStore,  # Abstract type
 ):
-    grids = _extract_grids_from_grib(raw_path)
-    grid_store.insert_grids(grids)
+    for grid in _extract_grids_from_grib(raw_path):
+        grid_store.insert_grid(grid)
 ```
 
 This abstraction enables:
-- Unit testing with `InMemoryGridStore` (no ClickHouse needed)
+- Unit testing with a stub `GridStore` subclass (no ClickHouse needed)
 - Future storage backend swaps without changing pipeline logic
-- Dagster resource lifecycle management (connection pooling, teardown)
+- Dagster resource lifecycle management (lazy connection, teardown)
 
-See [Task 02](guides/tasks/02-clickhouse-python-client.md) for resource design and [Task 04](guides/tasks/04-transform-insert-clickhouse.md) for insertion details.
+See [ADR 001](ADR/001-grid-data-storage.md) for the storage decision record.
 
 ## Multi-Resolution Sources
 
 Different sources have different temporal resolutions. Each source has a defined granularity.
 
-| Source | Granularity | Resolution |
-|--------|-------------|------------|
-| CAMS | Hourly | 1 hour |
-| ERA5 | Hourly | 1 hour |
-| GloFAS | Daily | 1 day |
-| CGLS (NDVI) | Weekly | ISO week |
+| Source      | Granularity | Resolution |
+|-------------|-------------|------------|
+| CAMS        | Hourly      | 1 hour     |
+| ERA5        | Hourly      | 1 hour     |
+| GloFAS      | Daily       | 1 day      |
+| CGLS (NDVI) | Weekly      | ISO week   |
 
 **Granularity handling:** Serving layer snaps query timestamps to the correct resolution before querying ClickHouse.
 
@@ -195,7 +207,7 @@ All transformations are recorded in the Postgres metadata catalog (`catalog` sch
 - `curated_data`: `ON CONFLICT DO UPDATE` (reprocessing updates metadata)
 
 **Connection reuse:**
-Transform assets use resources as context managers to reuse database connections across multiple inserts.
+Transform assets use resources with lazy connections (Dagster calls teardown_after_execution) to reuse database connections across multiple inserts.
 
 ### Dagster Metadata
 
@@ -261,9 +273,9 @@ To materialize data for specific dates (e.g., historical backfill):
 
 ## Processing Libraries
 
-| Purpose | Library |
-|---------|---------|
-| GRIB2 reading | [`grib2io`](https://github.com/NOAA-MDL/grib2io) — NOAA's GRIB2 read/write library |
+| Purpose           | Library                                                                                           |
+|-------------------|---------------------------------------------------------------------------------------------------|
+| GRIB2 reading     | [`grib2io`](https://github.com/NOAA-MDL/grib2io) — NOAA's GRIB2 read/write library                |
 | ClickHouse client | [`clickhouse-connect`](https://github.com/ClickHouse/clickhouse-connect) — Official Python driver |
 
 **Why grib2io:**
@@ -284,7 +296,7 @@ Transformation jobs must be idempotent:
 - Re-running produces identical output in ClickHouse
 - Can delete ClickHouse data, re-run ETL, get same results
 
-**Implementation:** Use ClickHouse's `ReplacingMergeTree` or explicit delete-before-insert pattern. TBD in schema design.
+**Implementation:** Uses ClickHouse's `ReplacingMergeTree` with `FINAL` keyword for deduplication on read.
 
 ---
 

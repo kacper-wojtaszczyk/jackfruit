@@ -99,6 +99,22 @@ def transform_cams_data(
     catalog: PostgresCatalogResource,
     grid_store: GridStore,
 ) -> dg.MaterializeResult:
+    """
+    Transform raw CAMS GRIB data into curated grid rows in ClickHouse.
+
+    Reads upstream ingestion metadata to locate the raw file, downloads it from MinIO,
+    extracts grid data per GRIB message, inserts rows into ClickHouse, and records
+    lineage in the Postgres catalog.
+
+    Args:
+        context: Dagster execution context (provides partition key and upstream metadata)
+        storage: S3/MinIO client for downloading raw files
+        catalog: Postgres catalog for lineage recording
+        grid_store: Grid storage backend (ClickHouse in production)
+
+    Returns:
+        MaterializeResult with run_id, date, variables_processed, and inserted_rows
+    """
     partition_date = context.partition_key
     upstream_key = ingest_cams_data.key
     materialization_event = context.instance.get_latest_materialization_event(
@@ -126,7 +142,7 @@ def transform_cams_data(
             storage.download_raw(raw_key, tmp_raw_path)
         except Exception as e:
             raise dg.Failure(f"Failed to download {raw_key}: {e}")
-        with grib2io.open(tmp_raw_path) as grib_file:
+        with grib2io.open(str(tmp_raw_path)) as grib_file:
             for message in grib_file:
                 catalog_id = uuid.uuid7()
                 constituent_code = message.atmosphericChemicalConstituentType.value

@@ -14,7 +14,7 @@ Environmental data platform. Ingests, transforms, and serves weather, air qualit
 - [x] CAMS transformation asset — needs migration to ClickHouse
 - [x] Metadata DB (Postgres)
 - [x] ClickHouse setup
-- [ ] Transform to ClickHouse — in progress
+- [x] Transform to ClickHouse
 - [ ] Serving API — planned
 
 ## Quick Start
@@ -50,17 +50,17 @@ docker-compose up -d
 └──────────────┘     └──────────────┘     └──────────────┘
 ```
 
-| Component | Tech | Status |
-|-----------|------|--------|
-| **Infrastructure** |||
-| Object Storage | MinIO / S3 | ✅ Active (raw only) |
-| Metadata DB | Postgres | ✅ Active |
-| Grid Data Store | ClickHouse | ⏳ In Progress |
-| Orchestration | Dagster | ✅ Active |
-| **Processing Layers** |||
-| L1: Ingestion | Go CLI | ✅ Active (CAMS) |
-| L2: Transformation | Python + Dagster | 🔄 Migrating to ClickHouse |
-| L3: Serving | Go | ⏳ Planned |
+| Component             | Tech             | Status              |
+|-----------------------|------------------|---------------------|
+| **Infrastructure**    |                  |                     |
+| Object Storage        | MinIO / S3       | ✅ Active (raw only) |
+| Metadata DB           | Postgres         | ✅ Active            |
+| Grid Data Store       | ClickHouse       | ✅ Active            |
+| Orchestration         | Dagster          | ✅ Active            |
+| **Processing Layers** |                  |                     |
+| L1: Ingestion         | Go CLI           | ✅ Active (CAMS)     |
+| L2: Transformation    | Python + Dagster | ✅ Active (CAMS)     |
+| L3: Serving           | Go               | ⏳ Planned           |
 
 See `docs/` for details. Key decisions are documented in `docs/ADR/`.
 
@@ -76,11 +76,11 @@ jackfruit/
 
 ## Data Sources (Current Targets)
 
-| Source | Type | Status                  |
-|--------|------|-------------------------|
-| Copernicus CAMS | Air quality | ✅ Implemented ingestion |
-| Copernicus GloFAS | Hydrology | ⏳ Next                  |
-| ERA5 (public S3) | Weather | ⏳ ETL target            |
+| Source            | Type        | Status                  |
+|-------------------|-------------|-------------------------|
+| Copernicus CAMS   | Air quality | ✅ Implemented ingestion |
+| Copernicus GloFAS | Hydrology   | ⏳ Next                  |
+| ERA5 (public S3)  | Weather     | ⏳ ETL target            |
 
 ## License
 
