@@ -205,3 +205,4 @@ __marimo__/
 # Dagster
 .tmp*
 /data/
+/.idea/
