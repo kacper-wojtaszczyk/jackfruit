@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"serving-go/internal/api"
 	"serving-go/internal/config"
 )
 
@@ -24,7 +26,7 @@ func main() {
 
 	// Setup HTTP routes
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", handleHealth)
+	api.NewHandler().RegisterRoutes(mux)
 
 	// Create server
 	server := &http.Server{
@@ -38,7 +40,7 @@ func main() {
 	// Start server in goroutine
 	go func() {
 		slog.Info("starting server", "port", cfg.Port)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("server error", "error", err)
 			os.Exit(1)
 		}
@@ -61,9 +63,4 @@ func main() {
 	}
 
 	slog.Info("server stopped")
-}
-
-// handleHealth returns 204 No Content for liveness checks.
-func handleHealth(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNoContent)
 }

@@ -14,7 +14,7 @@ go build -o bin/serving ./cmd/serving  # Build binary
 go test ./...                     # Run tests
 ```
 
-No external dependencies yet — uses only Go standard library. Go 1.25.
+No external dependencies yet — uses only Go standard library. Go 1.26.
 
 ## Architecture
 
@@ -79,14 +79,18 @@ Library: `github.com/ClickHouse/clickhouse-go/v2` (pure Go, no CGO)
 
 Nearest-neighbor via:
 ```sql
-SELECT value, lat, lon
-FROM grid_data
-WHERE variable = ? AND source = ? AND timestamp = ?
-ORDER BY greatCircleDistance(lat, lon, ?, ?)
+SELECT value, unit, lat, lon, catalog_id, timestamp
+FROM grid_data FINAL
+WHERE variable = @variable
+  AND timestamp = (
+    SELECT max(timestamp) FROM grid_data FINAL
+    WHERE variable = @variable AND timestamp <= @timestamp
+  )
+ORDER BY greatCircleDistance(lat, lon, @lat, @lon)
 LIMIT 1
 ```
 
-One query per variable, fetched in parallel. Source is hardcoded to CAMS for MVP.
+One query per variable, fetched in parallel. **Note:** `grid_data` has no `source` column — source lives in Postgres `catalog.raw_files`, joined via `catalog_id`.
 
 ### Postgres Lineage (Optional)
 
