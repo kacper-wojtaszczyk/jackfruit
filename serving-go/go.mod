@@ -1,4 +1,4 @@
-module serving-go
+module github.com/kacper-wojtaszczyk/jackfruit/serving-go
 
 go 1.26
 

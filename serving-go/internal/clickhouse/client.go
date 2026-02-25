@@ -11,7 +11,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 
-	"serving-go/internal/domain"
+	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/domain"
 )
 
 type Client struct {
@@ -20,7 +20,7 @@ type Client struct {
 
 type Config struct {
 	Host     string
-	Port     int
+	Port     string
 	User     string
 	Password string
 	Database string
@@ -28,7 +28,7 @@ type Config struct {
 
 func NewClient(cfg Config, logger *slog.Logger) (*Client, error) {
 	conn, err := clickhouse.Open(&clickhouse.Options{
-		Addr: []string{fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)},
+		Addr: []string{fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)},
 		Auth: clickhouse.Auth{
 			Database: cfg.Database,
 			Username: cfg.User,
@@ -48,7 +48,7 @@ func NewClient(cfg Config, logger *slog.Logger) (*Client, error) {
 		return nil, fmt.Errorf("ping clickhouse: %w", err)
 	}
 
-	return &Client{conn: conn}, err
+	return &Client{conn: conn}, nil
 }
 
 func (c *Client) GetValue(

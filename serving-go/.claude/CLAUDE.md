@@ -86,7 +86,7 @@ WHERE variable = @variable
     SELECT max(timestamp) FROM grid_data FINAL
     WHERE variable = @variable AND timestamp <= @timestamp
   )
-ORDER BY greatCircleDistance(lat, lon, @lat, @lon)
+ORDER BY (lat - @lat) * (lat - @lat) + (lon - @lon) * (lon - @lon)
 LIMIT 1
 ```
 

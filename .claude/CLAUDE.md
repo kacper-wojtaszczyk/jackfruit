@@ -93,7 +93,7 @@ External APIs (Copernicus ADS, etc.)
 - Raw key pattern: `{source}/{dataset}/{YYYY-MM-DD}/{run_id}.{ext}`
 - ClickHouse stores curated grid data as rows: (variable, timestamp, lat, lon, value, unit, catalog_id)
 - **Grid storage is abstracted** — both Python (`GridStore` abstract base class in `storage/grid_store.py`) and Go (`GridStore` interface) depend on abstractions, not ClickHouse directly. The Python `ClickHouseGridStore` is registered as a Dagster resource (`"grid_store"`). See [ADR 001](docs/ADR/001-grid-data-storage.md).
-- Serving API queries ClickHouse with nearest-neighbor: `ORDER BY greatCircleDistance(...) LIMIT 1` — **no `source` column in `grid_data`**; source lives in Postgres `catalog.raw_files` only (joined via `catalog_id`)
+- Serving API queries ClickHouse with nearest-neighbor: `ORDER BY (lat - @lat)*(lat - @lat) + (lon - @lon)*(lon - @lon) LIMIT 1` (Euclidean approximation — accurate enough for nearby grid points, could upgrade to `greatCircleDistance()` in the future) — **no `source` column in `grid_data`**; source lives in Postgres `catalog.raw_files` only (joined via `catalog_id`)
 - One query per variable, fetched in parallel via goroutines + errgroup
 - CAMS GRIB data uses PDT 4.40 which requires a monkey-patch in `pipeline-python/src/pipeline_python/grib2/pdt40.py`
 - `grib2io` pinned to 2.6.0 (2.7.0 has a circular import bug)

@@ -85,9 +85,11 @@ SELECT value, unit, lat, lon, catalog_id
 FROM grid_data FINAL
 WHERE variable = 'pm2p5'
   AND timestamp = '2025-03-11 14:00:00'
-ORDER BY greatCircleDistance(lat, lon, 52.52, 13.40)
+ORDER BY (lat - 52.52) * (lat - 52.52) + (lon - 13.40) * (lon - 13.40)
 LIMIT 1
 ```
+
+> **Note:** The implementation uses Euclidean distance rather than `greatCircleDistance()`. For the grid densities and distances involved (nearest neighbor within a few degrees), the approximation is accurate enough. Could be upgraded to `greatCircleDistance()` in the future if polar accuracy becomes a concern.
 
 Note: `source` is not in the CH `grid_data` table — it lives in Postgres `catalog.raw_files`. The serving layer uses `catalog_id` from the CH result to look up source/dataset lineage in Postgres.
 

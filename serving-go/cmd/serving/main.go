@@ -10,8 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"serving-go/internal/api"
-	"serving-go/internal/config"
+	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/api"
+	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/clickhouse"
+	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/config"
 )
 
 func main() {
@@ -23,6 +24,21 @@ func main() {
 
 	// Load configuration
 	cfg := config.Load()
+
+	// Initialize ClickHouse client
+	chClient, err := clickhouse.NewClient(clickhouse.Config{
+		Host:     cfg.ClickHouseHost,
+		Port:     cfg.ClickHousePort,
+		User:     cfg.ClickHouseUser,
+		Password: cfg.ClickHousePassword,
+		Database: cfg.ClickHouseDatabase,
+	}, logger.With("component", "clickhouse"))
+
+	if err != nil {
+		slog.Error("failed to connect to clickhouse", "error", err)
+		os.Exit(1)
+	}
+	defer chClient.Close()
 
 	// Setup HTTP routes
 	mux := http.NewServeMux()

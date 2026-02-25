@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"serving-go/internal/api"
+	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/api"
 )
 
 func TestHealthHandler(t *testing.T) {

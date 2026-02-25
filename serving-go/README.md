@@ -176,7 +176,7 @@ FROM grid_data
 WHERE variable = 'pm2p5'
   AND source = 'cams'
   AND timestamp = '2025-03-11 14:00:00'
-ORDER BY greatCircleDistance(lat, lon, $4, $5)
+ORDER BY (lat - $4) * (lat - $4) + (lon - $5) * (lon - $5)
 LIMIT 1
 ```
 
@@ -207,7 +207,7 @@ FROM grid_data
 WHERE variable = $1
   AND source = $2
   AND timestamp = $3
-ORDER BY greatCircleDistance(lat, lon, $4, $5)
+ORDER BY (lat - $4) * (lat - $4) + (lon - $5) * (lon - $5)
 LIMIT 1
 ```
 
