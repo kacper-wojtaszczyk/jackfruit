@@ -26,7 +26,7 @@ func Load() *Config {
 	return &Config{
 		Port:               getEnv("PORT", "8080"),
 		ClickHouseHost:     getEnv("CLICKHOUSE_HOST", "localhost"),
-		ClickHousePort:     getEnv("CLICKHOUSE_PORT", "9000"),
+		ClickHousePort:     getEnv("CLICKHOUSE_NATIVE_PORT", "9000"),
 		ClickHouseUser:     getEnv("CLICKHOUSE_USER", "default"),
 		ClickHousePassword: getEnv("CLICKHOUSE_PASSWORD", ""),
 		ClickHouseDatabase: getEnv("CLICKHOUSE_DATABASE", "jackfruit"),
