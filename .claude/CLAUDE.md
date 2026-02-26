@@ -51,7 +51,9 @@ make run ARGS="--dataset=... --date=... --run-id=..."
 cd pipeline-python
 uv sync                           # Install dependencies
 uv run dagster dev                # Start Dagster dev server
-uv run pytest                     # Run tests
+make test                         # Run all tests
+make test-unit                    # Unit tests only
+make test-integration             # Integration tests (requires real infra)
 ```
 
 Package manager is **uv** (not pip). Dependencies in `pyproject.toml`, lockfile is `uv.lock`.

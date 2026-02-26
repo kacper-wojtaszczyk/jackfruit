@@ -63,7 +63,7 @@ def test_transform_inserts_grid_data_to_clickhouse(s3_client, ch_client, storage
     transform_cams_data(_make_context(instance), storage, catalog, grid_store)
 
     result = ch_client.query(
-        "SELECT variable, count() FROM jackfruit_test.grid_data FINAL GROUP BY variable"
+        "SELECT variable, count() FROM grid_data FINAL GROUP BY variable"
     )
     rows = {r[0]: r[1] for r in result.result_rows}
     assert len(rows) == 2
@@ -120,7 +120,7 @@ def test_transform_is_idempotent(s3_client, ch_client, storage, grid_store, cata
     run_transform()
 
     result = ch_client.query(
-        "SELECT variable, count() FROM jackfruit_test.grid_data FINAL GROUP BY variable"
+        "SELECT variable, count() FROM grid_data FINAL GROUP BY variable"
     )
     rows = {r[0]: r[1] for r in result.result_rows}
     assert rows["pm2p5"] == 1176000
@@ -139,7 +139,7 @@ def test_curated_lineage_recorded_in_postgres(s3_client, storage, grid_store, ca
     transform_cams_data(_make_context(instance), storage, catalog, grid_store)
 
     rows = pg_connection.execute(
-        "SELECT variable FROM test_catalog.curated_data ORDER BY variable"
+        "SELECT variable FROM catalog.curated_data ORDER BY variable"
     ).fetchall()
     variables = [r[0] for r in rows]
     assert len(variables) == 8  # 2 variables × 4 timestamps
@@ -156,11 +156,11 @@ def test_catalog_id_links_ch_and_pg(s3_client, ch_client, storage, grid_store, c
 
     ch_ids = {
         str(r[0])
-        for r in ch_client.query("SELECT DISTINCT catalog_id FROM jackfruit_test.grid_data").result_rows
+        for r in ch_client.query("SELECT DISTINCT catalog_id FROM grid_data").result_rows
     }
     pg_ids = {
         r[0]
-        for r in pg_connection.execute("SELECT id::text FROM test_catalog.curated_data").fetchall()
+        for r in pg_connection.execute("SELECT id::text FROM catalog.curated_data").fetchall()
     }
 
     assert ch_ids == pg_ids
@@ -212,5 +212,5 @@ def test_transform_metadata_accuracy(s3_client, ch_client, storage, grid_store, 
     assert set(result.metadata["variables_processed"]) == {"pm2p5", "pm10"}
     assert result.metadata["inserted_rows"] == 1176000 * 2
 
-    ch_total = ch_client.query("SELECT count() FROM jackfruit_test.grid_data").result_rows[0][0]
+    ch_total = ch_client.query("SELECT count() FROM grid_data").result_rows[0][0]
     assert ch_total == result.metadata["inserted_rows"]

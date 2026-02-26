@@ -11,7 +11,9 @@ Dagster-based data pipeline for orchestrating ingestion (Go CLI via Docker) and 
 ```bash
 uv sync                              # Install dependencies
 uv run dg dev                        # Start Dagster dev server (localhost:3000)
-uv run pytest                        # Run all tests
+make test                            # Run all tests
+make test-unit                       # Unit tests only
+make test-integration                # Integration tests only (requires real infra)
 uv run pytest tests/unit/test_resources.py # Run single test file
 uv run pytest -k "test_schedule"     # Run tests matching pattern
 

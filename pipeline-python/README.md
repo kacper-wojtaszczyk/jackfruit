@@ -80,7 +80,7 @@ tests/
   unit/          # no external deps
   integration/   # requires Docker infra
   fixtures/      # real GRIB file for integration tests
-  .env.test      # test-specific env vars (localhost endpoints, isolated namespaces)
+  .env.test      # test-specific env vars (localhost endpoints, production schemas)
 ```
 
 ### Running
@@ -94,12 +94,7 @@ uv run pytest -m integration -s  # integration with stdout (good for debugger)
 
 ### Integration test infra
 
-Needs the docker-compose stack running (`docker-compose up -d`). Tests use isolated namespaces so they don't touch production data:
-- MinIO bucket: `jackfruit-raw-test`
-- Postgres schema: `test_catalog`
-- ClickHouse DB: `jackfruit_test`
-
-Session-scoped fixtures in `tests/integration/conftest.py` create these on first run. Per-test autouse fixtures truncate them before each test. ClickHouse must be reachable on `localhost:8123` or integration tests will fail.
+Needs the docker-compose stack running (`docker-compose up -d`). Tests use the same production schemas created by docker-compose init scripts. Per-test autouse fixtures truncate tables before each test. ClickHouse must be reachable on `localhost:8123` or integration tests will fail.
 
 The `.env.test` file is loaded by conftest before anything else — no env vars needed in the run config (useful for GoLand debug runs).
 
