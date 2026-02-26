@@ -38,7 +38,7 @@ Design a custom binary format optimized for point queries with JSON sidecar for 
 Store grid data as rows in ClickHouse: `(variable, timestamp, lat, lon, value, unit, catalog_id, inserted_at)`.
 
 - ✅ SQL queries replace complex file parsing
-- ✅ Built-in nearest-neighbor via `ORDER BY greatCircleDistance(...) LIMIT 1`
+- ✅ Built-in nearest-neighbor via `ORDER BY distance LIMIT 1` (Euclidean approximation; could upgrade to `greatCircleDistance()` for polar accuracy)
 - ✅ Mature Go driver (`clickhouse-go/v2`) — pure Go, no CGO
 - ✅ Mature Python driver (`clickhouse-connect`)
 - ✅ Handles compression, indexing, partitioning automatically

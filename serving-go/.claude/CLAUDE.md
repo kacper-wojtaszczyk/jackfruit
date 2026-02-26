@@ -4,47 +4,53 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Go HTTP service for querying environmental data from the Jackfruit platform. Queries ClickHouse for grid values at coordinates and optionally Postgres for lineage metadata. Currently in early development (health endpoint only).
+Go HTTP service for querying environmental data from the Jackfruit platform. Queries ClickHouse for grid values at coordinates and optionally Postgres for lineage metadata. ClickHouse client and GridStore abstraction are implemented; environmental query endpoint is next.
 
 ## Commands
 
 ```bash
 go run ./cmd/serving              # Start server (default port 8080)
 go build -o bin/serving ./cmd/serving  # Build binary
-go test ./...                     # Run tests
+make test                         # All tests (requires ClickHouse for integration)
+make test-short                   # Unit tests only (no infra needed)
 ```
 
-No external dependencies yet — uses only Go standard library. Go 1.25.
+Go 1.26. Key dependencies: `clickhouse-go/v2` (pure Go, no CGO), `google/uuid`.
 
 ## Architecture
 
-### Current State
-
-Minimal skeleton with health endpoint. Entry point: `cmd/serving/main.go`.
+### Current Structure
 
 ```
 serving-go/
-├── cmd/serving/main.go       # Server bootstrap, graceful shutdown, /health handler
-└── internal/config/config.go # PORT env var (default "8080")
+├── cmd/serving/main.go                        # Server bootstrap, graceful shutdown, CH wiring
+├── internal/
+│   ├── api/
+│   │   ├── handler.go                         # HTTP handlers (/health)
+│   │   └── handler_test.go
+│   ├── clickhouse/
+│   │   ├── client.go                          # GridStore implementation (nearest-neighbor query)
+│   │   └── client_integration_test.go         # Integration tests (requires running ClickHouse)
+│   ├── config/
+│   │   └── config.go                          # Environment config
+│   └── domain/
+│       └── store.go                           # GridStore interface, GridValue, ErrGridValueNotFound
+├── Dockerfile                                 # Multi-stage: production + dev (Delve debugger)
+├── Makefile
+└── .dockerignore
 ```
 
-### Planned Structure
+### Planned (not yet implemented)
 
 ```
 internal/
 ├── api/
-│   ├── handler.go            # HTTP handlers
 │   ├── request.go            # Request parsing/validation
 │   └── response.go           # Response formatting
-├── clickhouse/
-│   └── client.go             # ClickHouse queries (implements GridStore)
 ├── catalog/
 │   └── repository.go         # Postgres queries for lineage
-├── domain/
-│   ├── store.go              # GridStore interface
-│   └── environmental.go      # Business logic orchestration
-└── config/
-    └── config.go             # Environment config (exists)
+└── domain/
+    └── environmental.go      # Business logic orchestration
 ```
 
 ### Grid Storage Abstraction
@@ -55,15 +61,6 @@ Grid storage uses the `GridStore` interface (`internal/domain/store.go`):
 - Mock implementations for unit testing
 
 Domain service depends on `GridStore`, not ClickHouse directly. See [ADR 001](../docs/ADR/001-grid-data-storage.md) for storage decision context.
-
-### Request Flow (Planned)
-
-1. Parse request — extract coordinates, timestamp, variable list
-2. For each variable (in parallel via goroutines + errgroup):
-   - Query ClickHouse for value at nearest grid point
-   - Optionally query Postgres for lineage metadata
-3. Aggregate results
-4. Return JSON response
 
 ### API Contract
 
@@ -79,28 +76,24 @@ Library: `github.com/ClickHouse/clickhouse-go/v2` (pure Go, no CGO)
 
 Nearest-neighbor via:
 ```sql
-SELECT value, lat, lon
-FROM grid_data
-WHERE variable = ? AND source = ? AND timestamp = ?
-ORDER BY greatCircleDistance(lat, lon, ?, ?)
+SELECT value, unit, lat, lon, catalog_id, timestamp
+FROM grid_data FINAL
+WHERE variable = @variable
+  AND timestamp = (
+    SELECT max(timestamp) FROM grid_data FINAL
+    WHERE variable = @variable AND timestamp <= @timestamp
+  )
+ORDER BY (lat - @lat) * (lat - @lat) + (lon - @lon) * (lon - @lon)
 LIMIT 1
 ```
 
-One query per variable, fetched in parallel. Source is hardcoded to CAMS for MVP.
-
-### Postgres Lineage (Optional)
-
-Query `catalog.curated_data` joined with `catalog.raw_files` for per-variable lineage metadata (raw_file_id, source, dataset).
-
-### Timestamp Handling
-
-Snap to last available datapoint before requested timestamp. Tolerance window TBD. Response always includes `ref_timestamp` showing actual data time.
+One query per variable, fetched in parallel. **Note:** `grid_data` has no `source` column — source lives in Postgres `catalog.raw_files`, joined via `catalog_id`.
 
 ## Server Configuration
 
 Env vars:
 - `PORT` — HTTP port (default: 8080)
-- `CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, `CLICKHOUSE_DATABASE` — grid data
+- `CLICKHOUSE_HOST`, `CLICKHOUSE_NATIVE_PORT`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, `CLICKHOUSE_DATABASE` — grid data
 - `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` — lineage metadata
 
 Server timeouts: read 5s, write 10s, idle 60s. Graceful shutdown on SIGINT/SIGTERM with 5s timeout.

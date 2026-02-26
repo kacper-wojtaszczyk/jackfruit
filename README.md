@@ -15,7 +15,7 @@ Environmental data platform. Ingests, transforms, and serves weather, air qualit
 - [x] Metadata DB (Postgres)
 - [x] ClickHouse setup
 - [x] Transform to ClickHouse
-- [ ] Serving API — planned
+- [ ] Serving API — in progress
 
 ## Quick Start
 
@@ -60,7 +60,7 @@ docker-compose up -d
 | **Processing Layers** |                  |                     |
 | L1: Ingestion         | Go CLI           | ✅ Active (CAMS)     |
 | L2: Transformation    | Python + Dagster | ✅ Active (CAMS)     |
-| L3: Serving           | Go               | ⏳ Planned           |
+| L3: Serving           | Go               | 🚧 In progress      |
 
 See `docs/` for details. Key decisions are documented in `docs/ADR/`.
 
@@ -70,6 +70,7 @@ See `docs/` for details. Key decisions are documented in `docs/ADR/`.
 jackfruit/
 ├── ingestion-go/       # Go CLI — fetch external data → raw bucket
 ├── pipeline-python/    # Dagster orchestration + ETL assets
+├── serving-go/         # Go HTTP api serving the data from CH
 ├── docs/               # Architecture docs
 └── docker-compose.yml  # MinIO, Postgres, Dagster
 ```

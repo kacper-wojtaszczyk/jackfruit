@@ -4,15 +4,48 @@ updates:
     directory: "/pipeline-python/"
     schedule:
       interval: "weekly"
-  - package-ecosystem: "docker-compose"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-  - package-ecosystem: "docker"
-    directory: "/pipeline-python/"
-    schedule:
-      interval: "weekly"
+    groups:
+      python-major-minor:
+        update-types: ["major", "minor"]
+      python-patch:
+        update-types: ["patch"]
+
   - package-ecosystem: "gomod"
     directory: "/serving-go/"
     schedule:
       interval: "weekly"
+    groups:
+      go-major-minor:
+        update-types: ["major", "minor"]
+      go-patch:
+        update-types: ["patch"]
+
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      docker-compose-major-minor:
+        update-types: ["major", "minor"]
+      docker-compose-patch:
+        update-types: ["patch"]
+
+  - package-ecosystem: "docker"
+    directory: "/pipeline-python/"
+    schedule:
+      interval: "weekly"
+    groups:
+      docker-pipeline-major-minor:
+        update-types: ["major", "minor"]
+      docker-pipeline-patch:
+        update-types: ["patch"]
+
+  - package-ecosystem: "docker"
+    directory: "/serving-go/"
+    schedule:
+      interval: "weekly"
+    groups:
+      docker-serving-major-minor:
+        update-types: ["major", "minor"]
+      docker-serving-patch:
+        update-types: ["patch"]
