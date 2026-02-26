@@ -52,8 +52,9 @@ The domain service depends on a `GridStore` interface, not ClickHouse directly:
 // internal/domain/store.go
 type GridStore interface {
     GetValue(ctx context.Context, variable string, timestamp time.Time, lat, lon float32) (*GridValue, error)
-    Close() error
 }
+// Close() is intentionally absent — it's a lifecycle concern, not a query concern.
+// Call Close() on the concrete *clickhouse.Client directly in main().
 
 // Service uses the interface
 type Service struct {

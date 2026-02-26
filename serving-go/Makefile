@@ -1,7 +1,12 @@
-.PHONY: test test-short
+.PHONY: test test-short check
 
 test:
 	go test ./...
 
 test-short:
 	go test -short ./...
+
+check:
+	gofmt -l . | grep . && exit 1 || true
+	go vet ./...
+	go test ./...

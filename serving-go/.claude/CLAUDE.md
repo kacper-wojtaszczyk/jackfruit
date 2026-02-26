@@ -4,47 +4,53 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Go HTTP service for querying environmental data from the Jackfruit platform. Queries ClickHouse for grid values at coordinates and optionally Postgres for lineage metadata. Currently in early development (health endpoint only).
+Go HTTP service for querying environmental data from the Jackfruit platform. Queries ClickHouse for grid values at coordinates and optionally Postgres for lineage metadata. ClickHouse client and GridStore abstraction are implemented; environmental query endpoint is next.
 
 ## Commands
 
 ```bash
 go run ./cmd/serving              # Start server (default port 8080)
 go build -o bin/serving ./cmd/serving  # Build binary
-go test ./...                     # Run tests
+make test                         # All tests (requires ClickHouse for integration)
+make test-short                   # Unit tests only (no infra needed)
 ```
 
-No external dependencies yet — uses only Go standard library. Go 1.26.
+Go 1.26. Key dependencies: `clickhouse-go/v2` (pure Go, no CGO), `google/uuid`.
 
 ## Architecture
 
-### Current State
-
-Minimal skeleton with health endpoint. Entry point: `cmd/serving/main.go`.
+### Current Structure
 
 ```
 serving-go/
-├── cmd/serving/main.go       # Server bootstrap, graceful shutdown, /health handler
-└── internal/config/config.go # PORT env var (default "8080")
+├── cmd/serving/main.go                        # Server bootstrap, graceful shutdown, CH wiring
+├── internal/
+│   ├── api/
+│   │   ├── handler.go                         # HTTP handlers (/health)
+│   │   └── handler_test.go
+│   ├── clickhouse/
+│   │   ├── client.go                          # GridStore implementation (nearest-neighbor query)
+│   │   └── client_integration_test.go         # Integration tests (requires running ClickHouse)
+│   ├── config/
+│   │   └── config.go                          # Environment config
+│   └── domain/
+│       └── store.go                           # GridStore interface, GridValue, ErrGridValueNotFound
+├── Dockerfile                                 # Multi-stage: production + dev (Delve debugger)
+├── Makefile
+└── .dockerignore
 ```
 
-### Planned Structure
+### Planned (not yet implemented)
 
 ```
 internal/
 ├── api/
-│   ├── handler.go            # HTTP handlers
 │   ├── request.go            # Request parsing/validation
 │   └── response.go           # Response formatting
-├── clickhouse/
-│   └── client.go             # ClickHouse queries (implements GridStore)
 ├── catalog/
 │   └── repository.go         # Postgres queries for lineage
-├── domain/
-│   ├── store.go              # GridStore interface
-│   └── environmental.go      # Business logic orchestration
-└── config/
-    └── config.go             # Environment config (exists)
+└── domain/
+    └── environmental.go      # Business logic orchestration
 ```
 
 ### Grid Storage Abstraction
@@ -104,7 +110,7 @@ Snap to last available datapoint before requested timestamp. Tolerance window TB
 
 Env vars:
 - `PORT` — HTTP port (default: 8080)
-- `CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, `CLICKHOUSE_DATABASE` — grid data
+- `CLICKHOUSE_HOST`, `CLICKHOUSE_NATIVE_PORT`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, `CLICKHOUSE_DATABASE` — grid data
 - `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` — lineage metadata
 
 Server timeouts: read 5s, write 10s, idle 60s. Graceful shutdown on SIGINT/SIGTERM with 5s timeout.

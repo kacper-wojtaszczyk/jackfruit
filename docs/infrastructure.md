@@ -166,7 +166,10 @@ open http://localhost:3099
 
 **docker-compose.yml provides:**
 - MinIO (API: 9099, Console: 9098)
+- Postgres (port 5432) — metadata catalog
+- ClickHouse (HTTP: 8123, Native: 9097) — grid data
 - Dagster (port 3099) with host Docker socket mounted to run ingestion containers
+- Serving API (port 8080, Delve: 2345) — depends on ClickHouse + Postgres healthchecks
 - Network for service communication
 
 ## Environment Configuration
