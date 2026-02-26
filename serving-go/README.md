@@ -174,7 +174,6 @@ See [ADR 001](../docs/ADR/001-grid-data-storage.md) for the storage decision.
 SELECT value, lat, lon
 FROM grid_data
 WHERE variable = 'pm2p5'
-  AND source = 'cams'
   AND timestamp = '2025-03-11 14:00:00'
 ORDER BY (lat - $4) * (lat - $4) + (lon - $5) * (lon - $5)
 LIMIT 1
