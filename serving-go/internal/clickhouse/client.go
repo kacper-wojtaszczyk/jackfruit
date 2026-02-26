@@ -77,7 +77,7 @@ func (c *Client) GetValue(
 		clickhouse.Named("timestamp", timestamp),
 		clickhouse.Named("lat", lat),
 		clickhouse.Named("lon", lon),
-	).ScanStruct(&result)
+	).Scan(&result.Value, &result.Unit, &result.Lat, &result.Lon, &result.CatalogID, &result.Timestamp)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrGridValueNotFound
