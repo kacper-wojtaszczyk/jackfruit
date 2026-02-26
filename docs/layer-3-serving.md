@@ -82,13 +82,18 @@ WHERE variable = 'pm2p5'
 
 **Nearest-neighbor query (recommended):**
 ```sql
-SELECT value, unit, lat, lon, catalog_id
+SELECT value, unit, lat, lon, catalog_id, timestamp
 FROM grid_data FINAL
 WHERE variable = 'pm2p5'
-  AND timestamp = '2025-03-11 14:00:00'
+  AND timestamp = (
+    SELECT max(timestamp) FROM grid_data FINAL
+    WHERE variable = 'pm2p5' AND timestamp <= '2025-03-11 14:00:00'
+  )
 ORDER BY (lat - 52.52) * (lat - 52.52) + (lon - 13.40) * (lon - 13.40)
 LIMIT 1
 ```
+
+> **Note:** The timestamp filter uses a subquery to snap the requested timestamp to the latest available data timestamp that does not exceed it (e.g., a request for `14:30` snaps to `14:00` if data is hourly). This avoids returning no results when the exact requested timestamp is not present in the table.
 
 > **Note:** The implementation uses Euclidean distance rather than `greatCircleDistance()`. For the grid densities and distances involved (nearest neighbor within a few degrees), the approximation is accurate enough. Could be upgraded to `greatCircleDistance()` in the future if polar accuracy becomes a concern.
 
