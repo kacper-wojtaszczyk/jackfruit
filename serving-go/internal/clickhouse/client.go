@@ -63,7 +63,7 @@ func (c *Client) GetValue(
 	err := c.conn.QueryRow(
 		ctx,
 		`
-		SELECT value, unit, lat, lon, catalog_id, timestamp
+        SELECT value, unit, lat, lon, catalog_id, timestamp
         FROM grid_data FINAL
         WHERE variable = @variable
           AND timestamp = (
@@ -84,7 +84,7 @@ func (c *Client) GetValue(
 	}
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query clickhouse: %w", err)
 	}
 
 	return &result, nil

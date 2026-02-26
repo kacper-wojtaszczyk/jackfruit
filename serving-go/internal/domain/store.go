@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var ErrGridValueNotFound = errors.New("grid not found")
+var ErrGridValueNotFound = errors.New("grid value not found")
 
 type GridValue struct {
 	Value     float32
