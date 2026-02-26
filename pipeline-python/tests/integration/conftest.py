@@ -4,9 +4,8 @@ Integration test infrastructure fixtures.
 Loads .env.test before any imports so all resources pick up test config.
 Auto-marks tests in this directory as 'integration'
 
-DDL in session fixtures mirrors production migrations — keep in sync:
-  - ClickHouse: migrations/clickhouse/init.sql
-  - Postgres: migrations/postgres/init.sql
+Uses production databases/schemas (created by docker-compose init scripts).
+Tables are truncated before each test — no separate test namespaces.
 """
 import os
 
@@ -36,71 +35,33 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture(scope="session")
 def ch_client():
-    """Create test database and table in ClickHouse.
-    DDL mirrors migrations/clickhouse/init.sql — keep in sync."""
+    """Session-scoped ClickHouse connection for cleanup."""
     client = clickhouse_connect.get_client(
         host=os.environ["CLICKHOUSE_HOST"],
         username=os.environ["CLICKHOUSE_USER"],
         password=os.environ["CLICKHOUSE_PASSWORD"],
         port=int(os.environ["CLICKHOUSE_PORT"]),
+        database=os.environ["CLICKHOUSE_DB"],
     )
-    client.command("CREATE DATABASE IF NOT EXISTS jackfruit_test")
-    client.command("""
-        CREATE TABLE IF NOT EXISTS jackfruit_test.grid_data (
-            variable     LowCardinality(String),
-            timestamp    DateTime,
-            lat          Float32,
-            lon          Float32,
-            value        Float32,
-            unit         LowCardinality(String),
-            catalog_id   UUID,
-            inserted_at  DateTime64(3) DEFAULT now64(3)
-        ) ENGINE = ReplacingMergeTree(inserted_at)
-        PARTITION BY toYYYYMMDD(timestamp)
-        ORDER BY (variable, timestamp, lat, lon)
-    """)
     yield client
     client.close()
 
 
 @pytest.fixture(scope="session")
 def pg_connection():
-    """Create test schema and tables in Postgres.
-    DDL mirrors migrations/postgres/init.sql — keep in sync."""
+    """Session-scoped Postgres connection for cleanup."""
     dsn = (
         f"postgresql://{os.environ['POSTGRES_USER']}:{os.environ['POSTGRES_PASSWORD']}"
         f"@{os.environ['POSTGRES_HOST']}:{os.environ['POSTGRES_PORT']}/{os.environ['POSTGRES_DB']}"
     )
     conn = psycopg.connect(dsn)
-    conn.execute("CREATE SCHEMA IF NOT EXISTS test_catalog")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS test_catalog.raw_files (
-            id UUID PRIMARY KEY,
-            source TEXT NOT NULL,
-            dataset TEXT NOT NULL,
-            date DATE NOT NULL,
-            s3_key TEXT NOT NULL UNIQUE,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS test_catalog.curated_data (
-            id UUID PRIMARY KEY,
-            raw_file_id UUID NOT NULL REFERENCES test_catalog.raw_files(id),
-            variable TEXT NOT NULL,
-            unit TEXT NOT NULL,
-            timestamp TIMESTAMPTZ NOT NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-    """)
-    conn.commit()
     yield conn
     conn.close()
 
 
 @pytest.fixture(scope="session")
 def s3_client():
-    """Create test bucket in MinIO."""
+    """Session-scoped MinIO/S3 client for cleanup."""
     client = boto3.client(
         "s3",
         endpoint_url=os.environ["MINIO_ENDPOINT_URL"],
@@ -108,11 +69,6 @@ def s3_client():
         aws_secret_access_key=os.environ["MINIO_SECRET_KEY"],
         use_ssl=os.environ.get("MINIO_USE_SSL", "false").lower() in {"true", "1", "yes", "on"},
     )
-    bucket = os.environ["MINIO_RAW_BUCKET"]
-    try:
-        client.create_bucket(Bucket=bucket)
-    except client.exceptions.BucketAlreadyOwnedByYou:
-        pass
     yield client
 
 
@@ -122,22 +78,22 @@ def s3_client():
 
 @pytest.fixture(autouse=True)
 def clean_ch(ch_client):
-    """Truncate CH test table before each test."""
-    ch_client.command("TRUNCATE TABLE jackfruit_test.grid_data")
+    """Truncate CH grid_data before each test."""
+    ch_client.command("TRUNCATE TABLE grid_data")
     yield
 
 
 @pytest.fixture(autouse=True)
 def clean_pg(pg_connection):
-    """Truncate Postgres test tables before each test."""
-    pg_connection.execute("TRUNCATE test_catalog.curated_data, test_catalog.raw_files CASCADE")
+    """Truncate Postgres catalog tables before each test."""
+    pg_connection.execute("TRUNCATE catalog.curated_data, catalog.raw_files CASCADE")
     pg_connection.commit()
     yield
 
 
 @pytest.fixture(autouse=True)
 def clean_minio(s3_client):
-    """Empty MinIO test bucket before each test."""
+    """Empty MinIO raw bucket before each test."""
     bucket = os.environ["MINIO_RAW_BUCKET"]
     resp = s3_client.list_objects_v2(Bucket=bucket)
     for obj in resp.get("Contents", []):
@@ -179,5 +135,4 @@ def catalog():
     )
     return PostgresCatalogResource(
         dsn=dsn,
-        schema=os.environ["POSTGRES_SCHEMA"],
     )

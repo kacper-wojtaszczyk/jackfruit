@@ -223,10 +223,8 @@ class PostgresCatalogResource(dg.ConfigurableResource):
 
     Attributes:
         dsn: Postgres DSN (e.g., postgresql://user:password@host:port/dbname)
-        schema: Postgres schema name (e.g., "catalog" in prod, "test_catalog" in tests)
     """
     dsn: str
-    schema: str
     _connection: psycopg.Connection | None = PrivateAttr(default=None)
 
     def _get_connection(self) -> psycopg.Connection:
@@ -251,8 +249,8 @@ class PostgresCatalogResource(dg.ConfigurableResource):
         Args:
             raw_file: Raw file record to insert
         """
-        query = f"""
-        INSERT INTO {self.schema}.raw_files (id, source, dataset, date, s3_key, created_at)
+        query = """
+        INSERT INTO catalog.raw_files (id, source, dataset, date, s3_key, created_at)
         VALUES (%s, %s, %s, %s, %s, NOW())
         ON CONFLICT (id) DO NOTHING;
         """
@@ -278,8 +276,8 @@ class PostgresCatalogResource(dg.ConfigurableResource):
         Args:
             curated_data: Curated file record to insert or update
         """
-        query = f"""
-        INSERT INTO {self.schema}.curated_data (id, raw_file_id, variable, unit, timestamp)
+        query = """
+        INSERT INTO catalog.curated_data (id, raw_file_id, variable, unit, timestamp)
         VALUES (%s, %s, %s, %s, %s)
         ON CONFLICT (id) DO UPDATE SET
             raw_file_id = EXCLUDED.raw_file_id,
@@ -320,7 +318,6 @@ def resources():
             ),
             "catalog": PostgresCatalogResource(
                 dsn=_postgres_dsn_from_env(),
-                schema=os.environ.get("POSTGRES_SCHEMA", "catalog"),
             ),
             "grid_store": ClickHouseGridStore(
                 host=os.environ.get("CLICKHOUSE_HOST", "clickhouse"),

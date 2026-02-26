@@ -18,7 +18,6 @@ def postgres_env(monkeypatch):
     monkeypatch.setenv("POSTGRES_HOST", "localhost")
     monkeypatch.setenv("POSTGRES_PORT", "5432")
     monkeypatch.setenv("POSTGRES_DB", "test")
-    monkeypatch.setenv("POSTGRES_SCHEMA", "catalog")
 
 
 def _mock_schedule_context(scheduled_execution_time: datetime) -> dg.ScheduleEvaluationContext:

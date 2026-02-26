@@ -124,7 +124,7 @@ class TestPostgresCatalogResource:
 
     def test_insert_raw_file_uses_dataclass(self, psycopg_mocks):
         """Should insert raw file using typed dataclass fields."""
-        resource = PostgresCatalogResource(dsn="postgresql://localhost:5432/db", schema="catalog")
+        resource = PostgresCatalogResource(dsn="postgresql://localhost:5432/db")
         raw = RawFileRecord(
             id=uuid.uuid4(),
             source="ads",
@@ -150,7 +150,7 @@ class TestPostgresCatalogResource:
 
     def test_insert_curated_data_uses_dataclass(self, psycopg_mocks):
         """Should insert curated file using typed dataclass fields."""
-        resource = PostgresCatalogResource(dsn="postgresql://localhost:5432/db", schema="catalog")
+        resource = PostgresCatalogResource(dsn="postgresql://localhost:5432/db")
         curated = CuratedDataRecord(
             id=uuid.uuid4(),
             raw_file_id=uuid.uuid4(),
@@ -176,7 +176,7 @@ class TestPostgresCatalogResource:
 
     def test_teardown_closes_connection(self, psycopg_mocks):
         """teardown_after_execution should close the connection."""
-        resource = PostgresCatalogResource(dsn="postgresql://localhost:5432/db", schema="catalog")
+        resource = PostgresCatalogResource(dsn="postgresql://localhost:5432/db")
         raw = RawFileRecord(
             id=uuid.uuid4(),
             source="ads",
@@ -195,7 +195,7 @@ class TestPostgresCatalogResource:
 
     def test_reuses_connection_across_calls(self, psycopg_mocks):
         """Multiple inserts within one execution should reuse the same connection."""
-        resource = PostgresCatalogResource(dsn="postgresql://localhost:5432/db", schema="catalog")
+        resource = PostgresCatalogResource(dsn="postgresql://localhost:5432/db")
         raw1 = RawFileRecord(
             id=uuid.uuid4(),
             source="ads",
