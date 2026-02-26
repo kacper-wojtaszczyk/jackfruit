@@ -13,8 +13,6 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/serving ./cmd/ser
 # Stage 2: dev (extends builder — Go toolchain + warm module cache retained)
 FROM builder AS dev
 
-RUN apk add --no-cache curl
-
 # Rebuild without stripped symbols/DWARF and with optimisations off so Delve
 # can read debug info. (-s -w from the builder stage makes dlv exec fail.)
 RUN CGO_ENABLED=0 GOOS=linux go build -gcflags="all=-N -l" -o /bin/serving ./cmd/serving

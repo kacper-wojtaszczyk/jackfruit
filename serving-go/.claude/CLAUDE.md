@@ -62,15 +62,6 @@ Grid storage uses the `GridStore` interface (`internal/domain/store.go`):
 
 Domain service depends on `GridStore`, not ClickHouse directly. See [ADR 001](../docs/ADR/001-grid-data-storage.md) for storage decision context.
 
-### Request Flow (Planned)
-
-1. Parse request — extract coordinates, timestamp, variable list
-2. For each variable (in parallel via goroutines + errgroup):
-   - Query ClickHouse for value at nearest grid point
-   - Optionally query Postgres for lineage metadata
-3. Aggregate results
-4. Return JSON response
-
 ### API Contract
 
 - `GET /health` → 204 No Content (liveness check)
@@ -97,14 +88,6 @@ LIMIT 1
 ```
 
 One query per variable, fetched in parallel. **Note:** `grid_data` has no `source` column — source lives in Postgres `catalog.raw_files`, joined via `catalog_id`.
-
-### Postgres Lineage (Optional)
-
-Query `catalog.curated_data` joined with `catalog.raw_files` for per-variable lineage metadata (raw_file_id, source, dataset).
-
-### Timestamp Handling
-
-Snap to last available datapoint before requested timestamp. Tolerance window TBD. Response always includes `ref_timestamp` showing actual data time.
 
 ## Server Configuration
 
