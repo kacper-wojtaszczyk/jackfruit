@@ -11,30 +11,21 @@ import (
 )
 
 type ErrVariableNotFound struct {
-	Variable  string
-	Timestamp time.Time
-	Lat       float32
-	Lon       float32
+	Variable string
 }
 
 func (e *ErrVariableNotFound) Error() string {
-	return fmt.Sprintf(
-		"variable %q not found at time: %v lat: %v lon: %v",
-		e.Variable,
-		e.Timestamp,
-		e.Lat,
-		e.Lon,
-	)
+	return fmt.Sprintf("variable %q not found", e.Variable)
 }
 
 type VariableResult struct {
-	Name      string
-	Value     float32
-	Unit      string
-	Timestamp time.Time
-	Lat       float32
-	Lon       float32
-	CatalogID uuid.UUID
+	Name         string
+	Value        float32
+	Unit         string
+	RefTimestamp time.Time
+	ActualLat    float32
+	ActualLon    float32
+	CatalogID    uuid.UUID
 }
 
 type Service struct {
@@ -81,19 +72,19 @@ func (s *Service) getVariable(
 ) (*VariableResult, error) {
 	gridValue, err := s.store.GetValue(ctx, variable, ts, lat, lon)
 	if errors.Is(err, ErrGridValueNotFound) {
-		return nil, &ErrVariableNotFound{Variable: variable, Timestamp: ts, Lat: lat, Lon: lon}
+		return nil, &ErrVariableNotFound{Variable: variable}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("getting variable %q: %w", variable, err)
 	}
 
 	return &VariableResult{
-		Name:      variable,
-		Value:     gridValue.Value,
-		Unit:      gridValue.Unit,
-		Timestamp: gridValue.Timestamp,
-		Lat:       gridValue.Lat,
-		Lon:       gridValue.Lon,
-		CatalogID: gridValue.CatalogID,
+		Name:         variable,
+		Value:        gridValue.Value,
+		Unit:         gridValue.Unit,
+		RefTimestamp: gridValue.Timestamp,
+		ActualLat:    gridValue.Lat,
+		ActualLon:    gridValue.Lon,
+		CatalogID:    gridValue.CatalogID,
 	}, nil
 }
