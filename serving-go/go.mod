@@ -5,6 +5,7 @@ go 1.26
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.43.0
 	github.com/google/uuid v1.6.0
+	golang.org/x/sync v0.19.0
 )
 
 require (
