@@ -100,5 +100,4 @@ func TestService_GetVariables_NotFound(t *testing.T) {
 	if !strings.Contains(err.Error(), "pm2p5") {
 		t.Errorf("ErrVariableNotFound message should contain variable pm2p5, actual message: %q", err.Error())
 	}
-
 }
