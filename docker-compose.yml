@@ -47,7 +47,6 @@ services:
       # Dagster env
       ENV: ${ENV}
       DOCKER_HOST: unix:///var/run/docker.sock
-      # Forwarded to ingestion sibling container
       ADS_BASE_URL: ${ADS_BASE_URL}
       ADS_API_KEY: ${ADS_API_KEY}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
