@@ -23,7 +23,7 @@ ENV PATH="/opt/venv/bin:${PATH}"
 COPY pyproject.toml uv.lock ./
 
 # Install runtime deps only
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen
 
 # Copy source
 COPY src/ ./src/
