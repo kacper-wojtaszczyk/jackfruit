@@ -59,7 +59,6 @@ func (c *Client) GetValue(
 	lon float32,
 ) (*domain.GridValue, error) {
 	var result domain.GridValue
-
 	err := c.conn.QueryRow(
 		ctx,
 		`

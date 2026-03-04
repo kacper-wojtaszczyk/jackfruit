@@ -46,7 +46,7 @@ func newApp() (*app, error) {
 	service := domain.NewService(store)
 
 	mux := http.NewServeMux()
-	api.NewHandler(service).RegisterRoutes(mux)
+	api.NewHandler(service, logger.With("component", "api")).RegisterRoutes(mux)
 
 	server := &http.Server{
 		Addr:         ":" + cfg.Port,

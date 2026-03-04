@@ -113,46 +113,53 @@ REST API. Clients provide coordinates, timestamp, and variable names. The servin
 
 **Endpoints:**
 ```
-GET /health                                       # 204 No Content (liveness)
-GET /v1/environmental?lat=&lon=&time=&vars=       # Query environmental data
+GET /health                                                    # 204 No Content (liveness)
+GET /v1/environmental?lat=&lon=&timestamp=&variables=          # Query environmental data
 ```
 
 **Example request:**
 ```
-GET /v1/environmental?lat=52.52&lon=13.40&time=2025-03-12T14:55:00Z&vars=pm2p5,temperature
+GET /v1/environmental?lat=52.52&lon=13.40&timestamp=2025-03-12T14:55:00Z&variables=pm2p5,temperature
 ```
 
 **Example response:**
 ```json
 {
-  "location": { "lat": 52.52, "lon": 13.40 },
+  "lat": 52.52,
+  "lon": 13.40,
   "requested_timestamp": "2025-03-12T14:55:00Z",
   "variables": [
     {
       "name": "pm2p5",
       "value": 12.34,
       "unit": "µg/m³",
-      "metadata": {
-        "ref_timestamp": "2025-03-12T14:00:00Z",
-        "raw_file_id": "01890c24-905b-7122-b170-b60814e6ee06",
+      "ref_timestamp": "2025-03-12T14:00:00Z",
+      "actual_lat": 52.50,
+      "actual_lon": 13.50,
+      "lineage": {
         "source": "ads",
-        "dataset": "cams-europe-air-quality-forecasts-analysis"
+        "dataset": "cams-europe-air-quality-forecasts-analysis",
+        "raw_file_id": "01890c24-905b-7122-b170-b60814e6ee06"
       }
     },
     {
       "name": "temperature",
       "value": 285.5,
       "unit": "K",
-      "metadata": {
-        "ref_timestamp": "2025-03-12T14:00:00Z",
-        "raw_file_id": "01890c24-905b-7122-b170-b60814e6ee07",
+      "ref_timestamp": "2025-03-12T14:00:00Z",
+      "actual_lat": 52.50,
+      "actual_lon": 13.50,
+      "lineage": {
         "source": "ads",
-        "dataset": "reanalysis-era5-single-levels"
+        "dataset": "reanalysis-era5-single-levels",
+        "raw_file_id": "01890c24-905b-7122-b170-b60814e6ee07"
       }
     }
   ]
 }
 ```
+
+> **Note:** `lineage` object (guide 12) — not yet implemented. `catalog_id` is internal only and never exposed in responses.
 
 Clients never:
 - Know about S3 paths or bucket structure
