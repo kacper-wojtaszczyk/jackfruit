@@ -136,7 +136,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "8080:8080"
-      - "2345:2345"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 10s
