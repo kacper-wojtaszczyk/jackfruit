@@ -3,7 +3,6 @@ package testutil
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"testing"
 	"time"
@@ -26,7 +25,7 @@ func NewClient(t *testing.T) *clickhouse.Client {
 		User:     cfg.ClickHouseUser,
 		Password: cfg.ClickHousePassword,
 		Database: cfg.ClickHouseDatabase,
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}

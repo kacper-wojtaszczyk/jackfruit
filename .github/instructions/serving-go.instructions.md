@@ -24,48 +24,42 @@ You're helping build the Go serving layer. Inherit behavior from global instruct
 <api_contract>
 **Endpoints:**
 - `GET /health` → 204 No Content (liveness)
-- `GET /v1/environmental?lat=&lon=&time=&vars=` → JSON with values + metadata
+- `GET /v1/environmental?lat=&lon=&timestamp=&variables=` → JSON with values + metadata
 
 **Request parameters:**
 - `lat`, `lon`: coordinates (float)
-- `time`: ISO8601 timestamp (UTC)
-- `vars`: comma-separated variable names (e.g., `pm2p5,pm10,temperature`)
+- `timestamp`: ISO8601 timestamp (UTC)
+- `variables`: comma-separated variable names (e.g., `pm2p5,pm10,temperature`)
 
 **Response shape:**
 ```json
 {
-  "location": { "lat": 52.52, "lon": 13.40 },
+  "lat": 52.52,
+  "lon": 13.40,
   "requested_timestamp": "2025-03-12T14:55:00Z",
   "variables": [
     {
       "name": "pm2p5",
       "value": 12.34,
       "unit": "µg/m³",
-      "metadata": {
-        "ref_timestamp": "2025-03-12T14:00:00Z",
-        "raw_file_id": "...",
+      "ref_timestamp": "2025-03-12T14:00:00Z",
+      "actual_lat": 52.50,
+      "actual_lon": 13.50,
+      "lineage": {
         "source": "ads",
-        "dataset": "cams-europe-air-quality-forecasts-analysis"
-      }
-    },
-    {
-      "name": "temperature",
-      "value": 285.5,
-      "unit": "K",
-      "metadata": {
-        "ref_timestamp": "2025-03-12T14:00:00Z",
-        "raw_file_id": "...",
-        "source": "ads",
-        "dataset": "reanalysis-era5-single-levels"
+        "dataset": "cams-europe-air-quality-forecasts-analysis",
+        "raw_file_id": "..."
       }
     }
   ]
 }
 ```
 
+> `lineage` object is planned (guide 12) — not yet implemented. `catalog_id` is internal only and never exposed.
+
 **Error behavior:**
 - Fail entire request if ANY variable not found (no partial responses)
-- Return JSON error with `error` message and `code` field
+- Return JSON error with `error` message
 </api_contract>
 
 <boundaries>

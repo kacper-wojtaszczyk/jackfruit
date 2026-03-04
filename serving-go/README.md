@@ -8,7 +8,7 @@ Go HTTP service for querying environmental data from the Jackfruit platform.
 |-----------|--------|
 | Health endpoint (`/health`) | ✅ Done |
 | ClickHouse client + GridStore | ✅ Done |
-| Environmental endpoint (`/v1/environmental`) | ⏳ Next |
+| Environmental endpoint (`/v1/environmental`) | ✅ Done |
 | Postgres catalog integration | ⏳ Planned |
 
 ## Running
@@ -42,7 +42,7 @@ Returns `204 No Content`. Liveness check for container orchestration.
 ### `GET /v1/environmental`
 
 ```
-GET /v1/environmental?lat=52.52&lon=13.40&time=2025-03-12T14:55:00Z&vars=pm2p5,pm10
+GET /v1/environmental?lat=52.52&lon=13.40&timestamp=2025-03-12T14:55:00Z&variables=pm2p5,pm10
 ```
 
 **Parameters:**
@@ -51,15 +51,9 @@ GET /v1/environmental?lat=52.52&lon=13.40&time=2025-03-12T14:55:00Z&vars=pm2p5,p
 |-----------|------|----------|-------------|
 | `lat` | float | Yes | Latitude (−90 to 90) |
 | `lon` | float | Yes | Longitude (−180 to 180) |
-| `time` | ISO 8601 UTC | Yes | Requested timestamp |
-| `vars` | string | Yes | Comma-separated variable names |
+| `timestamp` | ISO 8601 UTC | Yes | Requested timestamp |
+| `variables` | string | Yes | Comma-separated variable names |
 
-**Error codes:**
-
-| Code | HTTP | Description |
-|------|------|-------------|
-| `INVALID_REQUEST` | 400 | Missing or invalid parameters |
-| `VARIABLE_NOT_FOUND` | 404 | No data for a variable within time tolerance |
-| `INTERNAL_ERROR` | 500 | ClickHouse or Postgres failure |
+Errors return `{"error": "..."}` with HTTP status codes: 400 (invalid/missing params), 404 (variable not found), 500 (internal error).
 
 Fails the entire request if any requested variable is not found — no partial responses.

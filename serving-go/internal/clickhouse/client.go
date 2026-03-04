@@ -59,7 +59,6 @@ func (c *Client) GetValue(
 	lon float32,
 ) (*domain.GridValue, error) {
 	var result domain.GridValue
-	slog.Info(fmt.Sprintf("querying clickhouse variable: %s timestamp: %s, lat: %f, lon: %f", variable, timestamp, lat, lon))
 	err := c.conn.QueryRow(
 		ctx,
 		`

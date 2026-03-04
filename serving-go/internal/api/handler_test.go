@@ -3,7 +3,6 @@ package api_test
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -25,7 +24,7 @@ func (m *mockVariableProvider) GetVariables(_ context.Context, _ time.Time, _ fl
 
 func TestHandleEnvironmental_InternalError(t *testing.T) {
 	mock := &mockVariableProvider{err: errors.New("database connection reset by peer")}
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	mux := http.NewServeMux()
 	api.NewHandler(mock, logger).RegisterRoutes(mux)

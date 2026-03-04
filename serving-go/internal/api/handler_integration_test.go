@@ -3,7 +3,6 @@ package api_test
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -21,7 +20,7 @@ func setupStack(t *testing.T) *http.ServeMux {
 
 	chClient := testutil.NewClient(t)
 	service := domain.NewService(chClient)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	mux := http.NewServeMux()
 	api.NewHandler(service, logger).RegisterRoutes(mux)
 
@@ -162,6 +161,53 @@ func TestEnvironmentalHandler(t *testing.T) {
 		}
 		if !strings.Contains(errResp.Error, "nonexistent_var") {
 			t.Errorf("expected error to mention variable name, got %q", errResp.Error)
+		}
+	})
+
+	t.Run("nearest neighbor returns actual grid coords", func(t *testing.T) {
+		ts := time.Now().UTC().Truncate(time.Second)
+		gridLat := float32(52.5)
+		gridLon := float32(13.4)
+
+		testutil.InsertGridRow(t, rawConn, "pm2p5_nn", float32(9.9), "µg/m³", ts, gridLat, gridLon)
+
+		// Request at slightly different coords — should snap to the nearest grid point.
+		reqLat := float32(52.51)
+		reqLon := float32(13.41)
+		url := fmt.Sprintf("/v1/environmental?lat=%v&lon=%v&timestamp=%s&variables=pm2p5_nn",
+			reqLat, reqLon, ts.Format(time.RFC3339))
+		req := httptest.NewRequest("GET", url, nil)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+
+		var resp api.EnvironmentalResponse
+		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+
+		// Top-level lat/lon must echo the request coordinates.
+		if resp.Lat != reqLat {
+			t.Errorf("resp.Lat = %v, want request lat %v", resp.Lat, reqLat)
+		}
+		if resp.Lon != reqLon {
+			t.Errorf("resp.Lon = %v, want request lon %v", resp.Lon, reqLon)
+		}
+
+		if len(resp.Variables) != 1 {
+			t.Fatalf("expected 1 variable, got %d", len(resp.Variables))
+		}
+		v := resp.Variables[0]
+
+		// actual_lat/actual_lon must reflect the nearest grid point, not the request.
+		if v.ActualLat != gridLat {
+			t.Errorf("v.ActualLat = %v, want grid lat %v", v.ActualLat, gridLat)
+		}
+		if v.ActualLon != gridLon {
+			t.Errorf("v.ActualLon = %v, want grid lon %v", v.ActualLon, gridLon)
 		}
 	})
 

@@ -19,23 +19,31 @@ Go 1.26. Key dependencies: `clickhouse-go/v2` (pure Go, no CGO), `google/uuid`.
 
 ## Architecture
 
-### Current Structure
+### Structure
 
 ```
 serving-go/
-├── cmd/serving/main.go                        # Server bootstrap, graceful shutdown, CH wiring
+├── cmd/serving/main.go
 ├── internal/
 │   ├── api/
-│   │   ├── handler.go                         # HTTP handlers (/health)
-│   │   └── handler_test.go
+│   │   ├── handler.go                         # HTTP handlers (/health, /v1/environmental)
+│   │   ├── handler_test.go
+│   │   ├── handler_integration_test.go
+│   │   ├── request.go                         # Request parsing/validation
+│   │   ├── request_test.go
+│   │   └── response.go                        # Response types + JSON helpers
 │   ├── clickhouse/
 │   │   ├── client.go                          # GridStore implementation (nearest-neighbor query)
-│   │   └── client_integration_test.go         # Integration tests (requires running ClickHouse)
+│   │   └── client_integration_test.go
 │   ├── config/
-│   │   └── config.go                          # Environment config
-│   └── domain/
-│       └── store.go                           # GridStore interface, GridValue, ErrGridValueNotFound
-├── Dockerfile                                 # Multi-stage: production + dev (Delve debugger)
+│   │   └── config.go
+│   ├── domain/
+│   │   ├── environmental.go                   # Service + VariableResult + ErrVariableNotFound
+│   │   ├── environmental_test.go
+│   │   └── store.go                           # GridStore interface, GridValue
+│   └── testutil/
+│       └── clickhouse.go                      # Shared test helpers (NewClient, InsertGridRow)
+├── Dockerfile
 ├── Makefile
 └── .dockerignore
 ```
@@ -44,13 +52,8 @@ serving-go/
 
 ```
 internal/
-├── api/
-│   ├── request.go            # Request parsing/validation
-│   └── response.go           # Response formatting
-├── catalog/
-│   └── repository.go         # Postgres queries for lineage
-└── domain/
-    └── environmental.go      # Business logic orchestration
+└── catalog/
+    └── repository.go         # Postgres queries for lineage (guide 12)
 ```
 
 ### Grid Storage Abstraction
@@ -65,10 +68,9 @@ Domain service depends on `GridStore`, not ClickHouse directly. See [ADR 001](..
 ### API Contract
 
 - `GET /health` → 204 No Content (liveness check)
-- `GET /v1/environmental?lat=&lon=&time=&vars=` → JSON with values + per-variable lineage metadata
+- `GET /v1/environmental?lat=&lon=&timestamp=&variables=` → JSON with values + per-variable lineage metadata
 - Fails entire request if ANY variable not found (no partial responses)
-
-Error codes: `INVALID_REQUEST` (400), `VARIABLE_NOT_FOUND` (404), `INTERNAL_ERROR` (500).
+- Errors return `{"error": "..."}` with HTTP status codes (400, 404, 500)
 
 ### ClickHouse Query Pattern
 

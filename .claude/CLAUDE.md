@@ -103,7 +103,7 @@ External APIs (Copernicus ADS, etc.)
 ### Serving API contract
 
 - `GET /health` → 204 No Content
-- `GET /v1/environmental?lat=&lon=&time=&vars=` → JSON with values + per-variable lineage metadata
+- `GET /v1/environmental?lat=&lon=&timestamp=&variables=` → JSON with values + per-variable lineage metadata
 - Fails entire request if ANY variable not found (no partial responses)
 
 ## Conventions
