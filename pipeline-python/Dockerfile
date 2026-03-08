@@ -9,10 +9,6 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Also install g2c library + build tools for grib2io GRIB2 decoding
 RUN apt-get update && apt-get install -y --no-install-recommends \
     docker.io \
-    libg2c0 \
-    libg2c-dev \
-    build-essential \
-    gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # Keep the project environment outside /app so the bind mount doesn't hide it
