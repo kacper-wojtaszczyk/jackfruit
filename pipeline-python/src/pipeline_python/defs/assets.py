@@ -15,11 +15,10 @@ from uuid import UUID
 
 import dagster as dg
 
-from pipeline_python.grib2 import grib2io, get_shortname
-
 from pipeline_python.defs.partitions import daily_partitions
 from pipeline_python.defs.resources import DockerIngestionClient, ObjectStorageResource, PostgresCatalogResource
 from pipeline_python.defs.models import RawFileRecord, CuratedDataRecord
+from pipeline_python.grib2.reader import GribReader
 from pipeline_python.storage import GridStore
 from pipeline_python.storage.grid_store import GridData
 
@@ -98,6 +97,7 @@ def transform_cams_data(
     storage: ObjectStorageResource,
     catalog: PostgresCatalogResource,
     grid_store: GridStore,
+    reader: GribReader
 ) -> dg.MaterializeResult:
     """
     Transform raw CAMS GRIB data into curated grid rows in ClickHouse.
@@ -111,6 +111,7 @@ def transform_cams_data(
         storage: S3/MinIO client for downloading raw files
         catalog: Postgres catalog for lineage recording
         grid_store: Grid storage backend (ClickHouse in production)
+        reader: GribReader instance
 
     Returns:
         MaterializeResult with run_id, date, variables_processed, and inserted_rows
@@ -147,17 +148,16 @@ def transform_cams_data(
             storage.download_raw(raw_key, tmp_raw_path)
         except Exception as e:
             raise dg.Failure(f"Failed to download {raw_key}: {e}")
-        with grib2io.open(str(tmp_raw_path)) as grib_file:
-            for message in grib_file:
+        with reader.open(str(tmp_raw_path)) as messages:
+            for message in messages:
                 catalog_id = uuid.uuid7()
-                constituent_code = message.atmosphericChemicalConstituentType.value
-                values = message.data
-                unit = message.units
+                variable_name = message.variable_name
+                timestamp = message.timestamp
+                values = message.values
+                unit = message.unit
                 if unit == "kg m-3":
                     values = values * 1e9
                     unit = "µg/m³"
-                variable_name = get_shortname(constituent_code)
-                timestamp = message.refDate + message.leadTime
                 rows_inserted += grid_store.insert_grid(GridData(
                     variable=variable_name,
                     unit=unit,

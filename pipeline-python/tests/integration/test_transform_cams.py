@@ -17,6 +17,7 @@ import pytest
 
 from pipeline_python.defs import RawFileRecord
 from pipeline_python.defs.assets import transform_cams_data
+from pipeline_python.grib2.adapters.cams_adapter import CamsReader
 
 FIXTURE_GRIB = Path(__file__).parent.parent / "fixtures" / "019c7f73-419f-727c-8e56-95880501e36b.grib"
 RUN_ID = "019c7f73-419f-727c-8e56-95880501e36b"
@@ -60,7 +61,7 @@ def test_transform_inserts_grid_data_to_clickhouse(s3_client, ch_client, storage
     _arrange_raw_file(s3_client, catalog)
     instance = dg.DagsterInstance.ephemeral()
     _report_upstream(instance)
-    transform_cams_data(_make_context(instance), storage, catalog, grid_store)
+    transform_cams_data(_make_context(instance), storage, catalog, grid_store, CamsReader())
 
     result = ch_client.query(
         "SELECT variable, count() FROM grid_data FINAL GROUP BY variable"
@@ -83,7 +84,7 @@ def test_transform_fails_without_upstream_materialization(storage, catalog, grid
     context = _make_context(instance)
 
     with pytest.raises(dg.Failure):
-        transform_cams_data(context, storage, catalog, grid_store)
+        transform_cams_data(context, storage, catalog, grid_store, CamsReader())
 
 
 def test_transform_fails_on_missing_raw_file(storage, catalog, grid_store):
@@ -100,7 +101,7 @@ def test_transform_fails_on_missing_raw_file(storage, catalog, grid_store):
     context = _make_context(instance)
 
     with pytest.raises(dg.Failure, match="Failed to download"):
-        transform_cams_data(context, storage, catalog, grid_store)
+        transform_cams_data(context, storage, catalog, grid_store, CamsReader())
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +115,7 @@ def test_transform_is_idempotent(s3_client, ch_client, storage, grid_store, cata
     def run_transform():
         instance = dg.DagsterInstance.ephemeral()
         _report_upstream(instance)
-        transform_cams_data(_make_context(instance), storage, catalog, grid_store)
+        transform_cams_data(_make_context(instance), storage, catalog, grid_store, CamsReader())
 
     run_transform()
     run_transform()
@@ -136,7 +137,7 @@ def test_curated_lineage_recorded_in_postgres(s3_client, storage, grid_store, ca
     _arrange_raw_file(s3_client, catalog)
     instance = dg.DagsterInstance.ephemeral()
     _report_upstream(instance)
-    transform_cams_data(_make_context(instance), storage, catalog, grid_store)
+    transform_cams_data(_make_context(instance), storage, catalog, grid_store, CamsReader())
 
     rows = pg_connection.execute(
         "SELECT variable FROM catalog.curated_data ORDER BY variable"
@@ -152,7 +153,7 @@ def test_catalog_id_links_ch_and_pg(s3_client, ch_client, storage, grid_store, c
     _arrange_raw_file(s3_client, catalog)
     instance = dg.DagsterInstance.ephemeral()
     _report_upstream(instance)
-    transform_cams_data(_make_context(instance), storage, catalog, grid_store)
+    transform_cams_data(_make_context(instance), storage, catalog, grid_store, CamsReader())
 
     ch_ids = {
         str(r[0])
@@ -190,7 +191,7 @@ def test_transform_uses_correct_partition_metadata(s3_client, storage, grid_stor
     )
 
     # Run transform for PARTITION (2026-02-21)
-    result = transform_cams_data(_make_context(instance), storage, catalog, grid_store)
+    result = transform_cams_data(_make_context(instance), storage, catalog, grid_store, CamsReader())
 
     # Should use OUR run_id, not the wrong one
     assert result.metadata["run_id"] == RUN_ID
@@ -205,7 +206,7 @@ def test_transform_metadata_accuracy(s3_client, ch_client, storage, grid_store, 
     _arrange_raw_file(s3_client, catalog)
     instance = dg.DagsterInstance.ephemeral()
     _report_upstream(instance)
-    result = transform_cams_data(_make_context(instance), storage, catalog, grid_store)
+    result = transform_cams_data(_make_context(instance), storage, catalog, grid_store, CamsReader())
 
     assert result.metadata["run_id"] == RUN_ID
     assert result.metadata["date"] == PARTITION
