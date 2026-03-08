@@ -79,7 +79,7 @@ ETL reads raw (or public S3 directly for large datasets), writes to ClickHouse. 
 - Dataset name is deterministic per transform asset (e.g., `cams-europe-air-quality-forecasts-analysis`)
 
 **Processing:**
-- Multi-variable GRIB files are read with `grib2io` (NOAA's GRIB2 library)
+- Multi-variable GRIB files are read with `pygrib` (ecCodes-backed library) via the `CamsReader` adapter
 - Grid data extracted to numpy arrays
 - Each variable/timestamp batch-inserted into ClickHouse
 
@@ -275,15 +275,15 @@ To materialize data for specific dates (e.g., historical backfill):
 
 | Purpose           | Library                                                                                           |
 |-------------------|---------------------------------------------------------------------------------------------------|
-| GRIB2 reading     | [`grib2io`](https://github.com/NOAA-MDL/grib2io) — NOAA's GRIB2 read/write library                |
+| GRIB2 reading     | [`pygrib`](https://github.com/jswhit/pygrib) — Pythonic ecCodes wrapper                          |
 | ClickHouse client | [`clickhouse-connect`](https://github.com/ClickHouse/clickhouse-connect) — Official Python driver |
 
-**Why grib2io:**
-- Full GRIB2 read support
-- Native Python API with clean context managers
-- Python 3.10-3.14 support
-- Uses NCEP g2c library backend
-- Maintained by NOAA MDL — production-quality library
+**Why pygrib:**
+- ecCodes backend handles all ECMWF products (CAMS, GloFAS, ERA5) natively — no patches or manual lookup tables
+- `grb.data()` returns `(values_2d, lats_2d, lons_2d)` — matches the `GribMessage` protocol interface cleanly
+- PDT 4.40 and ECMWF constituent codes (40008 PM10, 40009 PM2.5) are in the ecCodes definitions database
+- Bundled wheel — no system library dependencies
+- `assets.py` is decoupled from pygrib via the `GribMessage`/`GribReader` Protocol in `grib2/reader.py`; see [library landscape](guides/grib2-python-library-landscape.md) for the full decision record
 
 **Why clickhouse-connect:**
 - Official ClickHouse Python driver
