@@ -55,22 +55,6 @@ To process a specific date range (e.g., historical data):
 
 Dagster will execute `ingest_cams_data` first, then `transform_cams_data` in dependency order.
 
-### GRIB Sanity Check Script
-
-Validate that `grib2io` can read a GRIB file (useful for debugging CAMS data issues):
-
-```bash
-# Local
-uv run scripts/grib_sanity_check.py path/to/file.grib
-
-# Inside Docker
-docker compose run dagster uv run scripts/grib_sanity_check.py data/file.grib
-```
-
-The script includes a monkey-patch for PDT 4.40 (Atmospheric Chemical Constituents) which `grib2io` 2.6.0 doesn't support natively. CAMS air quality data uses this template.
-
-> **Note:** GRIB files are read for transformation, but output goes to ClickHouse (not GRIB2 files).
-
 ## Testing
 
 ### Structure

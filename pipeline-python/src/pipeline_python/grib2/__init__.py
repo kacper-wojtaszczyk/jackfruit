@@ -1,31 +1,24 @@
 """
-GRIB2 utilities with patched grib2io support.
+GRIB2 reading abstraction.
 
-This module provides a pre-patched grib2io instance and utility functions
-for working with GRIB2 files, including non-standard PDTs like 4.40.
+Provides a library-agnostic interface for reading GRIB2 files.
+The concrete implementation (currently CamsReader using pygrib) is hidden behind
+the GribMessage/GribReader protocols.
 
 Usage:
-    from pipeline_python.grib2 import grib2io, get_shortname
+    from pipeline_python.grib2 import CamsReader
 
-    with grib2io.open(path) as f:
-        for msg in f:
-            name = get_shortname(msg.section4[4])
-
-The grib2io instance is automatically patched with PDT 4.40 support.
-Import order doesn't matter — just import from this module.
+    reader = CamsReader()
+    with reader.open(path) as messages:
+        for msg in messages:
+            print(msg.variable_name, msg.values.shape)
 """
 
-# Apply PDT 4.40 patch by importing the patch module
-# This must happen before any grib2io usage
-import pipeline_python.grib2.pdt40  # noqa: F401
-
-# Re-export grib2io (now patched)
-import grib2io
-
-# Re-export shortname utilities
-from pipeline_python.grib2.shortnames import get_shortname
+from pipeline_python.grib2.adapters.cams_adapter import CamsReader
+from pipeline_python.grib2.reader import GribMessage, GribReader
 
 __all__ = [
-    "grib2io",
-    "get_shortname",
+    "GribMessage",
+    "GribReader",
+    "CamsReader",
 ]

@@ -17,9 +17,6 @@ make test-integration                # Integration tests only (requires real inf
 uv run pytest tests/unit/test_resources.py # Run single test file
 uv run pytest -k "test_schedule"     # Run tests matching pattern
 
-# GRIB validation tool
-uv run scripts/grib_sanity_check.py path/to/file.grib
-uv run scripts/grib_sanity_check.py s3://jackfruit-raw/ads/.../file.grib
 ```
 
 Package manager is **uv** (not pip). Dependencies in `pyproject.toml`, lockfile is `uv.lock`. Always verify latest dependency versions online before adding to pyproject.toml.
@@ -40,9 +37,9 @@ src/pipeline_python/
 │   ├── partitions.py       # Daily partitions (start 2026-01-01, UTC, end_offset=1)
 │   └── models.py           # RawFileRecord, CuratedDataRecord (frozen dataclasses)
 └── grib2/
-    ├── __init__.py          # Imports pdt40 FIRST, then grib2io (order matters)
-    ├── pdt40.py             # Monkey-patch for PDT 4.40 support
-    └── shortnames.py        # Constituent code → variable name mapping
+    ├── reader.py            # GribReader / GribMessage Protocols
+    └── adapters/
+        └── cams_adapter.py  # CamsReader + CamsMessage (pygrib-backed)
 ```
 
 ### Asset Pipeline
@@ -57,7 +54,7 @@ ingest_cams_data (Go CLI via Docker)
 transform_cams_data (Python)
   → Reads upstream metadata to construct exact raw S3 key (no LIST operations)
   → Downloads raw GRIB from MinIO
-  → Opens with grib2io (PDT 4.40 patched)
+  → Opens with pygrib via CamsReader (GribReader Protocol)
   → Extracts grid data per message
   → Writes curated output + records lineage in catalog
 ```
@@ -65,7 +62,7 @@ transform_cams_data (Python)
 ### Resources
 
 - **DockerIngestionClient** — Spawns Go ingestion container as Docker sibling (not nested). Forwards `ADS_*` and `MINIO_*` env vars. Network: `jackfruit_jackfruit`.
-- **ObjectStorageResource** — boto3-based S3/MinIO client. Methods: `download_raw()`. grib2io requires local files, so raw data is downloaded to temp files.
+- **ObjectStorageResource** — boto3-based S3/MinIO client. Methods: `download_raw()`. pygrib requires local files, so raw data is downloaded to temp files.
 - **PostgresCatalogResource** — psycopg3 client with context manager for connection reuse. `insert_raw_file()` uses `ON CONFLICT DO NOTHING`, `insert_curated_data()` uses `ON CONFLICT DO UPDATE`.
 
 ### Grid Storage Abstraction
@@ -74,20 +71,6 @@ Grid storage uses the `GridStore` abstract base class (`src/pipeline_python/stor
 - `ClickHouseGridStore` (`storage/clickhouse_grid_store.py`) — production Dagster resource, registered as `"grid_store"`
 
 `GridStore` extends `dg.ConfigurableResource` (not a Protocol — Protocols can't carry Dagster config). Transform code depends on the abstract base class, not ClickHouse directly. See [ADR 001](../docs/ADR/001-grid-data-storage.md) for storage decision context.
-
-### GRIB2 PDT 4.40 Patch
-
-CAMS air quality data uses PDT 4.40 (Atmospheric Chemical Constituents) which grib2io 2.6.0 doesn't support natively. The patch in `grib2/pdt40.py`:
-
-1. Defines a `ProductDefinitionTemplate40` dataclass with `atmosphericChemicalConstituentType` descriptor
-2. Registers it in `templates._pdt_by_pdtn[40]`
-3. Shifts downstream field indices by +1 (PDT 4.40 inserts constituent type at index 4)
-
-**Import order in `grib2/__init__.py` is critical** — `pdt40` must be imported before `grib2io`.
-
-Constituent codes used: 40008 (PM10), 40009 (PM2.5) — these are ECMWF/CAMS local codes, not WMO standard.
-
-`grib2io` is pinned to 2.6.0 because 2.7.0 has a circular import bug.
 
 ### Error Handling
 

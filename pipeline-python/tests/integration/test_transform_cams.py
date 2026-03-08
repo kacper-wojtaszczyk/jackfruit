@@ -51,9 +51,6 @@ def _arrange_raw_file(s3_client, catalog) -> None:
         s3_key=RAW_KEY,
     ))
 
-# ---------------------------------------------------------------------------
-# Happy path
-# ---------------------------------------------------------------------------
 
 def test_transform_inserts_grid_data_to_clickhouse(s3_client, ch_client, storage, grid_store, catalog):
     """Raw GRIB in MinIO → download → extract → insert → rows in ClickHouse."""
@@ -72,10 +69,6 @@ def test_transform_inserts_grid_data_to_clickhouse(s3_client, ch_client, storage
     assert rows["pm2p5"] == 1176000  # 420x700 grid × 4 timestamps in the grib file
     assert rows["pm10"] == 1176000
 
-
-# ---------------------------------------------------------------------------
-# Unhappy paths
-# ---------------------------------------------------------------------------
 
 def test_transform_fails_without_upstream_materialization(storage, catalog, grid_store):
     """Transform should raise dg.Failure when no upstream materialization event exists."""
@@ -103,10 +96,6 @@ def test_transform_fails_on_missing_raw_file(storage, catalog, grid_store):
         transform_cams_data(context, storage, catalog, grid_store)
 
 
-# ---------------------------------------------------------------------------
-# Idempotency
-# ---------------------------------------------------------------------------
-
 def test_transform_is_idempotent(s3_client, ch_client, storage, grid_store, catalog):
     """Running transform twice should produce the same CH row count as once (FINAL deduplication)."""
     _arrange_raw_file(s3_client, catalog)
@@ -126,10 +115,6 @@ def test_transform_is_idempotent(s3_client, ch_client, storage, grid_store, cata
     assert rows["pm2p5"] == 1176000
     assert rows["pm10"] == 1176000
 
-
-# ---------------------------------------------------------------------------
-# Catalog / lineage
-# ---------------------------------------------------------------------------
 
 def test_curated_lineage_recorded_in_postgres(s3_client, storage, grid_store, catalog, pg_connection):
     """Transform should insert one curated_data row per GRIB message into Postgres."""
@@ -167,10 +152,6 @@ def test_catalog_id_links_ch_and_pg(s3_client, ch_client, storage, grid_store, c
     assert len(ch_ids) == 8  # 2 variables × 4 timestamps
 
 
-# ---------------------------------------------------------------------------
-# Partition isolation
-# ---------------------------------------------------------------------------
-
 def test_transform_uses_correct_partition_metadata(s3_client, storage, grid_store, catalog):
     """Transform should use metadata from its own partition, not the latest across all partitions."""
     _arrange_raw_file(s3_client, catalog)
@@ -196,10 +177,6 @@ def test_transform_uses_correct_partition_metadata(s3_client, storage, grid_stor
     assert result.metadata["run_id"] == RUN_ID
 
 
-# ---------------------------------------------------------------------------
-# Metadata accuracy
-# ---------------------------------------------------------------------------
-
 def test_transform_metadata_accuracy(s3_client, ch_client, storage, grid_store, catalog):
     """MaterializeResult metadata should match what was actually written to ClickHouse."""
     _arrange_raw_file(s3_client, catalog)
@@ -214,3 +191,15 @@ def test_transform_metadata_accuracy(s3_client, ch_client, storage, grid_store, 
 
     ch_total = ch_client.query("SELECT count() FROM grid_data").result_rows[0][0]
     assert ch_total == result.metadata["inserted_rows"]
+
+def test_transform_processes_negative_longitude(s3_client, ch_client, storage, grid_store, catalog):
+    """Regression test for verifying the transformation can handle negative longitudes."""
+    _arrange_raw_file(s3_client, catalog)
+    instance = dg.DagsterInstance.ephemeral()
+    _report_upstream(instance)
+    transform_cams_data(_make_context(instance), storage, catalog, grid_store)
+
+    result = ch_client.query("SELECT min(lon), max(lon) FROM grid_data FINAL")
+    min_lon, max_lon = result.result_rows[0]
+    assert min_lon == pytest.approx(-24.95, abs=0.1)
+    assert max_lon == pytest.approx(44.95, abs=0.1)

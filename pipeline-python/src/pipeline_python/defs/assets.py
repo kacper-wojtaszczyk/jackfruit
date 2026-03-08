@@ -15,11 +15,10 @@ from uuid import UUID
 
 import dagster as dg
 
-from pipeline_python.grib2 import grib2io, get_shortname
-
 from pipeline_python.defs.partitions import daily_partitions
 from pipeline_python.defs.resources import DockerIngestionClient, ObjectStorageResource, PostgresCatalogResource
 from pipeline_python.defs.models import RawFileRecord, CuratedDataRecord
+from pipeline_python.grib2 import CamsReader
 from pipeline_python.storage import GridStore
 from pipeline_python.storage.grid_store import GridData
 
@@ -147,21 +146,19 @@ def transform_cams_data(
             storage.download_raw(raw_key, tmp_raw_path)
         except Exception as e:
             raise dg.Failure(f"Failed to download {raw_key}: {e}")
-        with grib2io.open(str(tmp_raw_path)) as grib_file:
-            for message in grib_file:
+        reader = CamsReader()
+        with reader.open(str(tmp_raw_path)) as messages:
+            for message in messages:
                 catalog_id = uuid.uuid7()
-                constituent_code = message.atmosphericChemicalConstituentType.value
-                values = message.data
-                unit = message.units
+                values = message.values
+                unit = message.unit
                 if unit == "kg m-3":
                     values = values * 1e9
                     unit = "µg/m³"
-                variable_name = get_shortname(constituent_code)
-                timestamp = message.refDate + message.leadTime
                 rows_inserted += grid_store.insert_grid(GridData(
-                    variable=variable_name,
+                    variable=message.variable_name,
                     unit=unit,
-                    timestamp=timestamp,
+                    timestamp=message.timestamp,
                     lats=message.lats,
                     lons=message.lons,
                     values=values,
@@ -170,12 +167,12 @@ def transform_cams_data(
                 catalog.insert_curated_data(CuratedDataRecord(
                     id=catalog_id,
                     raw_file_id=uuid.UUID(run_id),
-                    variable=variable_name,
+                    variable=message.variable_name,
                     unit=unit,
-                    timestamp=timestamp,
+                    timestamp=message.timestamp,
                 ))
                 curated_keys.append(catalog_id)
-                variables_processed.append(variable_name)
+                variables_processed.append(message.variable_name)
 
     return dg.MaterializeResult(
         metadata={
