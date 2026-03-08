@@ -49,8 +49,8 @@ class CamsMessage:
 class CamsReader:
     @contextmanager
     def open(self, path: str | Path) -> Iterator[Iterator[CamsMessage]]:
-        grbs = pygrib.open(str(path))
+        gribs = pygrib.open(str(path))
         try:
-            yield (CamsMessage(grb) for grb in grbs)
+            yield (CamsMessage(grb) for grb in gribs)
         finally:
-            grbs.close()
+            gribs.close()

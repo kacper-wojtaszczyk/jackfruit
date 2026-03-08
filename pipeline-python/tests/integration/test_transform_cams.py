@@ -52,16 +52,13 @@ def _arrange_raw_file(s3_client, catalog) -> None:
         s3_key=RAW_KEY,
     ))
 
-# ---------------------------------------------------------------------------
-# Happy path
-# ---------------------------------------------------------------------------
 
 def test_transform_inserts_grid_data_to_clickhouse(s3_client, ch_client, storage, grid_store, catalog):
     """Raw GRIB in MinIO → download → extract → insert → rows in ClickHouse."""
     _arrange_raw_file(s3_client, catalog)
     instance = dg.DagsterInstance.ephemeral()
     _report_upstream(instance)
-    transform_cams_data(_make_context(instance), storage, catalog, grid_store, CamsReader())
+    transform_cams_data(_make_context(instance), storage, catalog, grid_store)
 
     result = ch_client.query(
         "SELECT variable, count() FROM grid_data FINAL GROUP BY variable"
@@ -74,17 +71,13 @@ def test_transform_inserts_grid_data_to_clickhouse(s3_client, ch_client, storage
     assert rows["pm10"] == 1176000
 
 
-# ---------------------------------------------------------------------------
-# Unhappy paths
-# ---------------------------------------------------------------------------
-
 def test_transform_fails_without_upstream_materialization(storage, catalog, grid_store):
     """Transform should raise dg.Failure when no upstream materialization event exists."""
     instance = dg.DagsterInstance.ephemeral()
     context = _make_context(instance)
 
     with pytest.raises(dg.Failure):
-        transform_cams_data(context, storage, catalog, grid_store, CamsReader())
+        transform_cams_data(context, storage, catalog, grid_store)
 
 
 def test_transform_fails_on_missing_raw_file(storage, catalog, grid_store):
@@ -101,12 +94,8 @@ def test_transform_fails_on_missing_raw_file(storage, catalog, grid_store):
     context = _make_context(instance)
 
     with pytest.raises(dg.Failure, match="Failed to download"):
-        transform_cams_data(context, storage, catalog, grid_store, CamsReader())
+        transform_cams_data(context, storage, catalog, grid_store)
 
-
-# ---------------------------------------------------------------------------
-# Idempotency
-# ---------------------------------------------------------------------------
 
 def test_transform_is_idempotent(s3_client, ch_client, storage, grid_store, catalog):
     """Running transform twice should produce the same CH row count as once (FINAL deduplication)."""
@@ -115,7 +104,7 @@ def test_transform_is_idempotent(s3_client, ch_client, storage, grid_store, cata
     def run_transform():
         instance = dg.DagsterInstance.ephemeral()
         _report_upstream(instance)
-        transform_cams_data(_make_context(instance), storage, catalog, grid_store, CamsReader())
+        transform_cams_data(_make_context(instance), storage, catalog, grid_store)
 
     run_transform()
     run_transform()
@@ -128,16 +117,12 @@ def test_transform_is_idempotent(s3_client, ch_client, storage, grid_store, cata
     assert rows["pm10"] == 1176000
 
 
-# ---------------------------------------------------------------------------
-# Catalog / lineage
-# ---------------------------------------------------------------------------
-
 def test_curated_lineage_recorded_in_postgres(s3_client, storage, grid_store, catalog, pg_connection):
     """Transform should insert one curated_data row per GRIB message into Postgres."""
     _arrange_raw_file(s3_client, catalog)
     instance = dg.DagsterInstance.ephemeral()
     _report_upstream(instance)
-    transform_cams_data(_make_context(instance), storage, catalog, grid_store, CamsReader())
+    transform_cams_data(_make_context(instance), storage, catalog, grid_store)
 
     rows = pg_connection.execute(
         "SELECT variable FROM catalog.curated_data ORDER BY variable"
@@ -153,7 +138,7 @@ def test_catalog_id_links_ch_and_pg(s3_client, ch_client, storage, grid_store, c
     _arrange_raw_file(s3_client, catalog)
     instance = dg.DagsterInstance.ephemeral()
     _report_upstream(instance)
-    transform_cams_data(_make_context(instance), storage, catalog, grid_store, CamsReader())
+    transform_cams_data(_make_context(instance), storage, catalog, grid_store)
 
     ch_ids = {
         str(r[0])
@@ -167,10 +152,6 @@ def test_catalog_id_links_ch_and_pg(s3_client, ch_client, storage, grid_store, c
     assert ch_ids == pg_ids
     assert len(ch_ids) == 8  # 2 variables × 4 timestamps
 
-
-# ---------------------------------------------------------------------------
-# Partition isolation
-# ---------------------------------------------------------------------------
 
 def test_transform_uses_correct_partition_metadata(s3_client, storage, grid_store, catalog):
     """Transform should use metadata from its own partition, not the latest across all partitions."""
@@ -191,22 +172,18 @@ def test_transform_uses_correct_partition_metadata(s3_client, storage, grid_stor
     )
 
     # Run transform for PARTITION (2026-02-21)
-    result = transform_cams_data(_make_context(instance), storage, catalog, grid_store, CamsReader())
+    result = transform_cams_data(_make_context(instance), storage, catalog, grid_store)
 
     # Should use OUR run_id, not the wrong one
     assert result.metadata["run_id"] == RUN_ID
 
-
-# ---------------------------------------------------------------------------
-# Metadata accuracy
-# ---------------------------------------------------------------------------
 
 def test_transform_metadata_accuracy(s3_client, ch_client, storage, grid_store, catalog):
     """MaterializeResult metadata should match what was actually written to ClickHouse."""
     _arrange_raw_file(s3_client, catalog)
     instance = dg.DagsterInstance.ephemeral()
     _report_upstream(instance)
-    result = transform_cams_data(_make_context(instance), storage, catalog, grid_store, CamsReader())
+    result = transform_cams_data(_make_context(instance), storage, catalog, grid_store)
 
     assert result.metadata["run_id"] == RUN_ID
     assert result.metadata["date"] == PARTITION
@@ -215,3 +192,14 @@ def test_transform_metadata_accuracy(s3_client, ch_client, storage, grid_store, 
 
     ch_total = ch_client.query("SELECT count() FROM grid_data").result_rows[0][0]
     assert ch_total == result.metadata["inserted_rows"]
+
+def test_transform_processes_negative_longitude(s3_client, ch_client, storage, grid_store, catalog):
+    _arrange_raw_file(s3_client, catalog)
+    instance = dg.DagsterInstance.ephemeral()
+    _report_upstream(instance)
+    transform_cams_data(_make_context(instance), storage, catalog, grid_store)
+
+    result = ch_client.query("SELECT min(lon), max(lon) FROM grid_data FINAL")
+    min_lon, max_lon = result.result_rows[0]
+    assert min_lon == pytest.approx(-24.95, abs=0.1)
+    assert max_lon == pytest.approx(44.95, abs=0.1)

@@ -18,7 +18,7 @@ import dagster as dg
 from pipeline_python.defs.partitions import daily_partitions
 from pipeline_python.defs.resources import DockerIngestionClient, ObjectStorageResource, PostgresCatalogResource
 from pipeline_python.defs.models import RawFileRecord, CuratedDataRecord
-from pipeline_python.grib2.reader import GribReader
+from pipeline_python.grib2.adapters.cams_adapter import CamsReader
 from pipeline_python.storage import GridStore
 from pipeline_python.storage.grid_store import GridData
 
@@ -93,12 +93,10 @@ def ingest_cams_data(
     kinds={"python"},
 )
 def transform_cams_data(
-    context: dg.AssetExecutionContext,
-    storage: ObjectStorageResource,
-    catalog: PostgresCatalogResource,
-    grid_store: GridStore,
-    reader: GribReader
-) -> dg.MaterializeResult:
+        context: dg.AssetExecutionContext,
+        storage: ObjectStorageResource,
+        catalog: PostgresCatalogResource,
+        grid_store: GridStore) -> dg.MaterializeResult:
     """
     Transform raw CAMS GRIB data into curated grid rows in ClickHouse.
 
@@ -148,20 +146,19 @@ def transform_cams_data(
             storage.download_raw(raw_key, tmp_raw_path)
         except Exception as e:
             raise dg.Failure(f"Failed to download {raw_key}: {e}")
+        reader = CamsReader()
         with reader.open(str(tmp_raw_path)) as messages:
             for message in messages:
                 catalog_id = uuid.uuid7()
-                variable_name = message.variable_name
-                timestamp = message.timestamp
                 values = message.values
                 unit = message.unit
                 if unit == "kg m-3":
                     values = values * 1e9
                     unit = "µg/m³"
                 rows_inserted += grid_store.insert_grid(GridData(
-                    variable=variable_name,
+                    variable=message.variable_name,
                     unit=unit,
-                    timestamp=timestamp,
+                    timestamp=message.timestamp,
                     lats=message.lats,
                     lons=message.lons,
                     values=values,
@@ -170,12 +167,12 @@ def transform_cams_data(
                 catalog.insert_curated_data(CuratedDataRecord(
                     id=catalog_id,
                     raw_file_id=uuid.UUID(run_id),
-                    variable=variable_name,
+                    variable=message.variable_name,
                     unit=unit,
-                    timestamp=timestamp,
+                    timestamp=message.timestamp,
                 ))
                 curated_keys.append(catalog_id)
-                variables_processed.append(variable_name)
+                variables_processed.append(message.variable_name)
 
     return dg.MaterializeResult(
         metadata={
