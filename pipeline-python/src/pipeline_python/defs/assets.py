@@ -93,10 +93,11 @@ def ingest_cams_data(
     kinds={"python"},
 )
 def transform_cams_data(
-        context: dg.AssetExecutionContext,
-        storage: ObjectStorageResource,
-        catalog: PostgresCatalogResource,
-        grid_store: GridStore) -> dg.MaterializeResult:
+    context: dg.AssetExecutionContext,
+    storage: ObjectStorageResource,
+    catalog: PostgresCatalogResource,
+    grid_store: GridStore,
+) -> dg.MaterializeResult:
     """
     Transform raw CAMS GRIB data into curated grid rows in ClickHouse.
 
