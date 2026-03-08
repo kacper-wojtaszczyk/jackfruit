@@ -34,7 +34,8 @@ class TestCamsMessage:
         """Return the first message from the CAMS fixture."""
         reader = CamsReader()
         with reader.open(str(FIXTURE)) as messages:
-            return next(iter(messages))
+            message = next(iter(messages))
+            yield message
 
     def test_variable_name_is_known(self, first_message):
         """Should return a mapped CAMS variable name."""
