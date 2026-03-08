@@ -1,6 +1,7 @@
 """Tests for the pygrib adapter."""
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -19,10 +20,12 @@ class TestCamsReader:
         assert count == 8
 
     def test_context_manager_closes_file(self):
-        reader = CamsReader()
-        with reader.open(str(FIXTURE)) as messages:
-            for _ in messages:
+        mock_gribs = MagicMock()
+        mock_gribs.__iter__ = MagicMock(return_value=iter([]))
+        with patch("pipeline_python.grib2.adapters.cams_adapter.pygrib.open", return_value=mock_gribs):
+            with CamsReader().open("dummy.grib"):
                 pass
+        mock_gribs.close.assert_called_once()
 
 
 class TestCamsMessage:
