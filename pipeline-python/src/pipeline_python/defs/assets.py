@@ -110,7 +110,6 @@ def transform_cams_data(
         storage: S3/MinIO client for downloading raw files
         catalog: Postgres catalog for lineage recording
         grid_store: Grid storage backend (ClickHouse in production)
-        reader: GribReader instance
 
     Returns:
         MaterializeResult with run_id, date, variables_processed, and inserted_rows
