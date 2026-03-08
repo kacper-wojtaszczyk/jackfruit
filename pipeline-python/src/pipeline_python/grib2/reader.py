@@ -14,10 +14,7 @@ import numpy as np
 
 
 class GribMessage(Protocol):
-    """
-    Protocol for GRIB2 messages. That provides unified interface for
-    GRIB Messages originating from different sources.
-    """
+    """Protocol for GRIB2 messages providing a unified interface across libraries and sources."""
     @property
     def variable_name(self) -> str: ...
 
