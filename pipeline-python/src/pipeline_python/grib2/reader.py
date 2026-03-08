@@ -8,7 +8,7 @@ type hints but never touches the underlying library directly.
 from contextlib import AbstractContextManager
 from datetime import datetime
 from pathlib import Path
-from typing import Protocol, Iterator, runtime_checkable
+from typing import Protocol, Iterator
 
 import numpy as np
 
