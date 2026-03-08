@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 from pipeline_python.grib2.adapters.cams_adapter import CamsReader
