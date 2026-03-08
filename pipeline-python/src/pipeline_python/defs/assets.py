@@ -18,7 +18,7 @@ import dagster as dg
 from pipeline_python.defs.partitions import daily_partitions
 from pipeline_python.defs.resources import DockerIngestionClient, ObjectStorageResource, PostgresCatalogResource
 from pipeline_python.defs.models import RawFileRecord, CuratedDataRecord
-from pipeline_python.grib2.adapters.cams_adapter import CamsReader
+from pipeline_python.grib2 import CamsReader
 from pipeline_python.storage import GridStore
 from pipeline_python.storage.grid_store import GridData
 

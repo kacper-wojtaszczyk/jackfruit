@@ -17,7 +17,6 @@ import pytest
 
 from pipeline_python.defs import RawFileRecord
 from pipeline_python.defs.assets import transform_cams_data
-from pipeline_python.grib2.adapters.cams_adapter import CamsReader
 
 FIXTURE_GRIB = Path(__file__).parent.parent / "fixtures" / "019c7f73-419f-727c-8e56-95880501e36b.grib"
 RUN_ID = "019c7f73-419f-727c-8e56-95880501e36b"
@@ -194,6 +193,7 @@ def test_transform_metadata_accuracy(s3_client, ch_client, storage, grid_store, 
     assert ch_total == result.metadata["inserted_rows"]
 
 def test_transform_processes_negative_longitude(s3_client, ch_client, storage, grid_store, catalog):
+    """Regression test for verifying the transformation can handle negative longitudes."""
     _arrange_raw_file(s3_client, catalog)
     instance = dg.DagsterInstance.ephemeral()
     _report_upstream(instance)

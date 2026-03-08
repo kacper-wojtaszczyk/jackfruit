@@ -15,14 +15,14 @@ _constituent_names = {
 class CamsMessage:
     def __init__(self, message: pygrib.gribmessage):
         self._message = message
-        self._data : np.ndarray | None = None
+        self._data: np.ndarray | None = None
 
     @property
     def variable_name(self) -> str:
         return _constituent_names[self._message.constituentType]
 
     @property
-    def unit(self) -> str :
+    def unit(self) -> str:
         return self._message.parameterUnits
 
     @property
@@ -30,15 +30,15 @@ class CamsMessage:
         return self._message.validDate
 
     @property
-    def values(self) -> np.ndarray :
+    def values(self) -> np.ndarray:
         return self._get_data()[0]
 
     @property
-    def lats(self) -> np.ndarray :
+    def lats(self) -> np.ndarray:
         return self._get_data()[1]
 
     @property
-    def lons(self) -> np.ndarray :
+    def lons(self) -> np.ndarray:
         return self._get_data()[2]
 
     def _get_data(self) -> np.ndarray:
