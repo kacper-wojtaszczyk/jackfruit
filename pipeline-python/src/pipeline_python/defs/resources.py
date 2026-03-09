@@ -45,7 +45,7 @@ class DockerIngestionClient(dg.ConfigurableResource):
     """
 
     image: str = "jackfruit-ingestion:latest"
-    network: str = "jackfruit_jackfruit"  # docker-compose prefixes with project name
+    network: str = "jackfruit_jackfruit"
 
     def _get_forwarded_env(self) -> dict[str, str]:
         """Collect environment variables to forward to the ingestion container."""
@@ -306,8 +306,8 @@ def resources():
     return dg.Definitions(
         resources={
             "ingestion_client": DockerIngestionClient(
-                image="jackfruit-ingestion:latest",
-                network="jackfruit_jackfruit",
+                image=os.environ.get("INGESTION_IMAGE", "jackfruit-ingestion:latest"),
+                network=os.environ.get("DOCKER_NETWORK", "jackfruit_jackfruit"),
             ),
             "storage": ObjectStorageResource(
                 endpoint_url=os.environ.get("MINIO_ENDPOINT_URL", "http://minio:9000"),

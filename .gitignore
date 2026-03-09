@@ -3,6 +3,5 @@ CLAUDE.local.md
 
 /.idea/
 .DS_Store
-docs/guides/
 /go.work
 /go.work.sum

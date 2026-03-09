@@ -63,6 +63,7 @@ services:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
       CLICKHOUSE_HOST: ${CLICKHOUSE_HOST}
+      DOCKER_NETWORK: ${DOCKER_NETWORK:-jackfruit_jackfruit}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./pipeline-python:/app
