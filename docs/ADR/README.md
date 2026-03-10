@@ -7,6 +7,7 @@ This directory contains Architecture Decision Records (ADRs) documenting signifi
 | ADR | Title | Status |
 |-----|-------|--------|
 | [001](001-grid-data-storage.md) | Grid Data Storage | Accepted |
+| [002](002-grib-library.md) | GRIB Library (grib2io → pygrib) | Accepted |
 
 ## Format
 
