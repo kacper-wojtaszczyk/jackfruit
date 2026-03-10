@@ -11,15 +11,15 @@ import (
 )
 
 type Handler struct {
-	variableProvider VariableProvider
+	variableProvider variableProvider
 	logger           *slog.Logger
 }
 
-type VariableProvider interface {
+type variableProvider interface {
 	GetVariables(ctx context.Context, ts time.Time, lat float32, lon float32, vars []string) ([]domain.VariableResult, error)
 }
 
-func NewHandler(variableProvider VariableProvider, logger *slog.Logger) *Handler {
+func NewHandler(variableProvider variableProvider, logger *slog.Logger) *Handler {
 	return &Handler{variableProvider: variableProvider, logger: logger}
 }
 
@@ -46,7 +46,7 @@ func (h *Handler) handleEnvironmental(w http.ResponseWriter, r *http.Request) {
 		if notFound, ok := errors.AsType[*domain.ErrVariableNotFound](err); ok {
 			writeError(w, http.StatusNotFound, notFound.Error())
 		} else {
-			h.logger.Error("VariableProvider.GetVariables failed", "error", err)
+			h.logger.Error("variableProvider.GetVariables failed", "error", err)
 			writeError(w, http.StatusInternalServerError, "internal server error")
 		}
 		return
