@@ -16,7 +16,8 @@ from uuid import UUID
 import dagster as dg
 
 from pipeline_python.defs.partitions import daily_partitions
-from pipeline_python.defs.resources import DockerIngestionClient, PostgresCatalogResource
+from pipeline_python.defs.resources import PostgresCatalogResource
+from pipeline_python.ingestion import CdsClient
 from pipeline_python.storage.object_store import ObjectStore
 from pipeline_python.defs.models import RawFileRecord, CuratedDataRecord
 from pipeline_python.grib2 import CamsReader
@@ -24,21 +25,19 @@ from pipeline_python.storage import GridStore
 from pipeline_python.storage.grid_store import GridData
 
 
-class IngestionConfig(dg.Config):
+class CamsForecastConfig(dg.Config):
     """Configuration for the ingestion asset."""
-
-    date: str | None = None
-    dataset: str = "cams-europe-air-quality-forecasts-forecast"  # CAMS Europe Air Quality forecast
-
+    horizon_hours: int = 48
 
 @dg.asset(
     partitions_def=daily_partitions,
-    kinds={"go", "docker"},
+    kinds={"python", "ingest"},
 )
 def ingest_cams_data(
     context: dg.AssetExecutionContext,
-    config: IngestionConfig,
-    ingestion_client: DockerIngestionClient,
+    config: CamsForecastConfig,
+    cds_client: CdsClient,
+    object_store: ObjectStore,
     catalog: PostgresCatalogResource,
 ) -> dg.MaterializeResult:
     """
@@ -52,32 +51,38 @@ def ingest_cams_data(
     Args:
         context: Dagster execution context
         config: Ingestion configuration (date, dataset)
-        ingestion_client: Docker container client resource
+        cds_client: API client to retrieve the data from Copernicus
+        object_store: S3 object storage client
         catalog: Postgres catalog resource for metadata tracking
 
     Returns:
         MaterializeResult with run metadata
     """
+    source: str = "ads"
+    dataset: str = "cams-europe-air-quality-forecast"
     run_id = str(uuid.uuid7())
+    partition_date = date.fromisoformat(context.partition_key)
 
-    partition_date = context.partition_key
+    context.log.info(f"Starting ingestion: source={source}, dataset={dataset}, date={partition_date}, run_id={run_id}")
 
-    context.log.info(f"Starting ingestion: dataset={config.dataset}, date={partition_date}, run_id={run_id}")
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir) / "cams.grib"
+        cds_client.retrieve_forecast(
+            date=partition_date,
+            variables=["pm2p5", "pm10"],
+            target=tmp_path,
+            max_leadtime_hours=config.horizon_hours,
+        )
+        context.log.info(f"Downloaded CAMS data ({tmp_path.stat().st_size} bytes)")
+        s3_key = f"{source}/{dataset}/{partition_date}/{run_id}.grib"
+        object_store.upload_raw(s3_key, tmp_path)
+        context.log.info(f"Uploaded to {s3_key}")
 
-    result = ingestion_client.run_ingestion(
-        context,
-        dataset=config.dataset,
-        date=partition_date,
-        run_id=run_id,
-    )
-
-    # Record raw file in catalog
-    s3_key = f"ads/{config.dataset}/{partition_date}/{run_id}.grib"
     raw_record = RawFileRecord(
         id=uuid.UUID(run_id),
-        source="ads",
-        dataset=config.dataset,
-        date=date.fromisoformat(partition_date),
+        source=source,
+        dataset=dataset,
+        date=partition_date,
         s3_key=s3_key,
     )
     try:
@@ -86,16 +91,23 @@ def ingest_cams_data(
     except Exception as e:
         context.log.warning(f"Failed to record raw file in catalog: {e}")
 
-    return result
+    return dg.MaterializeResult(
+            metadata={
+                "run_id": run_id,
+                "source": source,
+                "dataset": dataset,
+                "date": date,
+            }
+        )
 
 @dg.asset(
     partitions_def=daily_partitions,
     deps=[ingest_cams_data],
-    kinds={"python"},
+    kinds={"python", "transform"},
 )
 def transform_cams_data(
     context: dg.AssetExecutionContext,
-    storage: ObjectStore,
+    object_store: ObjectStore,
     catalog: PostgresCatalogResource,
     grid_store: GridStore,
 ) -> dg.MaterializeResult:
@@ -108,7 +120,7 @@ def transform_cams_data(
 
     Args:
         context: Dagster execution context (provides partition key and upstream metadata)
-        storage: S3/MinIO client for downloading raw files
+        object_store: S3/MinIO client for downloading raw files
         catalog: Postgres catalog for lineage recording
         grid_store: Grid storage backend (ClickHouse in production)
 
@@ -144,7 +156,7 @@ def transform_cams_data(
         tmp_dir = Path(tmp_dir)
         tmp_raw_path = tmp_dir / "raw.grib"
         try:
-            storage.download_raw(raw_key, tmp_raw_path)
+            object_store.download_raw(raw_key, tmp_raw_path)
         except Exception as e:
             raise dg.Failure(f"Failed to download {raw_key}: {e}")
         reader = CamsReader()

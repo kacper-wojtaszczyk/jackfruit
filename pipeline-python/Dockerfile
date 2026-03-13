@@ -5,12 +5,6 @@ WORKDIR /app
 # Install uv for fast dependency management
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Install docker CLI so Dagster can spawn sibling containers via host Docker socket
-# Also install g2c library + build tools for grib2io GRIB2 decoding
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    docker.io \
-    && rm -rf /var/lib/apt/lists/*
-
 # Keep the project environment outside /app so the bind mount doesn't hide it
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"

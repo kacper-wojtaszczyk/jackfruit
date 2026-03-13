@@ -11,8 +11,7 @@ import uuid
 import dagster as dg
 import pytest
 
-from pipeline_python.defs.assets import IngestionConfig, ingest_cams_data
-from pipeline_python.defs.resources import DockerIngestionClient
+from pipeline_python.defs.assets import CamsForecastConfig, ingest_cams_data
 from pipeline_python.defs.models import RawFileRecord
 
 
@@ -279,14 +278,14 @@ class TestIngestionConfig:
 
     def test_default_values(self):
         """Config should have expected defaults."""
-        config = IngestionConfig()
+        config = CamsForecastConfig()
 
         assert config.date is None
         assert config.dataset == "cams-europe-air-quality-forecasts-forecast"
 
     def test_custom_values(self):
         """Config should accept custom values."""
-        config = IngestionConfig(
+        config = CamsForecastConfig(
             date="2025-12-25",
             dataset="custom-dataset",
         )
