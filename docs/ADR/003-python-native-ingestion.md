@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted (implementation in-progress)
 
 ## Context
 
@@ -75,8 +75,6 @@ The new flow: `CdsClient` (a `ConfigurableResource` wrapping `cdsapi`) retrieves
 
 ## References
 
-- `CdsClient`: `src/pipeline_python/ingestion/cds_client.py`
-- Replaced Go code: `ingestion-go/` (deleted)
+- `CdsClient`: `src/pipeline_python/ingestion/cds_client.py` (to be implemented)
+- Replaced Go code: `ingestion-go/` (to be deleted)
 - K8s architecture: `docs/buttprint-infrastructure.md` (Kapsule deployment plan)
-- ADR 001: Grid Data Storage — `GridStore` abstraction pattern
-- ADR 002: GRIB Library — similar "simplify by switching to the right tool" decision

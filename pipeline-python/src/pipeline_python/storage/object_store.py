@@ -21,7 +21,7 @@ class ObjectStore(dg.ConfigurableResource):
 
     Example usage in an asset:
         @dg.asset
-        def my_asset(storage: ObjectStorageResource):
+        def my_asset(storage: ObjectStore):
             with tempfile.TemporaryDirectory() as tmpdir:
                 local_path = Path(tmpdir) / "raw.grib"
                 storage.download_raw("ads/cams/.../file.grib", local_path)

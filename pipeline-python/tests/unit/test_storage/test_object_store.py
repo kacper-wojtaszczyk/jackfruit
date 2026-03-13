@@ -29,7 +29,7 @@ def storage_resource():
     )
 
 
-class TestObjectStorageResourceDownloadRaw:
+class TestObjectStoreDownloadRaw:
     """Tests for download_raw method."""
 
     def test_downloads_file_successfully(self, storage_resource, mock_s3_client):
@@ -102,7 +102,7 @@ class TestObjectStorageResourceDownloadRaw:
                     storage_resource.download_raw("secret/file.grib", local_path)
 
 
-class TestObjectStorageResourceUploadRaw:
+class TestObjectStoreUploadRaw:
     """Tests for upload_raw method."""
 
     def test_uploads_file_successfully(self, storage_resource, mock_s3_client):
@@ -137,7 +137,7 @@ class TestObjectStorageResourceUploadRaw:
                 storage_resource.upload_raw("ads/dataset/file.grib", Path("/tmp/file.grib"))
 
 
-class TestObjectStorageResourceConfig:
+class TestObjectStoreConfig:
     """Tests for ObjectStore configuration."""
 
     def test_create_object_storage(self):

@@ -3,7 +3,6 @@ Dagster resources for pipeline execution.
 
 Resources defined here:
 - DockerIngestionClient: run Go ingestion container via Dagster Pipes
-- ObjectStorageResource: S3/MinIO client for the raw data bucket
 - PostgresCatalogResource: Postgres metadata catalog (raw files, curated data lineage)
 """
 import os
@@ -15,7 +14,7 @@ from pydantic import PrivateAttr
 import dagster as dg
 from .models import CuratedDataRecord, RawFileRecord
 from pipeline_python.storage.clickhouse_grid_store import ClickHouseGridStore
-from ..storage.object_store import ObjectStore
+from pipeline_python.storage.object_store import ObjectStore
 
 # Environment variables to forward to the ingestion container
 _INGESTION_ENV_VARS = [
@@ -116,12 +115,6 @@ class DockerIngestionClient(dg.ConfigurableResource):
                 "network": self.network,
             }
         )
-
-
-# -----------------------------------------------------------------------------
-# Storage resources
-# -----------------------------------------------------------------------------
-
 
 # -----------------------------------------------------------------------------
 # Catalog resources
