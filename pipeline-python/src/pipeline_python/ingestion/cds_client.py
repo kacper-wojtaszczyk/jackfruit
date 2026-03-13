@@ -1,9 +1,8 @@
-import datetime
+from datetime import date
 from pathlib import Path
 
 import cdsapi
 import dagster as dg
-from pydantic import PrivateAttr
 
 _CDS_API_DATASET = "cams-europe-air-quality-forecasts"
 
@@ -13,7 +12,7 @@ _VARIABLE_MAP = {
 }
 
 # CAMS forecast model maximum lead time (hours).
-_MAX_LEADTIME = 96
+_MAX_LEADTIME = 48
 
 class CdsClient(dg.ConfigurableResource):
     """
@@ -29,20 +28,13 @@ class CdsClient(dg.ConfigurableResource):
 
     url: str
     api_key: str
-    _client: cdsapi.Client | None = PrivateAttr(default=None)
-
-    def _get_client(self) -> cdsapi.Client:
-        if self._client is None:
-            self._client = cdsapi.Client(url=self.url, key=self.api_key)
-
-        return self._client
 
     def retrieve_forecast(
             self,
-            date: datetime.date,
+            forecast_date: date,
             variables: list[str],
             target: Path,
-            max_leadtime_hours: int = 48,
+            max_leadtime_hours: int = _MAX_LEADTIME,
     ) -> None:
         """
         Submit a retrieval request and download the result to a local file.
@@ -51,7 +43,7 @@ class CdsClient(dg.ConfigurableResource):
         with exponential backoff.
 
         Args:
-            date: Date of forecast creation
+            forecast_date: Date of forecast creation
             variables: List of variables to download
             target: Local path to write the downloaded GRIB file to
             max_leadtime_hours: Max lead time in hours
@@ -71,12 +63,12 @@ class CdsClient(dg.ConfigurableResource):
             "variable": api_variables,
             "model": ["ensemble"],
             "level": ["0"],
-            "date": f"{date.isoformat()}/{date.isoformat()}",
+            "date": f"{forecast_date.isoformat()}/{forecast_date.isoformat()}",
             "type": ["forecast"],
             "time": ["00:00"],
             "leadtime_hour": leadtime_hours,
             "data_format": "grib",
         }
 
-        client = self._get_client()
+        client = cdsapi.Client(url=self.url, key=self.api_key, quiet=True)
         client.retrieve(_CDS_API_DATASET, request).download(str(target))

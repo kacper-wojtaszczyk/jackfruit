@@ -2,7 +2,7 @@
 Dagster resources for pipeline execution.
 
 Resources assembled here:
-- DockerIngestionClient: run Go ingestion container via Dagster Pipes
+- CdsClient: Copernicus ADS API client for GRIB data retrieval
 - PostgresCatalogResource: Postgres metadata catalog (raw files, curated data lineage)
 - ObjectStore / ClickHouseGridStore: storage resources wired from pipeline_python.storage.*
 """
@@ -13,8 +13,8 @@ from pydantic import PrivateAttr
 
 import dagster as dg
 from .models import CuratedDataRecord, RawFileRecord
+from pipeline_python.storage import ObjectStore
 from pipeline_python.storage.clickhouse_grid_store import ClickHouseGridStore
-from pipeline_python.storage.object_store import ObjectStore
 from pipeline_python.ingestion import CdsClient
 
 

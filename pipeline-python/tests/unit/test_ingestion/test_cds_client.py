@@ -1,3 +1,4 @@
+from datetime import date
 from pathlib import Path
 from unittest.mock import Mock, patch
 import tempfile
@@ -35,7 +36,7 @@ class TestCdsClientRetrieveForecast:
         with tempfile.TemporaryDirectory() as tmpdir:
             target = Path(tmpdir) / "out.grib"
             cds_client.retrieve_forecast(
-                date="2026-01-15",
+                forecast_date=date.fromisoformat("2026-01-15"),
                 variables=["pm2p5", "pm10"],
                 target=target,
             )
@@ -50,7 +51,7 @@ class TestCdsClientRetrieveForecast:
         with tempfile.TemporaryDirectory() as tmpdir:
             target = Path(tmpdir) / "out.grib"
             cds_client.retrieve_forecast(
-                date="2026-01-15",
+                forecast_date=date.fromisoformat("2026-01-15"),
                 variables=["pm2p5"],
                 target=target,
                 max_leadtime_hours=3,
@@ -63,26 +64,26 @@ class TestCdsClientRetrieveForecast:
         with tempfile.TemporaryDirectory() as tmpdir:
             target = Path(tmpdir) / "out.grib"
             cds_client.retrieve_forecast(
-                date="2026-01-15",
+                forecast_date=date.fromisoformat("2026-01-15"),
                 variables=["pm2p5"],
                 target=target,
             )
             params = mock_client.retrieve.call_args[0][1]
             assert len(params["leadtime_hour"]) == 49  # 0..48 inclusive
 
-    def test_rejects_leadtime_above_96(self, cds_client):
-        with pytest.raises(ValueError, match="96"):
+    def test_rejects_leadtime_above_48(self, cds_client):
+        with pytest.raises(ValueError, match="48"):
             cds_client.retrieve_forecast(
-                date="2026-01-15",
+                forecast_date=date.fromisoformat("2026-01-15"),
                 variables=["pm2p5"],
                 target=Path("/tmp/out.grib"),
-                max_leadtime_hours=99,
+                max_leadtime_hours=49,
             )
 
     def test_raises_key_error_for_unknown_variable(self, cds_client, mock_cdsapi):
         with pytest.raises(KeyError):
             cds_client.retrieve_forecast(
-                date="2026-01-15",
+                forecast_date=date.fromisoformat("2026-01-15"),
                 variables=["ozone"],
                 target=Path("/tmp/out.grib"),
             )

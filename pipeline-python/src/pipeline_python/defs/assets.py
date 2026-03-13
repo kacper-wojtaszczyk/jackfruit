@@ -1,11 +1,9 @@
 """
-Ingestion assets for fetching and storing raw environmental data.
+Dagster assets for CAMS environmental data ingestion and transformation.
 
-These assets orchestrate the Go ingestion container via Docker.
-
-DEPRECATION NOTICE:
-This Go-based ingestion will be replaced with Python-native ingestion using cdsapi.
-See docs/layer-1-ingestion.md for details.
+Ingestion fetches raw GRIB data from the Copernicus ADS API via cdsapi
+and stores it in MinIO. Transformation decodes the GRIB, extracts grids,
+and writes curated rows to ClickHouse.
 """
 import tempfile
 import uuid
@@ -18,11 +16,12 @@ import dagster as dg
 from pipeline_python.defs.partitions import daily_partitions
 from pipeline_python.defs.resources import PostgresCatalogResource
 from pipeline_python.ingestion import CdsClient
-from pipeline_python.storage.object_store import ObjectStore
+from pipeline_python.storage import ObjectStore, GridStore
+from pipeline_python.storage.grid_store import GridData
 from pipeline_python.defs.models import RawFileRecord, CuratedDataRecord
 from pipeline_python.grib2 import CamsReader
-from pipeline_python.storage import GridStore
-from pipeline_python.storage.grid_store import GridData
+
+_AIR_QUALITY_FORECAST = "cams-europe-air-quality-forecast"
 
 
 class CamsForecastConfig(dg.Config):
@@ -41,16 +40,14 @@ def ingest_cams_data(
     catalog: PostgresCatalogResource,
 ) -> dg.MaterializeResult:
     """
-    Run the ingestion service to fetch and store raw CAMS data.
+    Fetch raw CAMS forecast data from Copernicus ADS and store in MinIO.
 
-    This asset uses the DockerIngestionClient to run the Go ingestion CLI container.
-
-    Data will be written to the jackfruit-raw bucket following the pattern:
-        {source}/{dataset}/{YYYY-MM-DD}/{run_id}.grib
+    Downloads a GRIB file via cdsapi, uploads it to the raw bucket at
+    ads/{dataset}/{YYYY-MM-DD}/{run_id}.grib, and records lineage in Postgres.
 
     Args:
         context: Dagster execution context
-        config: Ingestion configuration (date, dataset)
+        config: Forecast-specific configuration (horizon_hours)
         cds_client: API client to retrieve the data from Copernicus
         object_store: S3 object storage client
         catalog: Postgres catalog resource for metadata tracking
@@ -59,29 +56,29 @@ def ingest_cams_data(
         MaterializeResult with run metadata
     """
     source: str = "ads"
-    dataset: str = "cams-europe-air-quality-forecast"
     run_id = str(uuid.uuid7())
     partition_date = date.fromisoformat(context.partition_key)
 
-    context.log.info(f"Starting ingestion: source={source}, dataset={dataset}, date={partition_date}, run_id={run_id}")
+    context.log.info(
+        f"Starting ingestion: source={source}, dataset={_AIR_QUALITY_FORECAST}, date={partition_date}, run_id={run_id}")
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir) / "cams.grib"
         cds_client.retrieve_forecast(
-            date=partition_date,
+            forecast_date=partition_date,
             variables=["pm2p5", "pm10"],
             target=tmp_path,
             max_leadtime_hours=config.horizon_hours,
         )
         context.log.info(f"Downloaded CAMS data ({tmp_path.stat().st_size} bytes)")
-        s3_key = f"{source}/{dataset}/{partition_date}/{run_id}.grib"
+        s3_key = f"{source}/{_AIR_QUALITY_FORECAST}/{partition_date}/{run_id}.grib"
         object_store.upload_raw(s3_key, tmp_path)
         context.log.info(f"Uploaded to {s3_key}")
 
     raw_record = RawFileRecord(
         id=uuid.UUID(run_id),
         source=source,
-        dataset=dataset,
+        dataset=_AIR_QUALITY_FORECAST,
         date=partition_date,
         s3_key=s3_key,
     )
@@ -92,13 +89,13 @@ def ingest_cams_data(
         context.log.warning(f"Failed to record raw file in catalog: {e}")
 
     return dg.MaterializeResult(
-            metadata={
-                "run_id": run_id,
-                "source": source,
-                "dataset": dataset,
-                "date": date,
-            }
-        )
+        metadata={
+            "run_id": run_id,
+            "source": source,
+            "dataset": _AIR_QUALITY_FORECAST,
+            "date": partition_date.isoformat(),
+        }
+    )
 
 @dg.asset(
     partitions_def=daily_partitions,
