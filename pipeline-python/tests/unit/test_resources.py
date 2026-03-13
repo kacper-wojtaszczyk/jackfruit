@@ -1,38 +1,14 @@
 """
-Tests for storage resources.
-
-Tests the ObjectStorageResource for S3/MinIO interactions.
+Tests for Postgres catalog resources (PostgresCatalogResource, _postgres_dsn_from_env).
 """
-import tempfile
-from pathlib import Path
-from unittest.mock import Mock, patch
 import uuid
 from datetime import date, datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
-from botocore.exceptions import ClientError
 
-from pipeline_python.defs.resources import ObjectStorageResource, PostgresCatalogResource
+from pipeline_python.defs.resources import PostgresCatalogResource
 from pipeline_python.defs.models import CuratedDataRecord, RawFileRecord
-
-
-@pytest.fixture
-def mock_s3_client():
-    """Provide a mock boto3 S3 client."""
-    return Mock()
-
-
-@pytest.fixture
-def storage_resource():
-    """Provide an ObjectStorageResource for testing."""
-    return ObjectStorageResource(
-        endpoint_url="http://localhost:9000",
-        access_key="test-access-key",
-        secret_key="test-secret-key",
-        raw_bucket="test-raw",
-        use_ssl=False,
-    )
 
 
 @pytest.fixture
@@ -47,76 +23,6 @@ def psycopg_mocks():
     conn.cursor.return_value = cursor
     conn.commit = MagicMock()  # Add commit method
     return {"connect": MagicMock(return_value=conn), "conn": conn, "cursor": cursor}
-
-
-class TestObjectStorageResourceDownloadRaw:
-    """Tests for download_raw method."""
-
-    def test_downloads_file_successfully(self, storage_resource, mock_s3_client):
-        """Should download file from raw bucket."""
-        with patch("pipeline_python.defs.resources.boto3.client", return_value=mock_s3_client):
-            with tempfile.TemporaryDirectory() as tmpdir:
-                local_path = Path(tmpdir) / "downloaded.grib"
-
-                storage_resource.download_raw("ads/dataset/2025-01-01/file.grib", local_path)
-
-                mock_s3_client.download_file.assert_called_once_with(
-                    "test-raw",
-                    "ads/dataset/2025-01-01/file.grib",
-                    str(local_path),
-                )
-
-    def test_creates_parent_directories(self, storage_resource, mock_s3_client):
-        """Should create parent directories if they don't exist."""
-        with patch("pipeline_python.defs.resources.boto3.client", return_value=mock_s3_client):
-            with tempfile.TemporaryDirectory() as tmpdir:
-                local_path = Path(tmpdir) / "nested" / "dir" / "downloaded.grib"
-
-                storage_resource.download_raw("ads/dataset/2025-01-01/file.grib", local_path)
-
-                assert local_path.parent.exists()
-                assert local_path.parent.is_dir()
-
-    def test_raises_error_for_empty_key(self, storage_resource):
-        """Should raise ValueError for empty key."""
-        with pytest.raises(ValueError, match="cannot be empty"):
-            storage_resource.download_raw("", Path("/tmp/file.grib"))
-
-        with pytest.raises(ValueError, match="cannot be empty"):
-            storage_resource.download_raw("   ", Path("/tmp/file.grib"))
-
-    def test_raises_error_for_missing_file(self, storage_resource, mock_s3_client):
-        """Should raise FileNotFoundError for missing S3 file."""
-        error_response = {"Error": {"Code": "NoSuchKey", "Message": "Not found"}}
-        mock_s3_client.download_file.side_effect = ClientError(error_response, "download_file")
-
-        with patch("pipeline_python.defs.resources.boto3.client", return_value=mock_s3_client):
-            with tempfile.TemporaryDirectory() as tmpdir:
-                local_path = Path(tmpdir) / "file.grib"
-
-                with pytest.raises(FileNotFoundError, match="test-raw"):
-                    storage_resource.download_raw("missing/file.grib", local_path)
-
-
-
-class TestObjectStorageResourceConfig:
-    """Tests for ObjectStorageResource configuration."""
-
-    def test_create_object_storage(self):
-        """Should accept custom configuration values."""
-        resource = ObjectStorageResource(
-            endpoint_url="https://s3.amazonaws.com",
-            access_key="custom-key",
-            secret_key="custom-secret",
-            raw_bucket="my-raw-bucket",
-            use_ssl=True,
-        )
-
-        assert resource.endpoint_url == "https://s3.amazonaws.com"
-        assert resource.access_key == "custom-key"
-        assert resource.secret_key == "custom-secret"
-        assert resource.raw_bucket == "my-raw-bucket"
-        assert resource.use_ssl is True
 
 
 class TestPostgresCatalogResource:

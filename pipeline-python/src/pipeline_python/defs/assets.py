@@ -16,7 +16,8 @@ from uuid import UUID
 import dagster as dg
 
 from pipeline_python.defs.partitions import daily_partitions
-from pipeline_python.defs.resources import DockerIngestionClient, ObjectStorageResource, PostgresCatalogResource
+from pipeline_python.defs.resources import DockerIngestionClient, PostgresCatalogResource
+from pipeline_python.storage.object_store import ObjectStore
 from pipeline_python.defs.models import RawFileRecord, CuratedDataRecord
 from pipeline_python.grib2 import CamsReader
 from pipeline_python.storage import GridStore
@@ -94,7 +95,7 @@ def ingest_cams_data(
 )
 def transform_cams_data(
     context: dg.AssetExecutionContext,
-    storage: ObjectStorageResource,
+    storage: ObjectStore,
     catalog: PostgresCatalogResource,
     grid_store: GridStore,
 ) -> dg.MaterializeResult:
