@@ -144,14 +144,14 @@ GET /v1/environmental?lat=52.52&lon=13.40&timestamp=2025-03-12T14:55:00Z&variabl
     },
     {
       "name": "temperature",
-      "value": 285.5,
-      "unit": "K",
+      "value": 12.35,
+      "unit": "°C",
       "ref_timestamp": "2025-03-12T14:00:00Z",
       "actual_lat": 52.50,
       "actual_lon": 13.50,
       "lineage": {
-        "source": "ads",
-        "dataset": "reanalysis-era5-single-levels",
+        "source": "ecmwf",
+        "dataset": "ecmwf-ifs-forecast",
         "raw_file_id": "01890c24-905b-7122-b170-b60814e6ee07"
       }
     }
