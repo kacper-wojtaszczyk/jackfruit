@@ -38,4 +38,4 @@ class EcmwfClient(dg.ConfigurableResource):
             "step": _ECMWF_STEPS,
             "param": api_variables,
         }
-        client.retrieve(request, target)
+        client.retrieve(request, str(target))

@@ -1,9 +1,9 @@
 """
-Dagster assets for CAMS environmental data ingestion and transformation.
+Dagster assets for environmental data ingestion and transformation.
 
-Ingestion fetches raw GRIB data from the Copernicus ADS API via cdsapi
-and stores it in MinIO. Transformation decodes the GRIB, extracts grids,
-and writes curated rows to ClickHouse.
+Ingestion fetches raw GRIB data from external APIs (Copernicus ADS via cdsapi,
+ECMWF Open Data) and stores it in MinIO. Transformation decodes the GRIB,
+extracts grids, and writes curated rows to ClickHouse.
 """
 import tempfile
 import uuid
@@ -241,5 +241,6 @@ def ingest_ecmwf_data(
             "source": _ECMWF_SOURCE,
             "dataset": _WEATHER_FORECAST,
             "date": partition_date.isoformat(),
+            "s3_key": s3_key,
         }
     )

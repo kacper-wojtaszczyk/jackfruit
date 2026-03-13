@@ -8,11 +8,8 @@ Dagster execute asset dependencies in order.
 Example: CAMS daily schedule at 08:00 UTC materializes today's data
 (because CAMS data is typically available ~6 hours after midnight UTC).
 """
-from datetime import timedelta
-
 import dagster as dg
 
-from .assets import ingest_cams_data
 from .partitions import daily_partitions
 
 

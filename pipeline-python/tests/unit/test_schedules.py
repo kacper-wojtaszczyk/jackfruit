@@ -147,6 +147,73 @@ class TestCamsDailySchedule:
             assert request.partition_key == "2025-03-12"
 
 
+class TestEcmwfDailySchedule:
+    """Tests for the ecmwf_daily_schedule."""
+
+    def test_schedule_generates_run_request(self):
+        """Schedule should generate a RunRequest when evaluated."""
+        from pipeline_python.defs.schedules import ecmwf_daily_schedule
+
+        now = datetime(2025, 3, 12, 9, 30, 0)
+        context = _mock_schedule_context(now)
+
+        request = ecmwf_daily_schedule(context)
+
+        assert request is not None
+        assert isinstance(request, dg.RunRequest)
+
+    def test_schedule_processes_today_partition(self):
+        """Schedule should materialize today's partition."""
+        from pipeline_python.defs.schedules import ecmwf_daily_schedule
+
+        scheduled_date = datetime(2025, 3, 12, 9, 30, 0)
+        context = _mock_schedule_context(scheduled_date)
+
+        request = ecmwf_daily_schedule(context)
+
+        assert request.partition_key == "2025-03-12"
+
+    def test_schedule_run_key_includes_date(self):
+        """Schedule should include date in run_key for idempotency."""
+        from pipeline_python.defs.schedules import ecmwf_daily_schedule
+
+        scheduled_date = datetime(2025, 3, 12, 9, 30, 0)
+        context = _mock_schedule_context(scheduled_date)
+
+        request = ecmwf_daily_schedule(context)
+
+        assert request.run_key == "ecmwf_daily_2025-03-12"
+
+    def test_schedule_tags_include_metadata(self):
+        """Schedule should tag runs with source, pipeline, and date."""
+        from pipeline_python.defs.schedules import ecmwf_daily_schedule
+
+        scheduled_date = datetime(2025, 3, 12, 9, 30, 0)
+        context = _mock_schedule_context(scheduled_date)
+
+        request = ecmwf_daily_schedule(context)
+
+        assert request.tags is not None
+        assert request.tags.get("source") == "schedule"
+        assert request.tags.get("pipeline") == "ecmwf"
+
+    def test_schedule_consistent_across_runs(self):
+        """Multiple evaluations for the same scheduled time should produce identical results."""
+        from pipeline_python.defs.schedules import ecmwf_daily_schedule
+
+        scheduled_date = datetime(2025, 3, 12, 9, 30, 0)
+
+        context1 = _mock_schedule_context(scheduled_date)
+        context2 = _mock_schedule_context(scheduled_date)
+
+        request1 = ecmwf_daily_schedule(context1)
+        request2 = ecmwf_daily_schedule(context2)
+
+        assert request1.partition_key == request2.partition_key
+        assert request1.run_key == request2.run_key
+        assert request1.tags == request2.tags
+
+
 class TestScheduleDefinitions:
     """Tests for schedule registration and discovery."""
 
@@ -167,6 +234,15 @@ class TestScheduleDefinitions:
 
         schedule_names = [s.name for s in definitions.schedules]
         assert "cams_daily_schedule" in schedule_names
+
+    def test_ecmwf_daily_schedule_registered(self, postgres_env):
+        """ecmwf_daily_schedule should be registered in definitions."""
+        from pipeline_python.definitions import defs
+
+        definitions = defs()
+
+        schedule_names = [s.name for s in definitions.schedules]
+        assert "ecmwf_daily_schedule" in schedule_names
 
     def test_schedule_has_cron_expression(self):
         """Schedule should have a valid cron expression."""
