@@ -8,6 +8,7 @@ This directory contains Architecture Decision Records (ADRs) documenting signifi
 |-----|-------|--------|
 | [001](001-grid-data-storage.md) | Grid Data Storage | Accepted |
 | [002](002-grib-library.md) | GRIB Library (grib2io → pygrib) | Accepted |
+| [003](003-python-native-ingestion.md) | Python-Native CDS API Ingestion | Accepted |
 
 ## Format
 
