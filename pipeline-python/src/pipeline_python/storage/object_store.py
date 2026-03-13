@@ -53,8 +53,9 @@ class ObjectStore(dg.ConfigurableResource):
             local_path: Local file path to write to
 
         Raises:
-            ValueError: If key is empty or contains invalid characters
-            FileNotFoundError: If the S3 download fails (e.g., file not found, permission denied)
+            ValueError: If key is empty or contains only whitespace.
+            FileNotFoundError: If the object does not exist in the bucket (404 / NoSuchKey).
+            ClientError: Propagated for other S3/MinIO client errors (e.g., permission denied, network issues).
         """
         if not key or not key.strip():
             raise ValueError("S3 key cannot be empty")
