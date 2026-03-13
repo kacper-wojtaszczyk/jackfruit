@@ -138,7 +138,7 @@ GET /v1/environmental?lat=52.52&lon=13.40&timestamp=2025-03-12T14:55:00Z&variabl
       "actual_lon": 13.50,
       "lineage": {
         "source": "ads",
-        "dataset": "cams-europe-air-quality-forecasts-analysis",
+        "dataset": "cams-europe-air-quality-forecast",
         "raw_file_id": "01890c24-905b-7122-b170-b60814e6ee06"
       }
     },

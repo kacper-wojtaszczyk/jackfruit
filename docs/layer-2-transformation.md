@@ -201,14 +201,27 @@ Transform assets use resources with lazy connections (Dagster calls teardown_aft
 
 Lineage and processing metadata also stored in `MaterializeResult.metadata`:
 
+**Ingestion asset:**
 ```python
 return dg.MaterializeResult(
     metadata={
         "run_id": run_id,
-        "raw_key": raw_key,
-        "variables_processed": variables,
-        "rows_inserted": row_count,
-        "processing_version": "1.0.0",
+        "source": _ADS_SOURCE,
+        "dataset": _AIR_QUALITY_FORECAST,
+        "date": partition_date.isoformat(),
+    }
+)
+```
+
+**Transformation asset:**
+```python
+return dg.MaterializeResult(
+    metadata={
+        "run_id": run_id,
+        "date": partition_date,
+        "curated_keys": [str(key) for key in curated_keys],
+        "variables_processed": list(set(variables_processed)),
+        "inserted_rows": rows_inserted,
     }
 )
 ```

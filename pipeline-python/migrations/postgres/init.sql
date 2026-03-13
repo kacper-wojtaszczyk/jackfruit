@@ -18,7 +18,7 @@ CREATE TABLE catalog.curated_data (
     id              UUID PRIMARY KEY,           -- app-generated UUIDv7, referenced by CH grid_data.catalog_id
     raw_file_id     UUID NOT NULL REFERENCES catalog.raw_files(id),
     variable        TEXT NOT NULL,              -- e.g., 'pm2p5', 'pm10'
-    unit            TEXT NOT NULL,              -- e.g., 'kg/m³'
+    unit            TEXT NOT NULL,              -- e.g., 'µg/m³' (post-conversion unit)
     timestamp       TIMESTAMPTZ NOT NULL,       -- valid time of data
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
