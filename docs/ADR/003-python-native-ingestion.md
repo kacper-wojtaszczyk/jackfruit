@@ -77,4 +77,4 @@ The new flow: `CdsClient` (a `ConfigurableResource` wrapping `cdsapi`) retrieves
 
 - `CdsClient`: `src/pipeline_python/ingestion/cds_client.py` (to be implemented)
 - Replaced Go code: `ingestion-go/` (to be deleted)
-- K8s architecture: `docs/buttprint-infrastructure.md` (Kapsule deployment plan)
+- K8s architecture: [Terraform repo](https://github.com/kacper-wojtaszczyk/climacterium-infra)
