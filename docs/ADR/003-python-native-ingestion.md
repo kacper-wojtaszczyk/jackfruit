@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (implementation in-progress)
+Accepted
 
 ## Context
 
@@ -75,6 +75,6 @@ The new flow: `CdsClient` (a `ConfigurableResource` wrapping `cdsapi`) retrieves
 
 ## References
 
-- `CdsClient`: `src/pipeline_python/ingestion/cds_client.py` (to be implemented)
-- Replaced Go code: `ingestion-go/` (to be deleted)
+- `CdsClient`: `src/pipeline_python/ingestion/cds_client.py`
+- Replaced Go code: `ingestion-go/` (deleted)
 - K8s architecture: [Terraform repo](https://github.com/kacper-wojtaszczyk/climacterium-infra)
