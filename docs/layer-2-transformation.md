@@ -86,8 +86,7 @@ All transformations are recorded in the Postgres metadata catalog (`catalog` sch
 
 **Connection reuse:** Transform assets use resources with lazy connections (Dagster calls teardown_after_execution) to reuse database connections across multiple inserts (reduces connection overhead).
 
-**Error handling:** Catalog writes are non-fatal. If a catalog insert fails, a warning is logged and the asset continues. ClickHouse is the source of truth for grid data; the catalog is a derived lineage index.
-
+**Error handling:** Catalog writes are fatal — both ingestion and transformation fail-fast on catalog insert failure. Lineage is required for licensing compliance.
 ## Curated Data Output (ClickHouse)
 
 **Storage:** ClickHouse

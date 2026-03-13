@@ -84,11 +84,8 @@ def ingest_cams_data(
         date=partition_date,
         s3_key=s3_key,
     )
-    try:
-        catalog.insert_raw_file(raw_record)
-        context.log.info(f"Recorded raw file in catalog: {s3_key}")
-    except Exception as e:
-        context.log.warning(f"Failed to record raw file in catalog: {e}")
+    catalog.insert_raw_file(raw_record)
+    context.log.info(f"Recorded raw file in catalog: {s3_key}")
 
     return dg.MaterializeResult(
         metadata={

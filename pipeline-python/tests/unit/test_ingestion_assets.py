@@ -192,15 +192,16 @@ class TestIngestCamsDataAsset:
         id2 = _mock_uploads[1]["key"].split("/")[-1].replace(".grib", "")
         assert id1 != id2
 
-    def test_continues_on_catalog_failure(self):
-        """Catalog insert is non-fatal — asset should still succeed."""
+    def test_fails_on_catalog_failure(self):
+        """Catalog insert is fatal — asset must fail (licensing requires lineage)."""
         result = dg.materialize(
             assets=[ingest_cams_data],
             resources=_make_resources(catalog=MockCatalogResource(should_fail=True)),
             partition_key="2026-01-15",
+            raise_on_error=False,
         )
 
-        assert result.success
+        assert not result.success
 
     def test_propagates_cds_failure(self):
         """CDS API failure is fatal — asset must fail."""

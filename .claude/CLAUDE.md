@@ -215,10 +215,9 @@ Grid storage: `GridStore` abstract base class (`storage/grid_store.py`). `ClickH
 
 ### Error Handling
 
-- **Fatal:** missing upstream asset, invalid GRIB file, download failure
-- **Non-fatal:** catalog insert failures (logged as warning, asset continues)
+- **Fatal:** missing upstream asset, invalid GRIB file, download failure, catalog insert failure
 - Assets either succeed completely or fail completely — no partial ClickHouse inserts
-- Catalog is a derived lineage index; ClickHouse is source of truth for grid data
+- Catalog writes are fail-fast in both ingestion and transformation (licensing compliance requires lineage)
 
 ### Database Schema
 
