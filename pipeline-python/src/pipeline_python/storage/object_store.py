@@ -10,7 +10,7 @@ class ObjectStore(dg.ConfigurableResource):
     S3/MinIO client for the raw data bucket.
 
     Provides explicit download/upload methods optimized for large files.
-    Uses boto3 with local temp files (grib2io requires local file access).
+    Uses boto3 with local temp files (current GRIB readers, e.g. pygrib via GribReader, require local file access).
 
     Attributes:
         endpoint_url: S3/MinIO endpoint URL (e.g., 'http://minio:9000')

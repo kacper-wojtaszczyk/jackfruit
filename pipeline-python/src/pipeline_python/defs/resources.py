@@ -1,9 +1,10 @@
 """
 Dagster resources for pipeline execution.
 
-Resources defined here:
+Resources assembled here:
 - DockerIngestionClient: run Go ingestion container via Dagster Pipes
 - PostgresCatalogResource: Postgres metadata catalog (raw files, curated data lineage)
+- ObjectStore / ClickHouseGridStore: storage resources wired from pipeline_python.storage.*
 """
 import os
 
