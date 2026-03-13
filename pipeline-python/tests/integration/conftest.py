@@ -118,7 +118,7 @@ def grid_store():
 
 
 @pytest.fixture
-def storage():
+def object_store():
     return ObjectStore(
         endpoint_url=os.environ["MINIO_ENDPOINT_URL"],
         access_key=os.environ["MINIO_ACCESS_KEY"],

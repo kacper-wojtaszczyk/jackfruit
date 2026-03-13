@@ -14,6 +14,7 @@ _VARIABLE_MAP = {
 # CAMS forecast model maximum lead time (hours).
 _MAX_LEADTIME = 48
 
+
 class CdsClient(dg.ConfigurableResource):
     """
     Copernicus ADS client for downloading GRIB data.
@@ -54,6 +55,10 @@ class CdsClient(dg.ConfigurableResource):
         if max_leadtime_hours > _MAX_LEADTIME:
             raise ValueError(
                 f"CAMS forecast maximum is {_MAX_LEADTIME} hours, got {max_leadtime_hours}"
+            )
+        if max_leadtime_hours < 0:
+            raise ValueError(
+                f"CAMS forecast minimum is 0 hours, got {max_leadtime_hours}"
             )
 
         api_variables = [_VARIABLE_MAP[v] for v in variables]

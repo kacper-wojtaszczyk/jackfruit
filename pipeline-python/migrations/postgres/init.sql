@@ -4,7 +4,7 @@ CREATE SCHEMA IF NOT EXISTS catalog;
 CREATE TABLE catalog.raw_files (
     id              UUID PRIMARY KEY,           -- run_id from ingestion (app-generated UUIDv7)
     source          TEXT NOT NULL,              -- e.g., 'ads'
-    dataset         TEXT NOT NULL,              -- e.g., 'cams-europe-air-quality-forecasts-forecast'
+    dataset         TEXT NOT NULL,              -- e.g., 'cams-europe-air-quality-forecast'
     date            DATE NOT NULL,              -- partition date
     s3_key          TEXT NOT NULL UNIQUE,       -- full key in jackfruit-raw bucket
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()

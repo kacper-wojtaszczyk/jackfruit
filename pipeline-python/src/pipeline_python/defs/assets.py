@@ -21,12 +21,15 @@ from pipeline_python.storage.grid_store import GridData
 from pipeline_python.defs.models import RawFileRecord, CuratedDataRecord
 from pipeline_python.grib2 import CamsReader
 
+_ADS_SOURCE = "ads"
+
 _AIR_QUALITY_FORECAST = "cams-europe-air-quality-forecast"
 
 
 class CamsForecastConfig(dg.Config):
     """Configuration for the ingestion asset."""
     horizon_hours: int = 48
+
 
 @dg.asset(
     partitions_def=daily_partitions,
@@ -55,12 +58,11 @@ def ingest_cams_data(
     Returns:
         MaterializeResult with run metadata
     """
-    source: str = "ads"
     run_id = str(uuid.uuid7())
     partition_date = date.fromisoformat(context.partition_key)
 
     context.log.info(
-        f"Starting ingestion: source={source}, dataset={_AIR_QUALITY_FORECAST}, date={partition_date}, run_id={run_id}")
+        f"Starting ingestion: source={_ADS_SOURCE}, dataset={_AIR_QUALITY_FORECAST}, date={partition_date}, run_id={run_id}")
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir) / "cams.grib"
@@ -71,13 +73,13 @@ def ingest_cams_data(
             max_leadtime_hours=config.horizon_hours,
         )
         context.log.info(f"Downloaded CAMS data ({tmp_path.stat().st_size} bytes)")
-        s3_key = f"{source}/{_AIR_QUALITY_FORECAST}/{partition_date}/{run_id}.grib"
+        s3_key = f"{_ADS_SOURCE}/{_AIR_QUALITY_FORECAST}/{partition_date}/{run_id}.grib"
         object_store.upload_raw(s3_key, tmp_path)
         context.log.info(f"Uploaded to {s3_key}")
 
     raw_record = RawFileRecord(
         id=uuid.UUID(run_id),
-        source=source,
+        source=_ADS_SOURCE,
         dataset=_AIR_QUALITY_FORECAST,
         date=partition_date,
         s3_key=s3_key,
@@ -91,11 +93,12 @@ def ingest_cams_data(
     return dg.MaterializeResult(
         metadata={
             "run_id": run_id,
-            "source": source,
+            "source": _ADS_SOURCE,
             "dataset": _AIR_QUALITY_FORECAST,
             "date": partition_date.isoformat(),
         }
     )
+
 
 @dg.asset(
     partitions_def=daily_partitions,
@@ -144,7 +147,8 @@ def transform_cams_data(
     context.log.info(f"Upstream metadata: {ingest_metadata}")
     run_id = ingest_metadata["run_id"].value
     dataset = ingest_metadata["dataset"].value
-    raw_key = f"ads/{dataset}/{partition_date}/{run_id}.grib"
+    source = ingest_metadata["source"].value
+    raw_key = f"{source}/{dataset}/{partition_date}/{run_id}.grib"
     context.log.info(f"Processing {raw_key}")
     curated_keys: list[UUID] = []
     variables_processed: list[str] = []
