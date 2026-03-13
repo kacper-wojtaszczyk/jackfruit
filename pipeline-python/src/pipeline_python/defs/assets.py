@@ -15,15 +15,17 @@ import dagster as dg
 
 from pipeline_python.defs.partitions import daily_partitions
 from pipeline_python.defs.resources import PostgresCatalogResource
-from pipeline_python.ingestion import CdsClient
+from pipeline_python.ingestion import CdsClient, EcmwfClient
 from pipeline_python.storage import ObjectStore, GridStore
 from pipeline_python.storage.grid_store import GridData
 from pipeline_python.defs.models import RawFileRecord, CuratedDataRecord
 from pipeline_python.grib2 import CamsReader
 
 _ADS_SOURCE = "ads"
+_ECMWF_SOURCE = "ecmwf"
 
 _AIR_QUALITY_FORECAST = "cams-europe-air-quality-forecast"
+_WEATHER_FORECAST = "ifs-weather-forecast"
 
 
 class CamsForecastConfig(dg.Config):
@@ -61,8 +63,7 @@ def ingest_cams_data(
     run_id = str(uuid.uuid7())
     partition_date = date.fromisoformat(context.partition_key)
 
-    context.log.info(
-        f"Starting ingestion: source={_ADS_SOURCE}, dataset={_AIR_QUALITY_FORECAST}, date={partition_date}, run_id={run_id}")
+    context.log.info(f"Starting ingestion: source={_ADS_SOURCE}, dataset={_AIR_QUALITY_FORECAST}, date={partition_date}, run_id={run_id}")
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir) / "cams.grib"
@@ -192,5 +193,53 @@ def transform_cams_data(
             "curated_keys": [str(key) for key in curated_keys],
             "variables_processed": list(set(variables_processed)),
             "inserted_rows": rows_inserted,
+        }
+    )
+
+
+@dg.asset(
+    partitions_def=daily_partitions,
+    kinds={"python", "ingest"},
+)
+def ingest_ecmwf_data(
+    context: dg.AssetExecutionContext,
+    ecmwf_client: EcmwfClient,
+    object_store: ObjectStore,
+    catalog: PostgresCatalogResource,
+) -> dg.MaterializeResult:
+    """
+    Download 2t + 2d from ECMWF Open Data and store in MinIO.
+
+    Single retrieve call — both surface variables in one GRIB file.
+    S3 key pattern: ecmwf/{dataset}/{YYYY-MM-DD}/{run_id}.grib
+    """
+    run_id = str(uuid.uuid7())
+    partition_date = date.fromisoformat(context.partition_key)
+    context.log.info(f"Starting ingestion: source={_ECMWF_SOURCE}, dataset={_WEATHER_FORECAST}, date={partition_date}, run_id={run_id}")
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir) / "ecmwf.grib"
+        ecmwf_client.retrieve_forecast(partition_date, ["temperature", "dewpoint"], tmp_path)
+        context.log.info(f"Downloaded ECMWF data ({tmp_path.stat().st_size} bytes)")
+        s3_key = f"{_ECMWF_SOURCE}/{_WEATHER_FORECAST}/{partition_date}/{run_id}.grib"
+        object_store.upload_raw(s3_key, tmp_path)
+        context.log.info(f"Uploaded to {s3_key}")
+
+    raw_record = RawFileRecord(
+        id=uuid.UUID(run_id),
+        source=_ECMWF_SOURCE,
+        dataset=_WEATHER_FORECAST,
+        date=partition_date,
+        s3_key=s3_key,
+    )
+    catalog.insert_raw_file(raw_record)
+    context.log.info(f"Recorded raw file in catalog: {s3_key}")
+
+    return dg.MaterializeResult(
+        metadata={
+            "run_id": run_id,
+            "source": _ECMWF_SOURCE,
+            "dataset": _WEATHER_FORECAST,
+            "date": partition_date.isoformat(),
         }
     )

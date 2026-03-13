@@ -15,7 +15,7 @@ import dagster as dg
 from .models import CuratedDataRecord, RawFileRecord
 from pipeline_python.storage import ObjectStore
 from pipeline_python.storage.clickhouse_grid_store import ClickHouseGridStore
-from pipeline_python.ingestion import CdsClient
+from pipeline_python.ingestion import CdsClient, EcmwfClient
 
 
 # -----------------------------------------------------------------------------
@@ -134,6 +134,9 @@ def resources():
             "cds_client": CdsClient(
                 url=os.environ.get("ADS_BASE_URL", "https://ads.atmosphere.copernicus.eu/api"),
                 api_key=dg.EnvVar("ADS_API_KEY"),
+            ),
+            "ecmwf_client": EcmwfClient(
+                source=os.environ.get("ECMWF_SOURCE", "ecmwf"),
             ),
             "object_store": ObjectStore(
                 endpoint_url=os.environ.get("MINIO_ENDPOINT_URL", "http://minio:9000"),

@@ -12,6 +12,7 @@ from datetime import timedelta
 
 import dagster as dg
 
+from .assets import ingest_cams_data
 from .partitions import daily_partitions
 
 
@@ -20,6 +21,7 @@ from .partitions import daily_partitions
         "cams_daily_job",
         partitions_def=daily_partitions,
         tags={"pipeline": "cams"},
+        selection=["ingest_cams_data", "transform_cams_data"],
     ),
     cron_schedule="0 8 * * *",  # 08:00 UTC every day
     execution_timezone="UTC",
@@ -51,6 +53,30 @@ def cams_daily_schedule(context: dg.ScheduleEvaluationContext) -> dg.RunRequest:
         tags={
             "source": "schedule",
             "pipeline": "cams",
+            "scheduled_date": partition_key,
+        },
+    )
+
+
+@dg.schedule(
+    job=dg.define_asset_job(
+        "ecmwf_daily_job",
+        partitions_def=daily_partitions,
+        tags={"pipeline": "ecmwf"},
+        selection=["ingest_ecmwf_data"]
+    ),
+    cron_schedule="30 9 * * *",
+    execution_timezone="UTC",
+)
+def ecmwf_daily_schedule(context: dg.ScheduleEvaluationContext) -> dg.RunRequest:
+    scheduled_date = context.scheduled_execution_time.date()
+    partition_key = scheduled_date.strftime("%Y-%m-%d")
+    return dg.RunRequest(
+        run_key=f"ecmwf_daily_{partition_key}",
+        partition_key=partition_key,
+        tags={
+            "source": "schedule",
+            "pipeline": "ecmwf",
             "scheduled_date": partition_key,
         },
     )
