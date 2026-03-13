@@ -23,13 +23,13 @@ Three processing layers + infrastructure:
 
 | Layer | Name | Tech | Status |
 |-------|------|------|--------|
-| 1 | Ingestion | Go CLI (Python planned) | Active |
-| 2 | Transformation | Python + Dagster | Migrating to ClickHouse |
-| 3 | Serving API | Go | Planned |
+| 1 | Ingestion | Python + cdsapi | Active (CAMS) |
+| 2 | Transformation | Python + Dagster | Active (CAMS → ClickHouse) |
+| 3 | Serving API | Go | In progress |
 
 MVP target: All 3 layers. Serving queries ClickHouse directly for grid data.
 
-Go ingestion works but will be replaced with native Python ingestion (`cdsapi`) to simplify the stack. Go's strengths better utilized in serving layer.
+Ingestion uses native Python `cdsapi` — the previous Go ingestion binary was removed (see ADR 003).
 </architecture>
 
 <storage_rules>
@@ -41,11 +41,11 @@ Raw is NEVER mutated. ETL reads raw, writes to ClickHouse.
 Raw key pattern:
 `{source}/{dataset}/{YYYY-MM-DD}/{run_id}.{ext}`
 
-Example: `ads/cams-europe-air-quality-forecasts-analysis/2025-03-12/01890c24-905b-7122-b170-b60814e6ee06.grib`
+Example: `ads/cams-europe-air-quality-forecast/2025-03-12/01890c24-905b-7122-b170-b60814e6ee06.grib`
 
 **ClickHouse (Grid Data):**
-Curated grid data stored as rows: (variable, source, timestamp, lat, lon, value)
-Schema design TBD — optimized for point queries by coordinates.
+Curated grid data stored as rows: `(variable, timestamp, lat, lon, value, unit, catalog_id, inserted_at)`
+No `source` column — source lives in Postgres `catalog.raw_files`, joined via `catalog_id`.
 </storage_rules>
 
 <boundaries>

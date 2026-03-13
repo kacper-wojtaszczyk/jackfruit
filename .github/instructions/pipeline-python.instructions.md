@@ -1,21 +1,23 @@
 # Jackfruit / pipeline-python — Copilot Instructions
 
-<layer>Layers 1 + 3 — Ingestion (future) + Transformation/ETL (Python + Dagster)</layer>
+<layer>Layers 1 + 2 — Ingestion + Transformation/ETL (Python + Dagster)</layer>
 
 <role_reminder>
 You're helping build the Python pipeline layer. Inherit behavior from global instructions.
 </role_reminder>
 
 <scope>
+**Ingestion (active):**
+- Python-native ingestion using `cdsapi` via `CdsClient` ConfigurableResource
+- Downloads GRIB from Copernicus ADS, uploads to MinIO via `ObjectStore`
+- Records metadata in Postgres catalog
+
 **Transformation (active):**
 - Read raw objects from `jackfruit-raw`
-- Decode GRIB files with `grib2io` (requires PDT 4.40 monkey-patch for CAMS data)
+- Decode GRIB files with `pygrib` via `CamsReader` adapter (Protocol-based, see ADR 002)
 - Extract grid data (lat, lon, value arrays)
-- Batch insert into ClickHouse
-
-**Ingestion (planned):**
-- Python-native ingestion using `cdsapi` will replace Go ingestion
-- Same storage contract: write raw bytes to `jackfruit-raw`
+- Unit conversion (kg m-3 → µg/m³)
+- Batch insert into ClickHouse via `GridStore` abstraction
 </scope>
 
 <storage_rules>
@@ -41,9 +43,10 @@ See [ADR 001](docs/ADR/001-grid-data-storage.md) for storage decision context.
 
 <metadata>
 Metadata stored in Dagster `MaterializeResult.metadata`:
-- run_id, raw_key, variables_processed, rows_inserted, processing_version
+- Ingestion: run_id, source, dataset, date
+- Transform: run_id, date, curated_keys, variables_processed, inserted_rows
 
-Lineage tracked in Postgres `catalog.curated_data` table.
+Lineage tracked in Postgres `catalog.curated_data` table (catalog_id links CH ↔ Postgres).
 </metadata>
 
 <python_style>
@@ -54,18 +57,21 @@ Lineage tracked in Postgres `catalog.curated_data` table.
 </python_style>
 
 <dagster>
-- Model pipeline as assets
-- Resources for S3/MinIO (`ObjectStorageResource`) and Docker ingestion client
+- Model pipeline as assets (partitioned daily)
+- Resources: `CdsClient`, `ObjectStore`, `PostgresCatalogResource`, `ClickHouseGridStore` (as `GridStore`)
 - Lineage via upstream asset metadata (run_id → construct raw key)
 - No S3 LIST operations — direct GET by constructed key
+- Schedule: `cams_daily_schedule` at 08:00 UTC
 </dagster>
 
-<grib2io>
-CAMS air quality data uses PDT 4.40 (Atmospheric Chemical Constituents) which grib2io 2.6.0 doesn't support.
-The monkey-patch lives in `src/pipeline_python/grib2/pdt40.py` — imported via `grib2/__init__.py` before grib2io.
+<grib_reading>
+GRIB reading uses `pygrib` (ecCodes backend) via Protocol-based abstraction:
+- `GribReader` / `GribMessage` protocols in `grib2/reader.py`
+- `CamsReader` adapter in `grib2/adapters/cams_adapter.py`
+- Asset code imports protocols, never pygrib directly
 
-Note: grib2io is used for READING raw GRIB files only. Output goes to ClickHouse, not GRIB2 files.
-</grib2io>
+See [ADR 002](docs/ADR/002-grib-library.md) for the migration from grib2io.
+</grib_reading>
 
 <testing>
 - Unit test transforms on small sample fixtures

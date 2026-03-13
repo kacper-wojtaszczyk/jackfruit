@@ -34,7 +34,7 @@ class TestPostgresCatalogResource:
         raw = RawFileRecord(
             id=uuid.uuid4(),
             source="ads",
-            dataset="cams-europe-air-quality-forecasts-forecast",
+            dataset="cams-europe-air-quality-forecast",
             date=date(2025, 1, 2),
             s3_key="ads/cams/2025-01-02/run.grib",
         )
@@ -49,7 +49,7 @@ class TestPostgresCatalogResource:
         assert args[1] == (
             str(raw.id),
             "ads",
-            "cams-europe-air-quality-forecasts-forecast",
+            "cams-europe-air-quality-forecast",
             date(2025, 1, 2),
             "ads/cams/2025-01-02/run.grib",
         )

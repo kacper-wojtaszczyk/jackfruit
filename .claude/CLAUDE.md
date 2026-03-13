@@ -22,8 +22,8 @@ Three processing layers with strict boundaries — do not blur them:
 ```
 External APIs (Copernicus ADS, etc.)
         ↓
-  L1: Ingestion (ingestion-go/)
-  Go CLI fetches raw data → MinIO jackfruit-raw bucket
+  L1: Ingestion (pipeline-python/)
+  Python + cdsapi fetches raw data → MinIO jackfruit-raw bucket
         ↓
   L2: Transformation (pipeline-python/)
   Dagster assets: read raw GRIB → decode → extract grids → ClickHouse
@@ -36,7 +36,7 @@ External APIs (Copernicus ADS, etc.)
 - **MinIO** — S3-compatible object storage for raw data (ports 9099/9098)
 - **Postgres** — Metadata catalog with `catalog` schema for lineage (port 5432)
 - **ClickHouse** — Columnar store for curated grid data (ports 8123/9097)
-- **Dagster** — Orchestration (port 3099, mounts host Docker socket)
+- **Dagster** — Orchestration (port 3099)
 
 ### Key architectural decisions
 
@@ -149,7 +149,7 @@ Server timeouts: read 5s, write 10s, idle 60s. Graceful shutdown on SIGINT/SIGTE
 
 ## Sub-project: pipeline-python
 
-Dagster-based data pipeline: ingestion (Go CLI via Docker) + transformation (Python) of GRIB environmental data. Reads raw files from MinIO/S3, decodes, writes curated grid data to ClickHouse.
+Dagster-based data pipeline: ingestion + transformation (Python) of GRIB environmental data. Reads raw files from MinIO/S3, decodes, writes curated grid data to ClickHouse.
 
 ### Commands
 
@@ -174,10 +174,16 @@ src/pipeline_python/
 ├── definitions.py
 ├── defs/
 │   ├── assets.py           # ingest_cams_data, transform_cams_data
-│   ├── resources.py        # DockerIngestionClient, ObjectStorageResource, PostgresCatalogResource
+│   ├── resources.py        # Wires CdsClient, ObjectStore, PostgresCatalogResource, ClickHouseGridStore
 │   ├── schedules.py        # cams_daily_schedule (08:00 UTC daily)
 │   ├── partitions.py       # Daily partitions (start 2026-01-01, UTC, end_offset=1)
 │   └── models.py           # RawFileRecord, CuratedDataRecord (frozen dataclasses)
+├── ingestion/
+│   └── cds_client.py       # CdsClient (ConfigurableResource wrapping cdsapi)
+├── storage/
+│   ├── grid_store.py       # GridStore ABC + GridData dataclass
+│   ├── clickhouse_grid_store.py  # ClickHouseGridStore implementation
+│   └── object_store.py     # ObjectStore (ConfigurableResource, boto3-based S3/MinIO)
 └── grib2/
     ├── reader.py            # GribReader / GribMessage Protocols
     └── adapters/
@@ -187,9 +193,9 @@ src/pipeline_python/
 ### Asset Pipeline
 
 ```
-ingest_cams_data (Go CLI via Docker)
+ingest_cams_data (Python)
   → Generates UUIDv7 run_id
-  → Spawns ingestion container via PipesDockerClient
+  → Calls CDS API via CdsClient, uploads to MinIO via ObjectStore
   → Records metadata in Postgres catalog
         ↓
 transform_cams_data (Python)
@@ -201,18 +207,17 @@ transform_cams_data (Python)
 
 ### Resources
 
-- **DockerIngestionClient** — spawns Go ingestion container as Docker sibling (not nested). Forwards `ADS_*` and `MINIO_*` env vars. Network: `jackfruit_jackfruit`.
-- **ObjectStorageResource** — boto3-based S3/MinIO client. `download_raw()` downloads to temp files.
+- **CdsClient** — `ConfigurableResource` wrapping `cdsapi`. `retrieve_forecast()` downloads GRIB from Copernicus ADS to a local temp path.
+- **ObjectStore** — boto3-based S3/MinIO client. `download_raw()` downloads to temp files; `upload_raw()` uploads to the raw bucket.
 - **PostgresCatalogResource** — psycopg3. `insert_raw_file()` uses `ON CONFLICT DO NOTHING`; `insert_curated_data()` uses `ON CONFLICT DO UPDATE`.
 
 Grid storage: `GridStore` abstract base class (`storage/grid_store.py`). `ClickHouseGridStore` is the production implementation, registered as Dagster resource `"grid_store"`. Transform code depends on the ABC, not ClickHouse directly.
 
 ### Error Handling
 
-- **Fatal:** missing upstream asset, invalid GRIB file, download failure
-- **Non-fatal:** catalog insert failures (logged as warning, asset continues)
+- **Fatal:** missing upstream asset, invalid GRIB file, download failure, catalog insert failure
 - Assets either succeed completely or fail completely — no partial ClickHouse inserts
-- Catalog is a derived lineage index; ClickHouse is source of truth for grid data
+- Catalog writes are fail-fast in both ingestion and transformation (licensing compliance requires lineage)
 
 ### Database Schema
 
@@ -225,7 +230,7 @@ Postgres schema in `migrations/postgres/init.sql`:
 ```python
 result = dg.materialize(
     assets=[ingest_cams_data],
-    resources={"ingestion_client": mock_client, "catalog": mock_catalog},
+    resources={"cds_client": mock_client, "object_store": mock_store, "catalog": mock_catalog},
     partition_key="2026-01-15",
 )
 assert result.success
@@ -237,7 +242,7 @@ Integration tests in `tests/integration/` test against real infrastructure.
 
 - Type hints for public functions
 - Pure functions for transforms; isolate I/O
-- Dagster resources for all external dependencies (S3, Postgres, Docker)
+- Dagster resources for all external dependencies (S3, Postgres, ClickHouse, CDS API)
 - Frozen dataclasses for domain models
 - Idempotent ops and no S3 LIST — see root Conventions above
 - Schedule run_keys include date for idempotency (`cams_daily_{partition_key}`)

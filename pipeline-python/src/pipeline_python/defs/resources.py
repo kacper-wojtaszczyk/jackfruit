@@ -2,120 +2,21 @@
 Dagster resources for pipeline execution.
 
 Resources assembled here:
-- DockerIngestionClient: run Go ingestion container via Dagster Pipes
+- CdsClient: Copernicus ADS API client for GRIB data retrieval
 - PostgresCatalogResource: Postgres metadata catalog (raw files, curated data lineage)
 - ObjectStore / ClickHouseGridStore: storage resources wired from pipeline_python.storage.*
 """
 import os
 
-from dagster_docker import PipesDockerClient
 import psycopg
 from pydantic import PrivateAttr
 
 import dagster as dg
 from .models import CuratedDataRecord, RawFileRecord
+from pipeline_python.storage import ObjectStore
 from pipeline_python.storage.clickhouse_grid_store import ClickHouseGridStore
-from pipeline_python.storage.object_store import ObjectStore
+from pipeline_python.ingestion import CdsClient
 
-# Environment variables to forward to the ingestion container
-_INGESTION_ENV_VARS = [
-    "ADS_BASE_URL",
-    "ADS_API_KEY",
-    "MINIO_ENDPOINT",
-    "MINIO_ACCESS_KEY",
-    "MINIO_SECRET_KEY",
-    "MINIO_RAW_BUCKET",
-    "MINIO_USE_SSL",
-]
-
-
-class DockerIngestionClient(dg.ConfigurableResource):
-    """
-    Run ingestion via local Docker using dagster-docker PipesDockerClient.
-
-    Spawns the ingestion container as a sibling on the host Docker daemon.
-    Requires Docker socket mounted at /var/run/docker.sock.
-
-    Attributes:
-        image: Docker image name (e.g., 'jackfruit-ingestion:latest')
-        network: Docker network to attach to (e.g., 'jackfruit_jackfruit')
-    """
-
-    image: str = "jackfruit-ingestion:latest"
-    network: str = "jackfruit_jackfruit"
-
-    def _get_forwarded_env(self) -> dict[str, str]:
-        """Collect environment variables to forward to the ingestion container."""
-        env = {}
-        for var in _INGESTION_ENV_VARS:
-            value = os.environ.get(var)
-            if value is not None:
-                env[var] = value
-        return env
-
-    def run_ingestion(
-        self,
-        context: dg.AssetExecutionContext,
-        *,
-        dataset: str,
-        date: str,
-        run_id: str,
-    ) -> dg.MaterializeResult:
-        """
-        Run ingestion container as Docker sibling.
-
-        Uses PipesDockerClient to spawn a sibling container on the host Docker daemon.
-        The container is attached to the configured network so it can reach MinIO.
-        Environment variables are forwarded from the Dagster container.
-
-        Args:
-            context: Dagster asset execution context
-            dataset: Dataset identifier (e.g., 'cams-europe-air-quality-forecasts')
-            date: Date to ingest (YYYY-MM-DD format)
-            run_id: Unique run identifier for idempotency
-
-        Returns:
-            MaterializeResult with run metadata
-        """
-        client = PipesDockerClient()
-
-        # Build command arguments for the ingestion CLI
-        command = [
-            f"--dataset={dataset}",
-            f"--date={date}",
-            f"--run-id={run_id}",
-        ]
-
-        # Forward env vars and set network for sibling container
-        container_kwargs = {
-            "network": self.network,
-        }
-
-        context.log.info(
-            f"Running ingestion container: image={self.image}, "
-            f"network={self.network}, dataset={dataset}, date={date}"
-        )
-
-        # Run the container and wait for completion
-        # PipesDockerClient handles: create -> start -> wait -> stop
-        # Logs are streamed to Dagster's log output
-        client.run(
-            context=context,
-            image=self.image,
-            command=command,
-            env=self._get_forwarded_env(),
-            container_kwargs=container_kwargs,
-        )
-
-        return dg.MaterializeResult(
-            metadata={
-                "run_id": run_id,
-                "dataset": dataset,
-                "date": date,
-                "image": self.image,
-                "network": self.network,
-            }
-        )
 
 # -----------------------------------------------------------------------------
 # Catalog resources
@@ -230,11 +131,11 @@ class PostgresCatalogResource(dg.ConfigurableResource):
 def resources():
     return dg.Definitions(
         resources={
-            "ingestion_client": DockerIngestionClient(
-                image=os.environ.get("INGESTION_IMAGE", "jackfruit-ingestion:latest"),
-                network=os.environ.get("DOCKER_NETWORK", "jackfruit_jackfruit"),
+            "cds_client": CdsClient(
+                url=os.environ.get("ADS_BASE_URL", "https://ads.atmosphere.copernicus.eu/api"),
+                api_key=dg.EnvVar("ADS_API_KEY"),
             ),
-            "storage": ObjectStore(
+            "object_store": ObjectStore(
                 endpoint_url=os.environ.get("MINIO_ENDPOINT_URL", "http://minio:9000"),
                 access_key=dg.EnvVar("MINIO_ACCESS_KEY"),
                 secret_key=dg.EnvVar("MINIO_SECRET_KEY"),

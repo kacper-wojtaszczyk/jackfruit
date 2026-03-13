@@ -39,7 +39,7 @@ Raw data is stored in object storage. Curated (processed) data is stored in Clic
 
 **Example:**
 ```
-ads/cams-europe-air-quality-forecasts-analysis/2025-03-12/01890c24-905b-7122-b170-b60814e6ee06.grib
+ads/cams-europe-air-quality-forecast/2025-03-12/01890c24-905b-7122-b170-b60814e6ee06.grib
 ```
 
 ### What "Raw" Means
@@ -75,7 +75,7 @@ The metadata database tracks all raw files ingested and their transformation lin
 |--------------|---------------|-------------------------------------------------------------------------|
 | `id`         | UUID (PK)     | Run ID from ingestion (UUIDv7)                                          |
 | `source`     | TEXT          | Data source (e.g., 'ads')                                               |
-| `dataset`    | TEXT          | Dataset identifier (e.g., 'cams-europe-air-quality-forecasts-forecast') |
+| `dataset`    | TEXT          | Dataset identifier (e.g., 'cams-europe-air-quality-forecast') |
 | `date`       | DATE          | Partition date                                                          |
 | `s3_key`     | TEXT (UNIQUE) | Full S3 key in `jackfruit-raw` bucket                                   |
 | `created_at` | TIMESTAMPTZ   | Record creation timestamp                                               |
@@ -140,14 +140,14 @@ LIMIT 1
 
 **Job execution model:**
 
-| Layer                   | Execution                                  | Rationale                               |
-|-------------------------|--------------------------------------------|-----------------------------------------|
-| Ingestion (Go)          | Sibling container via `docker compose run` | Isolated binary, different language     |
-| Transformation (Python) | In Dagster container                       | Same runtime, simpler, faster iteration |
+| Layer                   | Execution              | Rationale                                       |
+|-------------------------|------------------------|-------------------------------------------------|
+| Ingestion (Python)      | In Dagster container   | Native `cdsapi` — no Docker socket or sidecar   |
+| Transformation (Python) | In Dagster container   | Same runtime, simpler, faster iteration          |
 
-Dagster container mounts host Docker socket to spawn ingestion containers as siblings (not nested).
+Both layers run in-process in the Dagster worker. See [ADR 003](ADR/003-python-native-ingestion.md) for why the previous Go ingestion container was replaced.
 
-**Future:** If transformation jobs need resource isolation or conflicting dependencies, they can be containerized like ingestion.
+**Future:** If jobs need resource isolation or conflicting dependencies, they can be run as Kubernetes Jobs via `dagster-k8s`.
 
 **Local:** Dagster runs in container via `docker-compose up`  
 **Production:** Dagster Cloud or self-hosted on ECS
@@ -168,7 +168,7 @@ open http://localhost:3099
 - MinIO (API: 9099, Console: 9098)
 - Postgres (port 5432) — metadata catalog
 - ClickHouse (HTTP: 8123, Native: 9097) — grid data
-- Dagster (port 3099) with host Docker socket mounted to run ingestion containers
+- Dagster (port 3099) — runs ingestion and transformation in-process
 - Serving API (port 8080, Delve: 2345) — depends on ClickHouse + Postgres healthchecks
 - Network for service communication
 
@@ -181,7 +181,7 @@ All services configured via environment variables (`.env` file):
 ENV=dev
 
 # External APIs
-ADS_BASE_URL=https://ads.atmosphere.copernicus.eu/api/retrieve/v1
+ADS_BASE_URL=https://ads.atmosphere.copernicus.eu/api
 ADS_API_KEY=...
 
 # Object Storage (raw files only)

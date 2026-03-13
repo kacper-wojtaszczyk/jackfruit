@@ -8,9 +8,9 @@ Environmental data platform. Ingests, transforms, and serves weather, air qualit
 
 - [x] Architecture defined (infrastructure + 3 processing layers)
 - [x] Storage strategy decided (MinIO raw bucket + ClickHouse for curated)
-- [x] Go ingestion CLI (CAMS adapter working)
+- [x] Python ingestion (CAMS adapter working, via cdsapi)
 - [x] Dagster orchestration setup
-- [x] Ingestion asset (runs Go CLI via docker compose)
+- [x] Ingestion asset (Python-native, CDS API + MinIO)
 - [x] CAMS transformation asset — needs migration to ClickHouse
 - [x] Metadata DB (Postgres)
 - [x] ClickHouse setup
@@ -46,7 +46,7 @@ docker-compose up -d
         ▼                ▼                ▼                ▼
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
 │ L1: Ingest   │ ──▶ │ L2: Transform│ ──▶ │ L3: Serving  │
-│    (Go)      │     │   (Python)   │     │    (Go)      │
+│  (Python)    │     │   (Python)   │     │    (Go)      │
 └──────────────┘     └──────────────┘     └──────────────┘
 ```
 
@@ -58,7 +58,7 @@ docker-compose up -d
 | Grid Data Store       | ClickHouse       | ✅ Active            |
 | Orchestration         | Dagster          | ✅ Active            |
 | **Processing Layers** |                  |                     |
-| L1: Ingestion         | Go CLI           | ✅ Active (CAMS)     |
+| L1: Ingestion         | Python + cdsapi  | ✅ Active (CAMS)     |
 | L2: Transformation    | Python + Dagster | ✅ Active (CAMS)     |
 | L3: Serving           | Go               | 🚧 In progress      |
 
@@ -68,8 +68,7 @@ See `docs/` for details. Key decisions are documented in `docs/ADR/`.
 
 ```
 jackfruit/
-├── ingestion-go/       # Go CLI — fetch external data → raw bucket
-├── pipeline-python/    # Dagster orchestration + ETL assets
+├── pipeline-python/    # Dagster orchestration — ingestion + ETL assets
 ├── serving-go/         # Go HTTP api serving the data from CH
 ├── docs/               # Architecture docs
 └── docker-compose.yml  # MinIO, Postgres, Dagster

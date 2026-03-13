@@ -47,7 +47,7 @@ You're helping build the Go serving layer. Inherit behavior from global instruct
       "actual_lon": 13.50,
       "lineage": {
         "source": "ads",
-        "dataset": "cams-europe-air-quality-forecasts-analysis",
+        "dataset": "cams-europe-air-quality-forecast",
         "raw_file_id": "..."
       }
     }
@@ -78,16 +78,20 @@ You're helping build the Go serving layer. Inherit behavior from global instruct
 - No CGO dependencies (pure Go driver)
 - Excellent query performance on grid data
 
-**Query pattern:**
+**Query pattern (nearest-neighbor with timestamp snapping):**
 ```sql
-SELECT value, lat, lon
-FROM grid_data
-WHERE variable = 'pm2p5'
-  AND source = 'cams'
-  AND timestamp = '2025-03-11 14:00:00'
-ORDER BY (lat - 52.52) * (lat - 52.52) + (lon - 13.40) * (lon - 13.40)
+SELECT value, unit, lat, lon, catalog_id, timestamp
+FROM grid_data FINAL
+WHERE variable = @variable
+  AND timestamp = (
+    SELECT max(timestamp) FROM grid_data FINAL
+    WHERE variable = @variable AND timestamp <= @timestamp
+  )
+ORDER BY (lat - @lat) * (lat - @lat) + (lon - @lon) * (lon - @lon)
 LIMIT 1
 ```
+
+No `source` column in `grid_data` — source lives in Postgres `catalog.raw_files`, joined via `catalog_id`.
 </clickhouse>
 
 <grid_storage_abstraction>

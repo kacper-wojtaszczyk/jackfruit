@@ -7,7 +7,7 @@ Read raw data, normalize schemas, compute quality flags, and write to ClickHouse
 | Component                           | Status              |
 |-------------------------------------|---------------------|
 | Dagster project setup               | ✅ Done              |
-| Dagster asset invoking Go ingestion | ✅ Done              |
+| Dagster asset: Python-native ingestion | ✅ Done              |
 | CAMS transformation asset           | ✅ Done              |
 | Curated storage                     | ✅ Done (ClickHouse) |
 | Error handling                      | ✅ Fail-fast         |
@@ -40,28 +40,16 @@ Read raw data, normalize schemas, compute quality flags, and write to ClickHouse
 **Why Python:** Rich data ecosystem (pandas, polars, pyarrow, xarray)  
 **Why Dagster:** Asset-centric model, built-in partitioning, lineage tracking, observability UI
 
-## Invoking Go Ingestion from Dagster
+## Ingestion from Dagster
 
-> ⚠️ **Deprecation Notice:** The Go ingestion layer will be replaced with native Python ingestion using `cdsapi`. See [Layer 1 docs](layer-1-ingestion.md) for details. The current implementation works and unblocks development.
+The `ingest_cams_data` Dagster asset handles ingestion natively in Python. See [Layer 1 docs](layer-1-ingestion.md) and [ADR 003](ADR/003-python-native-ingestion.md) for the decision record.
 
-The Go ingestion layer is containerized and invoked by Dagster using `PipesDockerClient`.
-
-**Current implementation:** Uses `dagster-docker` to spawn the ingestion container as a sibling on the host Docker daemon.
-
-**Pattern:**
+**Flow:**
 1. Dagster asset generates UUIDv7 for `run_id`
-2. `PipesDockerClient` spawns ingestion container with network and env vars configured
-3. Container runs, logs stream to Dagster
-4. On success (exit 0), downstream transformation assets can materialize
-
-**Key configuration (Docker sibling pattern):**
-- Network: `jackfruit_jackfruit` (so container can reach MinIO)
-- Env vars: Forwarded from Dagster container (`ADS_*`, `MINIO_*`)
-
-**Exit code handling:**
-- `0`: Success → materialize downstream assets
-- `1`: Config error → fail immediately
-- `2`: Application error → retry with backoff (future)
+2. `CdsClient.retrieve_forecast()` downloads GRIB from Copernicus ADS to a temp file
+3. `ObjectStore.upload_raw()` uploads the file to MinIO at `ads/{dataset}/{date}/{run_id}.grib`
+4. `PostgresCatalogResource.insert_raw_file()` records lineage in Postgres
+5. On success, downstream `transform_cams_data` can materialize
 
 ## Storage
 
@@ -76,7 +64,7 @@ ETL reads raw (or public S3 directly for large datasets), writes to ClickHouse. 
 - Ingestion asset outputs `run_id` in `MaterializeResult.metadata`
 - Transform asset reads upstream metadata to construct exact raw key
 - No S3 LIST operations needed — direct GET by constructed key
-- Dataset name is deterministic per transform asset (e.g., `cams-europe-air-quality-forecasts-analysis`)
+- Dataset name is deterministic per transform asset (e.g., `cams-europe-air-quality-forecast`)
 
 **Processing:**
 - Multi-variable GRIB files are read with `pygrib` (ecCodes-backed library) via the `CamsReader` adapter
@@ -98,8 +86,7 @@ All transformations are recorded in the Postgres metadata catalog (`catalog` sch
 
 **Connection reuse:** Transform assets use resources with lazy connections (Dagster calls teardown_after_execution) to reuse database connections across multiple inserts (reduces connection overhead).
 
-**Error handling:** Catalog writes are fatal. If a catalog insert fails, the asset fails and needs to be re-ran. ClickHouse is the source of truth for grid data but lineage is crucial for showcasing our integrity.
-
+**Error handling:** Catalog writes are fatal — both ingestion and transformation fail-fast on catalog insert failure. Lineage is required for licensing compliance.
 ## Curated Data Output (ClickHouse)
 
 **Storage:** ClickHouse
@@ -165,7 +152,7 @@ from pipeline_python.storage import GridStore
 # Asset receives GridStore — doesn't know it's ClickHouse
 @dg.asset(...)
 def transform_cams_data(
-    context, storage, catalog,
+    context, object_store, catalog,
     grid_store: GridStore,  # Abstract type
 ):
     for grid in _extract_grids_from_grib(raw_path):
@@ -213,14 +200,27 @@ Transform assets use resources with lazy connections (Dagster calls teardown_aft
 
 Lineage and processing metadata also stored in `MaterializeResult.metadata`:
 
+**Ingestion asset:**
 ```python
 return dg.MaterializeResult(
     metadata={
         "run_id": run_id,
-        "raw_key": raw_key,
-        "variables_processed": variables,
-        "rows_inserted": row_count,
-        "processing_version": "1.0.0",
+        "source": _ADS_SOURCE,
+        "dataset": _AIR_QUALITY_FORECAST,
+        "date": partition_date.isoformat(),
+    }
+)
+```
+
+**Transformation asset:**
+```python
+return dg.MaterializeResult(
+    metadata={
+        "run_id": run_id,
+        "date": partition_date,
+        "curated_keys": [str(key) for key in curated_keys],
+        "variables_processed": list(set(variables_processed)),
+        "inserted_rows": rows_inserted,
     }
 )
 ```
@@ -246,10 +246,10 @@ If any variable fails to extract or insert:
 **Cron:** `0 8 * * *` (08:00 UTC every day)  
 **Timezone:** UTC
 
-The schedule automatically triggers ingestion and transformation for the previous day's data each morning:
+The schedule automatically triggers ingestion and transformation each morning:
 
-1. **Trigger Time:** 08:00 UTC (after CAMS data is typically available ~6 hours after midnight UTC)
-2. **Partition:** Today's date (e.g., if scheduled run is 2025-03-12 08:00, it processes 2025-03-11)
+1. **Trigger Time:** 08:00 UTC (after CAMS forecast data is typically available ~6 hours after midnight UTC)
+2. **Partition:** Today's date (e.g., if scheduled run is 2026-03-12 08:00, it processes 2026-03-12)
 3. **Execution:**
    - Dagster creates a `RunRequest` for the specific partition
    - `ingest_cams_data` asset executes first (fetches from CDS API → raw bucket)

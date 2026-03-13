@@ -19,26 +19,6 @@ services:
       - "9099:9000"
       - "9098:9001"
 
-  ingestion:
-    profiles: ["ingestion"]
-    build:
-      context: ./ingestion-go
-      dockerfile: Dockerfile
-    depends_on:
-      minio:
-        condition: service_healthy
-    environment:
-      ADS_BASE_URL: ${ADS_BASE_URL}
-      ADS_API_KEY: ${ADS_API_KEY}
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_RAW_BUCKET: ${MINIO_RAW_BUCKET}
-      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
-      LOG_LEVEL: debug
-    networks:
-      jackfruit:
-
   dagster:
     build:
       context: ./pipeline-python
@@ -46,10 +26,9 @@ services:
     environment:
       # Dagster env
       ENV: ${ENV}
-      DOCKER_HOST: unix:///var/run/docker.sock
       ADS_BASE_URL: ${ADS_BASE_URL}
       ADS_API_KEY: ${ADS_API_KEY}
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ENDPOINT_URL: ${MINIO_ENDPOINT}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_RAW_BUCKET: ${MINIO_RAW_BUCKET}
@@ -63,9 +42,7 @@ services:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
       CLICKHOUSE_HOST: ${CLICKHOUSE_HOST}
-      DOCKER_NETWORK: ${DOCKER_NETWORK:-jackfruit_jackfruit}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - ./pipeline-python:/app
     ports:
       - "3099:3000"

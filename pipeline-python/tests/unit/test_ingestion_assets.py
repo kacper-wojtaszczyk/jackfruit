@@ -3,294 +3,240 @@ Tests for ingestion assets.
 
 Dagster testing patterns used:
 - `materialize()` for integration-style tests with mocked resources
-- Mock resources to avoid Docker/network dependencies
-- pytest fixtures for common setup
+- Mock resources to avoid network/API/S3 dependencies
+- Module-level state for call tracking (ConfigurableResource is frozen)
 """
+import re
 import uuid
+from datetime import date
 
 import dagster as dg
 import pytest
 
-from pipeline_python.defs.assets import IngestionConfig, ingest_cams_data
-from pipeline_python.defs.resources import DockerIngestionClient
+from pipeline_python.defs.assets import (
+    CamsForecastConfig,
+    _AIR_QUALITY_FORECAST,
+    ingest_cams_data,
+)
 from pipeline_python.defs.models import RawFileRecord
 
 
+# ---------------------------------------------------------------------------
+# Module-level state for mock tracking (ConfigurableResource is frozen)
+# ---------------------------------------------------------------------------
 
-# Global state for tracking mock calls (used during tests)
-_mock_calls = []
-_catalog_raw_inserts = []
+_mock_cds_calls: list[dict] = []
+_mock_uploads: list[dict] = []
+_catalog_raw_inserts: list[RawFileRecord] = []
+
+
+# ---------------------------------------------------------------------------
+# Mock resources
+# ---------------------------------------------------------------------------
+
+
+class MockCdsClient(dg.ConfigurableResource):
+    """Mock CDS API client that creates an empty file instead of downloading."""
+
+    should_fail: bool = False
+
+    def retrieve_forecast(self, forecast_date, variables, target, max_leadtime_hours=48):
+        _mock_cds_calls.append({
+            "forecast_date": forecast_date,
+            "variables": variables,
+            "max_leadtime_hours": max_leadtime_hours,
+        })
+        if self.should_fail:
+            raise Exception("Mock CDS API failure")
+        target.touch()
+
+
+class MockObjectStore(dg.ConfigurableResource):
+    """Mock object store that records upload calls."""
+
+    should_fail: bool = False
+
+    def upload_raw(self, key: str, local_path) -> None:
+        _mock_uploads.append({
+            "key": key,
+            "local_path": local_path,
+        })
+        if self.should_fail:
+            raise IOError("Mock upload failure")
 
 
 class MockCatalogResource(dg.ConfigurableResource):
-    """
-    Mock catalog resource for testing.
-
-    Tracks insert calls for verification in tests.
-    """
+    """Mock catalog resource that records insert calls."""
 
     should_fail: bool = False
 
     def insert_raw_file(self, raw_file: RawFileRecord) -> None:
-        """Record the insert call."""
         _catalog_raw_inserts.append(raw_file)
         if self.should_fail:
             raise Exception("Mock catalog failure")
 
 
-class StatefulMockIngestionClient(dg.ConfigurableResource):
-    """
-    Stateful mock ingestion client for testing with call tracking.
-
-    Since ConfigurableResource is frozen (immutable), we use module-level state
-    to track calls and reset it per test.
-    """
-
-    should_fail: bool = False
-
-    def run_ingestion(
-        self,
-        context: dg.AssetExecutionContext,
-        *,
-        dataset: str,
-        date: str,
-        run_id: str,
-    ) -> dg.MaterializeResult:
-        """Record the call and return a mock result."""
-        call_info = {
-            "dataset": dataset,
-            "date": date,
-            "run_id": run_id,
-        }
-        _mock_calls.append(call_info)
-
-        if self.should_fail:
-            raise dg.Failure(
-                description="Mock ingestion failure",
-                metadata={"error": "simulated"},
-            )
-
-        return dg.MaterializeResult(
-            metadata={
-                "run_id": run_id,
-                "dataset": dataset,
-                "date": date,
-                "mock": True,
-            }
-        )
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def mock_ingestion_client():
-    """Fixture providing a fresh mock client for each test."""
-    global _mock_calls, _catalog_raw_inserts
-    _mock_calls = []
+@pytest.fixture(autouse=True)
+def _reset_mock_state():
+    """Reset all module-level mock state before each test."""
+    global _mock_cds_calls, _mock_uploads, _catalog_raw_inserts
+    _mock_cds_calls = []
+    _mock_uploads = []
     _catalog_raw_inserts = []
-    return StatefulMockIngestionClient()
 
 
-@pytest.fixture
-def mock_catalog():
-    """Fixture providing a fresh mock catalog for each test."""
-    global _catalog_raw_inserts
-    _catalog_raw_inserts = []
-    return MockCatalogResource()
+def _make_resources(*, cds_client=None, object_store=None, catalog=None):
+    """Build resource dict with defaults for all three mocks."""
+    return {
+        "cds_client": cds_client or MockCdsClient(),
+        "object_store": object_store or MockObjectStore(),
+        "catalog": catalog or MockCatalogResource(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Tests: IngestCamsDataAsset
+# ---------------------------------------------------------------------------
 
 
 class TestIngestCamsDataAsset:
     """Tests for the ingest_cams_data asset."""
 
-    def test_asset_executes_with_partition(self, mock_ingestion_client, mock_catalog):
-        """Asset should execute successfully with a partition key."""
+    def test_calls_cds_with_domain_args(self):
+        """Core happy path: CDS called with correct args, upload key + catalog record are right."""
         result = dg.materialize(
             assets=[ingest_cams_data],
-            resources={"ingestion_client": mock_ingestion_client, "catalog": mock_catalog},
+            resources=_make_resources(),
             partition_key="2026-01-15",
         )
 
         assert result.success
-        assert len(_mock_calls) == 1
 
-        call = _mock_calls[0]
-        assert call["dataset"] == "cams-europe-air-quality-forecasts-forecast"
-        # Date should match the partition key
-        assert call["date"] == "2026-01-15"
-        # run_id should be a valid UUID
-        uuid.UUID(call["run_id"])  # Raises if invalid
+        # CDS client called with correct domain args
+        assert len(_mock_cds_calls) == 1
+        call = _mock_cds_calls[0]
+        assert call["forecast_date"] == date(2026, 1, 15)
+        assert call["variables"] == ["pm2p5", "pm10"]
+        assert call["max_leadtime_hours"] == 48
 
-        # Verify catalog insert was called
+        # Upload key matches expected pattern
+        assert len(_mock_uploads) == 1
+        key = _mock_uploads[0]["key"]
+        assert re.match(
+            r"ads/cams-europe-air-quality-forecast/2026-01-15/[0-9a-f-]+\.grib$",
+            key,
+        )
+
+        # Catalog insert with correct fields
         assert len(_catalog_raw_inserts) == 1
-        raw_record = _catalog_raw_inserts[0]
-        assert raw_record.source == "ads"
-        assert raw_record.dataset == "cams-europe-air-quality-forecasts-forecast"
-        assert str(raw_record.date) == "2026-01-15"
-        assert raw_record.s3_key == f"ads/cams-europe-air-quality-forecasts-forecast/2026-01-15/{call['run_id']}.grib"
+        record = _catalog_raw_inserts[0]
+        assert record.source == "ads"
+        assert record.dataset == _AIR_QUALITY_FORECAST
 
-    def test_asset_uses_custom_dataset(self, mock_ingestion_client, mock_catalog):
-        """Asset should use the dataset from config when provided."""
+    def test_forwards_horizon_from_config(self):
+        """Config horizon_hours plumbed through to CDS client."""
         result = dg.materialize(
             assets=[ingest_cams_data],
-            resources={"ingestion_client": mock_ingestion_client, "catalog": mock_catalog},
+            resources=_make_resources(),
             partition_key="2026-01-15",
             run_config={
                 "ops": {
                     "ingest_cams_data": {
-                        "config": {
-                            "dataset": "cams-europe-air-quality-forecasts-analysis",
-                        }
+                        "config": {"horizon_hours": 24}
                     }
                 }
             },
         )
 
         assert result.success
-        call = _mock_calls[0]
-        assert call["date"] == "2026-01-15"
-        assert call["dataset"] == "cams-europe-air-quality-forecasts-analysis"
+        assert _mock_cds_calls[0]["max_leadtime_hours"] == 24
 
-        # Verify catalog uses custom dataset
-        assert len(_catalog_raw_inserts) == 1
-        assert _catalog_raw_inserts[0].dataset == "cams-europe-air-quality-forecasts-analysis"
+    def test_metadata_contains_keys_for_transform(self):
+        """Contract: transform_cams_data reads run_id, dataset, date, source from upstream metadata."""
+        result = dg.materialize(
+            assets=[ingest_cams_data],
+            resources=_make_resources(),
+            partition_key="2026-01-15",
+        )
 
-    def test_asset_generates_unique_run_ids(self, mock_ingestion_client, mock_catalog):
-        """Each asset execution should generate a unique run_id."""
-        global _mock_calls, _catalog_raw_inserts
-        _mock_calls = []
-        _catalog_raw_inserts = []
+        events = result.get_asset_materialization_events()
+        assert len(events) == 1
+        metadata = events[0].step_materialization_data.materialization.metadata
 
-        # Execute twice with same partition
+        for key in ("run_id", "dataset", "date", "source"):
+            assert key in metadata, f"Missing metadata key: {key}"
+
+        assert metadata["dataset"].value == _AIR_QUALITY_FORECAST
+        uuid.UUID(metadata["run_id"].value)  # raises if not a valid UUID
+
+    def test_generates_unique_run_ids(self):
+        """Each materialization must produce a distinct run_id (idempotency safety)."""
         dg.materialize(
             assets=[ingest_cams_data],
-            resources={"ingestion_client": mock_ingestion_client, "catalog": mock_catalog},
+            resources=_make_resources(),
             partition_key="2026-01-15",
         )
         dg.materialize(
             assets=[ingest_cams_data],
-            resources={"ingestion_client": mock_ingestion_client, "catalog": mock_catalog},
+            resources=_make_resources(),
             partition_key="2026-01-16",
         )
 
-        assert len(_mock_calls) == 2
-        run_id_1 = _mock_calls[0]["run_id"]
-        run_id_2 = _mock_calls[1]["run_id"]
-        assert run_id_1 != run_id_2
+        assert len(_mock_uploads) == 2
+        id1 = _mock_uploads[0]["key"].split("/")[-1].replace(".grib", "")
+        id2 = _mock_uploads[1]["key"].split("/")[-1].replace(".grib", "")
+        assert id1 != id2
 
-    def test_asset_returns_metadata(self, mock_ingestion_client, mock_catalog):
-        """Asset should return MaterializeResult with expected metadata."""
+    def test_fails_on_catalog_failure(self):
+        """Catalog insert is fatal — asset must fail (licensing requires lineage)."""
         result = dg.materialize(
             assets=[ingest_cams_data],
-            resources={"ingestion_client": mock_ingestion_client, "catalog": mock_catalog},
-            partition_key="2026-01-01",
-            run_config={
-                "ops": {
-                    "ingest_cams_data": {
-                        "config": {
-                            "dataset": "test-dataset",
-                        }
-                    }
-                }
-            },
-        )
-
-        assert result.success
-
-        # Get materialization events
-        materializations = result.get_asset_materialization_events()
-        assert len(materializations) == 1
-
-    def test_asset_propagates_client_failure(self, mock_catalog):
-        """Asset should propagate failures from the ingestion client."""
-        mock_client = StatefulMockIngestionClient(should_fail=True)
-
-        result = dg.materialize(
-            assets=[ingest_cams_data],
-            resources={"ingestion_client": mock_client, "catalog": mock_catalog},
+            resources=_make_resources(catalog=MockCatalogResource(should_fail=True)),
             partition_key="2026-01-15",
             raise_on_error=False,
         )
 
         assert not result.success
 
-    def test_asset_continues_on_catalog_failure(self, mock_ingestion_client):
-        """Asset should succeed even if catalog insert fails (log warning only)."""
-        failing_catalog = MockCatalogResource(should_fail=True)
-
+    def test_propagates_cds_failure(self):
+        """CDS API failure is fatal — asset must fail."""
         result = dg.materialize(
             assets=[ingest_cams_data],
-            resources={"ingestion_client": mock_ingestion_client, "catalog": failing_catalog},
+            resources=_make_resources(cds_client=MockCdsClient(should_fail=True)),
             partition_key="2026-01-15",
+            raise_on_error=False,
         )
 
-        # Asset should still succeed - catalog failure is non-fatal
-        assert result.success
-        assert len(_mock_calls) == 1
+        assert not result.success
 
 
-class TestDockerIngestionClientUnit:
-    """Unit tests for DockerIngestionClient (without Docker)."""
-
-    def test_get_forwarded_env_collects_vars(self, monkeypatch):
-        """Should collect environment variables from os.environ."""
-        monkeypatch.setenv("MINIO_ENDPOINT", "localhost:9000")
-        monkeypatch.setenv("MINIO_ACCESS_KEY", "testkey")
-        monkeypatch.setenv("ADS_API_KEY", "secret123")
-
-        client = DockerIngestionClient()
-        env = client._get_forwarded_env()
-
-        assert env["MINIO_ENDPOINT"] == "localhost:9000"
-        assert env["MINIO_ACCESS_KEY"] == "testkey"
-        assert env["ADS_API_KEY"] == "secret123"
-
-    def test_get_forwarded_env_skips_missing(self, monkeypatch):
-        """Should skip environment variables that aren't set."""
-        # Clear all ingestion env vars
-        for var in ["ADS_BASE_URL", "ADS_API_KEY", "MINIO_ENDPOINT",
-                    "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY", "MINIO_RAW_BUCKET", "MINIO_USE_SSL"]:
-            monkeypatch.delenv(var, raising=False)
-
-        monkeypatch.setenv("MINIO_ENDPOINT", "localhost:9000")
-
-        client = DockerIngestionClient()
-        env = client._get_forwarded_env()
-
-        assert env == {"MINIO_ENDPOINT": "localhost:9000"}
-
-    def test_client_config_defaults(self):
-        """Should have sensible default configuration."""
-        client = DockerIngestionClient()
-
-        assert client.image == "jackfruit-ingestion:latest"
-        assert client.network == "jackfruit_jackfruit"
-
-    def test_client_config_override(self):
-        """Should accept custom configuration."""
-        client = DockerIngestionClient(
-            image="my-image:v2",
-            network="custom_network",
-        )
-
-        assert client.image == "my-image:v2"
-        assert client.network == "custom_network"
+# ---------------------------------------------------------------------------
+# Tests: CamsForecastConfig
+# ---------------------------------------------------------------------------
 
 
-class TestIngestionConfig:
-    """Tests for IngestionConfig schema."""
+class TestCamsForecastConfig:
+    """Tests for CamsForecastConfig defaults and overrides."""
 
-    def test_default_values(self):
-        """Config should have expected defaults."""
-        config = IngestionConfig()
+    def test_default_horizon(self):
+        assert CamsForecastConfig().horizon_hours == 48
 
-        assert config.date is None
-        assert config.dataset == "cams-europe-air-quality-forecasts-forecast"
+    def test_custom_horizon(self):
+        assert CamsForecastConfig(horizon_hours=24).horizon_hours == 24
 
-    def test_custom_values(self):
-        """Config should accept custom values."""
-        config = IngestionConfig(
-            date="2025-12-25",
-            dataset="custom-dataset",
-        )
 
-        assert config.date == "2025-12-25"
-        assert config.dataset == "custom-dataset"
+# ---------------------------------------------------------------------------
+# Tests: _AIR_QUALITY_FORECAST constant
+# ---------------------------------------------------------------------------
 
+
+class TestAirQualityForecastConstant:
+    """Guard against accidental rename breaking S3 key paths."""
+
+    def test_dataset_constant(self):
+        assert _AIR_QUALITY_FORECAST == "cams-europe-air-quality-forecast"
