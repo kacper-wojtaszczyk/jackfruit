@@ -19,7 +19,8 @@ from pathlib import Path
 # Load test env vars BEFORE any resource imports
 load_dotenv(Path(__file__).parent.parent / ".env.test", override=True)
 
-from pipeline_python.defs.resources import ObjectStorageResource, PostgresCatalogResource
+from pipeline_python.defs.resources import PostgresCatalogResource
+from pipeline_python.storage.object_store import ObjectStore
 from pipeline_python.storage.clickhouse_grid_store import ClickHouseGridStore
 
 def pytest_collection_modifyitems(config, items):
@@ -118,7 +119,7 @@ def grid_store():
 
 @pytest.fixture
 def storage():
-    return ObjectStorageResource(
+    return ObjectStore(
         endpoint_url=os.environ["MINIO_ENDPOINT_URL"],
         access_key=os.environ["MINIO_ACCESS_KEY"],
         secret_key=os.environ["MINIO_SECRET_KEY"],
