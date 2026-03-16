@@ -308,3 +308,63 @@ class TestClipToEurope:
         mask = (clipped_la == 50.0) & (clipped_lo == 10.0)
         assert mask.sum() == 1
         assert clipped_v[mask][0] == pytest.approx(5010.0)
+
+    def test_clip_works_with_coarser_grid(self):
+        """Should infer shape for any regular resolution, not just 0.25°."""
+        lat_1d = np.arange(90, -90.5, -0.5)    # 0.5° grid: 361 points
+        lon_1d = np.arange(-180, 180, 0.5)      # 720 points
+        lons, lats = np.meshgrid(lon_1d, lat_1d)
+        values = np.ones_like(lats)
+        clipped_v, clipped_la, clipped_lo = _clip_to_europe(values, lats, lons)
+        # 0.5° over [30,72] × [-25,45]: 85 lats × 141 lons
+        assert clipped_v.shape == (85, 141)
+
+    def test_clip_handles_irregular_points(self):
+        """Station-like data with arbitrary coordinates returns (N, 1) shape."""
+        lats = np.array([50.1, 48.3, 35.0, 10.0, 60.5])
+        lons = np.array([5.2, 12.7, -10.0, 20.0, 40.0])
+        values = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        # Treat as 2D (N, 1) input — same as a column of points
+        lats_2d = lats.reshape(-1, 1)
+        lons_2d = lons.reshape(-1, 1)
+        values_2d = values.reshape(-1, 1)
+        clipped_v, clipped_la, clipped_lo = _clip_to_europe(values_2d, lats_2d, lons_2d)
+        # Point at lat=10 is outside Europe (< 30), 4 remaining
+        assert clipped_v.shape == (4, 1)
+        assert clipped_la.min() >= _EUROPE_LAT_MIN
+
+
+# ---------------------------------------------------------------------------
+# Tests: Magnus formula
+# ---------------------------------------------------------------------------
+
+
+class TestMagnusFormula:
+    """Standalone test for the Magnus relative humidity formula."""
+
+    def test_known_values(self):
+        """T=20°C, Td=15°C should give RH ≈ 73%."""
+        t_k = np.array([293.15])   # 20°C in Kelvin
+        td_k = np.array([288.15])  # 15°C in Kelvin
+        t_c = t_k - 273.15
+        td_c = td_k - 273.15
+        rh = 100 * np.exp(17.625 * td_c / (243.04 + td_c)) \
+                 / np.exp(17.625 * t_c / (243.04 + t_c))
+        assert rh[0] == pytest.approx(73.0, abs=1.0)
+
+    def test_equal_temp_and_dewpoint_gives_100_percent(self):
+        """When T == Td, air is saturated — RH must be 100%."""
+        t_c = np.array([15.0])
+        td_c = np.array([15.0])
+        rh = 100 * np.exp(17.625 * td_c / (243.04 + td_c)) \
+                 / np.exp(17.625 * t_c / (243.04 + t_c))
+        assert rh[0] == pytest.approx(100.0, abs=0.01)
+
+    def test_vectorised_over_array(self):
+        """Formula must work element-wise on arrays (same as in the transform)."""
+        t_c = np.array([20.0, 30.0, 0.0])
+        td_c = np.array([15.0, 20.0, -5.0])
+        rh = 100 * np.exp(17.625 * td_c / (243.04 + td_c)) \
+                 / np.exp(17.625 * t_c / (243.04 + t_c))
+        assert rh.shape == (3,)
+        assert all(0 < v < 100 for v in rh)

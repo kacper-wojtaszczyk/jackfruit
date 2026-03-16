@@ -36,22 +36,37 @@ _EUROPE_LON_MIN, _EUROPE_LON_MAX = -25.0, 45.0
 def _clip_to_europe(
     values: np.ndarray, lats: np.ndarray, lons: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Clip 2D grids to the European bounding box.
+    """Clip spatial data to the European bounding box.
 
-    ECMWF Open Data returns global 0.25° grids (721x1440). This clips to
-    Europe (lat [30, 72], lon [-25, 45]) and reshapes to 2D (169x281) for
-    GridData compatibility.
+    Works with any grid resolution (ECMWF 0.25°, CAMS 0.1°, etc.) or
+    irregular point data (e.g. station measurements). For regular grids,
+    infers the 2D output shape from unique coordinates. For irregular
+    data, returns arrays shaped (N, 1) to satisfy GridData's 2D requirement.
     """
     mask = (
         (lats >= _EUROPE_LAT_MIN) & (lats <= _EUROPE_LAT_MAX)
         & (lons >= _EUROPE_LON_MIN) & (lons <= _EUROPE_LON_MAX)
     )
-    n_lats = int((_EUROPE_LAT_MAX - _EUROPE_LAT_MIN) / 0.25) + 1  # 169
-    n_lons = int((_EUROPE_LON_MAX - _EUROPE_LON_MIN) / 0.25) + 1  # 281
+    flat_v = values[mask]
+    flat_la = lats[mask]
+    flat_lo = lons[mask]
+
+    # Infer 2D shape from unique coordinates (resolution-independent).
+    # Round to 6 decimals (~0.11 m) to avoid floating-point splitting.
+    n_lats = len(np.unique(np.round(flat_la, decimals=6)))
+    n_lons = len(np.unique(np.round(flat_lo, decimals=6)))
+
+    if n_lats * n_lons == len(flat_v):
+        return (
+            flat_v.reshape(n_lats, n_lons),
+            flat_la.reshape(n_lats, n_lons),
+            flat_lo.reshape(n_lats, n_lons),
+        )
+    # Irregular points — column vector for GridData compatibility
     return (
-        values[mask].reshape(n_lats, n_lons),
-        lats[mask].reshape(n_lats, n_lons),
-        lons[mask].reshape(n_lats, n_lons),
+        flat_v.reshape(-1, 1),
+        flat_la.reshape(-1, 1),
+        flat_lo.reshape(-1, 1),
     )
 
 
@@ -218,10 +233,15 @@ def transform_cams_data(
             "run_id": run_id,
             "date": partition_date,
             "curated_keys": [str(key) for key in curated_keys],
-            "variables_processed": list(set(variables_processed)),
+            "variables_processed": sorted(set(variables_processed)),
             "inserted_rows": rows_inserted,
         }
     )
+
+
+class EcmwfForecastConfig(dg.Config):
+    """Configuration for the ECMWF ingestion asset."""
+    horizon_hours: int = 48
 
 
 @dg.asset(
@@ -230,6 +250,7 @@ def transform_cams_data(
 )
 def ingest_ecmwf_data(
     context: dg.AssetExecutionContext,
+    config: EcmwfForecastConfig,
     ecmwf_client: EcmwfClient,
     object_store: ObjectStore,
     catalog: PostgresCatalogResource,
@@ -250,7 +271,7 @@ def ingest_ecmwf_data(
             forecast_date=partition_date,
             variables=["temperature", "dewpoint"],
             target=tmp_path,
-            max_leadtime_hours=48,
+            max_leadtime_hours=config.horizon_hours,
         )
         context.log.info(f"Downloaded ECMWF data ({tmp_path.stat().st_size} bytes)")
         s3_key = f"{_ECMWF_SOURCE}/{_WEATHER_FORECAST}/{partition_date}/{run_id}.grib"
@@ -396,6 +417,6 @@ def transform_ecmwf_data(
         "run_id": run_id,
         "date": partition_date,
         "curated_keys": [str(k) for k in curated_keys],
-        "variables_processed": list(set(variables_processed)),
+        "variables_processed": sorted(set(variables_processed)),
         "inserted_rows": rows_inserted,
     })

@@ -48,9 +48,9 @@ class TestEcmwfMessage:
         """ECMWF global grid is 721x1440 (0.25° resolution)."""
         assert first_message.values.shape == (721, 1440)
 
-    def test_unit_is_string(self, first_message):
-        assert isinstance(first_message.unit, str)
-        assert len(first_message.unit) > 0
+    def test_unit_is_kelvin(self, first_message):
+        """Both 2t and 2d are stored in Kelvin in the GRIB — adapter must be faithful."""
+        assert first_message.unit == "K"
 
     def test_valid_time_is_datetime(self, first_message):
         assert isinstance(first_message.timestamp, datetime)
