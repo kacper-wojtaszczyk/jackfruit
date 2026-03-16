@@ -81,3 +81,37 @@ class TestEcmwfClientRetrieveForecast:
                 variables=["ozone"],
                 target=Path("/tmp/out.grib"),
             )
+
+    def test_filters_steps_by_max_leadtime(self, ecmwf_client, mock_opendata):
+        """With max_leadtime_hours=24, steps should be [0, 3, ..., 24]."""
+        _, mock_client_instance = mock_opendata
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "out.grib"
+            ecmwf_client.retrieve_forecast(
+                forecast_date=date(2026, 1, 15),
+                variables=["temperature"],
+                target=target,
+                max_leadtime_hours=24,
+            )
+        request = mock_client_instance.retrieve.call_args[0][0]
+        assert request["step"] == list(range(0, 25, 3))
+
+    def test_rejects_leadtime_above_max(self, ecmwf_client, mock_opendata):
+        """ValueError for leadtime exceeding 48 hours."""
+        with pytest.raises(ValueError, match="maximum is 48"):
+            ecmwf_client.retrieve_forecast(
+                forecast_date=date(2026, 1, 15),
+                variables=["temperature"],
+                target=Path("/tmp/out.grib"),
+                max_leadtime_hours=49,
+            )
+
+    def test_rejects_negative_leadtime(self, ecmwf_client, mock_opendata):
+        """ValueError for negative leadtime."""
+        with pytest.raises(ValueError, match="minimum is 0"):
+            ecmwf_client.retrieve_forecast(
+                forecast_date=date(2026, 1, 15),
+                variables=["temperature"],
+                target=Path("/tmp/out.grib"),
+                max_leadtime_hours=-1,
+            )

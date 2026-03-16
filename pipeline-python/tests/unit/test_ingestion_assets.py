@@ -15,6 +15,7 @@ import pytest
 
 from pipeline_python.defs.assets import (
     CamsForecastConfig,
+    EcmwfForecastConfig,
     _AIR_QUALITY_FORECAST,
     _WEATHER_FORECAST,
     ingest_cams_data,
@@ -43,10 +44,11 @@ class MockEcmwfClient(dg.ConfigurableResource):
 
     should_fail: bool = False
 
-    def retrieve_forecast(self, forecast_date, variables, target):
+    def retrieve_forecast(self, forecast_date, variables, target, max_leadtime_hours=48):
         _mock_ecmwf_calls.append({
             "forecast_date": forecast_date,
             "variables": variables,
+            "max_leadtime_hours": max_leadtime_hours,
         })
         if self.should_fail:
             raise Exception("Mock ECMWF API failure")
@@ -287,6 +289,25 @@ class TestIngestEcmwfDataAsset:
         call = _mock_ecmwf_calls[0]
         assert call["forecast_date"] == date(2026, 1, 15)
         assert call["variables"] == ["temperature", "dewpoint"]
+        assert call["max_leadtime_hours"] == 48
+
+    def test_forwards_horizon_from_config(self):
+        """Config horizon_hours plumbed through to ECMWF client."""
+        result = dg.materialize(
+            assets=[ingest_ecmwf_data],
+            resources=_make_resources(ecmwf_client=MockEcmwfClient()),
+            partition_key="2026-01-15",
+            run_config={
+                "ops": {
+                    "ingest_ecmwf_data": {
+                        "config": {"horizon_hours": 24}
+                    }
+                }
+            },
+        )
+
+        assert result.success
+        assert _mock_ecmwf_calls[0]["max_leadtime_hours"] == 24
 
     def test_uploads_to_correct_s3_path(self):
         """Upload key must match the expected pattern for the future transform asset."""
@@ -379,6 +400,16 @@ class TestIngestEcmwfDataAsset:
 # ---------------------------------------------------------------------------
 # Tests: _WEATHER_FORECAST constant
 # ---------------------------------------------------------------------------
+
+
+class TestEcmwfForecastConfig:
+    """Tests for EcmwfForecastConfig defaults and overrides."""
+
+    def test_default_horizon(self):
+        assert EcmwfForecastConfig().horizon_hours == 48
+
+    def test_custom_horizon(self):
+        assert EcmwfForecastConfig(horizon_hours=24).horizon_hours == 24
 
 
 class TestWeatherForecastConstant:
