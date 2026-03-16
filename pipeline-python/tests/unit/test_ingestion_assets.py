@@ -43,10 +43,11 @@ class MockEcmwfClient(dg.ConfigurableResource):
 
     should_fail: bool = False
 
-    def retrieve_forecast(self, forecast_date, variables, target):
+    def retrieve_forecast(self, forecast_date, variables, target, max_leadtime_hours=48):
         _mock_ecmwf_calls.append({
             "forecast_date": forecast_date,
             "variables": variables,
+            "max_leadtime_hours": max_leadtime_hours,
         })
         if self.should_fail:
             raise Exception("Mock ECMWF API failure")

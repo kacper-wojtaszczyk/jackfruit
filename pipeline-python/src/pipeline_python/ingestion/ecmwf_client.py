@@ -4,7 +4,8 @@ from pathlib import Path
 import dagster as dg
 from ecmwf.opendata import Client
 
-_ECMWF_STEPS = list(range(0, 48 + 1, 3))
+_MAX_LEADTIME = 48
+_ECMWF_STEPS = list(range(0, _MAX_LEADTIME + 1, 3))
 
 _VARIABLE_MAP = {
     "temperature": "2t",
@@ -25,8 +26,18 @@ class EcmwfClient(dg.ConfigurableResource):
         self,
         forecast_date: date,
         variables: list[str],
-        target: Path
+        target: Path,
+        max_leadtime_hours: int = _MAX_LEADTIME
     ) -> None:
+        if max_leadtime_hours > _MAX_LEADTIME:
+            raise ValueError(
+                f"ECMWF forecast maximum is {_MAX_LEADTIME} hours, got {max_leadtime_hours}"
+            )
+        if max_leadtime_hours < 0:
+            raise ValueError(
+                f"ECMWF forecast minimum is 0 hours, got {max_leadtime_hours}"
+            )
+
         client = Client(source=self.source)
         api_variables = [_VARIABLE_MAP[v] for v in variables]
         request = {
@@ -35,7 +46,7 @@ class EcmwfClient(dg.ConfigurableResource):
             "stream": "oper",
             "levtype": "sfc",
             "time": 0,
-            "step": _ECMWF_STEPS,
+            "step": [x for x in _ECMWF_STEPS if x <= max_leadtime_hours],
             "param": api_variables,
         }
         client.retrieve(request, str(target))

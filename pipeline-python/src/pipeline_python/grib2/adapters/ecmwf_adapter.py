@@ -56,6 +56,6 @@ class EcmwfReader:
     def _open(self, path: str | Path) -> Iterator[Iterator[EcmwfMessage]]:
         gribs = pygrib.open(str(path))
         try:
-            yield (EcmwfMessage(grb)for grb in gribs)
+            yield (EcmwfMessage(grb) for grb in gribs)
         finally:
             gribs.close()

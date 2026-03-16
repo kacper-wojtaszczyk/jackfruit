@@ -28,6 +28,32 @@ _ECMWF_SOURCE = "ecmwf"
 _AIR_QUALITY_FORECAST = "cams-europe-air-quality-forecast"
 _WEATHER_FORECAST = "ifs-weather-forecast"
 
+# European bounding box — matches CAMS Europe domain
+_EUROPE_LAT_MIN, _EUROPE_LAT_MAX = 30.0, 72.0
+_EUROPE_LON_MIN, _EUROPE_LON_MAX = -25.0, 45.0
+
+
+def _clip_to_europe(
+    values: np.ndarray, lats: np.ndarray, lons: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Clip 2D grids to the European bounding box.
+
+    ECMWF Open Data returns global 0.25° grids (721x1440). This clips to
+    Europe (lat [30, 72], lon [-25, 45]) and reshapes to 2D (169x281) for
+    GridData compatibility.
+    """
+    mask = (
+        (lats >= _EUROPE_LAT_MIN) & (lats <= _EUROPE_LAT_MAX)
+        & (lons >= _EUROPE_LON_MIN) & (lons <= _EUROPE_LON_MAX)
+    )
+    n_lats = int((_EUROPE_LAT_MAX - _EUROPE_LAT_MIN) / 0.25) + 1  # 169
+    n_lons = int((_EUROPE_LON_MAX - _EUROPE_LON_MIN) / 0.25) + 1  # 281
+    return (
+        values[mask].reshape(n_lats, n_lons),
+        lats[mask].reshape(n_lats, n_lons),
+        lons[mask].reshape(n_lats, n_lons),
+    )
+
 
 class CamsForecastConfig(dg.Config):
     """Configuration for the ingestion asset."""
@@ -223,7 +249,8 @@ def ingest_ecmwf_data(
         ecmwf_client.retrieve_forecast(
             forecast_date=partition_date,
             variables=["temperature", "dewpoint"],
-            target=tmp_path
+            target=tmp_path,
+            max_leadtime_hours=48,
         )
         context.log.info(f"Downloaded ECMWF data ({tmp_path.stat().st_size} bytes)")
         s3_key = f"{_ECMWF_SOURCE}/{_WEATHER_FORECAST}/{partition_date}/{run_id}.grib"
@@ -262,6 +289,23 @@ def transform_ecmwf_data(
     catalog: PostgresCatalogResource,
     grid_store: GridStore,
 ) -> dg.MaterializeResult:
+    """
+    Transform raw ECMWF GRIB data into curated grid rows in ClickHouse.
+
+    Reads upstream ingestion metadata to locate the raw file, downloads it from MinIO,
+    groups messages by timestamp, converts temperature from Kelvin to Celsius, computes
+    relative humidity from dewpoint via the Magnus formula, clips to the European bounding
+    box, inserts rows into ClickHouse, and records lineage in the Postgres catalog.
+
+    Args:
+        context: Dagster execution context (provides partition key and upstream metadata)
+        object_store: S3/MinIO client for downloading raw files
+        catalog: Postgres catalog for lineage recording
+        grid_store: Grid storage backend (ClickHouse in production)
+
+    Returns:
+        MaterializeResult with run_id, date, variables_processed, and inserted_rows
+    """
     partition_date = context.partition_key
     upstream_key = ingest_ecmwf_data.key
     records = context.instance.get_event_records(
@@ -284,6 +328,7 @@ def transform_ecmwf_data(
     raw_key = f"{source}/{dataset}/{partition_date}/{run_id}.grib"
 
     curated_keys: list[uuid.UUID] = []
+    variables_processed: list[str] = []
     rows_inserted = 0
 
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -313,15 +358,18 @@ def transform_ecmwf_data(
                 t_msg = vars["temperature"]
                 d_msg = vars["dewpoint"]
 
-                t_c  = t_msg.values - 273.15
-                d_c  = d_msg.values - 273.15
-                rh   = 100 * np.exp(17.625 * d_c / (243.04 + d_c)) \
-                           / np.exp(17.625 * t_c  / (243.04 + t_c))
+                t_vals, t_lats, t_lons = _clip_to_europe(t_msg.values, t_msg.lats, t_msg.lons)
+                d_vals, _, _ = _clip_to_europe(d_msg.values, d_msg.lats, d_msg.lons)
+
+                t_c = t_vals - 273.15
+                d_c = d_vals - 273.15
+                rh = 100 * np.exp(17.625 * d_c / (243.04 + d_c)) \
+                         / np.exp(17.625 * t_c / (243.04 + t_c))
 
                 catalog_id_t = uuid.uuid7()
                 rows_inserted += grid_store.insert_grid(GridData(
                     variable="temperature", unit="°C", timestamp=ts,
-                    lats=t_msg.lats, lons=t_msg.lons, values=t_c,
+                    lats=t_lats, lons=t_lons, values=t_c,
                     catalog_id=catalog_id_t,
                 ))
                 catalog.insert_curated_data(CuratedDataRecord(
@@ -329,11 +377,12 @@ def transform_ecmwf_data(
                     variable="temperature", unit="°C", timestamp=ts,
                 ))
                 curated_keys.append(catalog_id_t)
+                variables_processed.append("temperature")
 
                 catalog_id_h = uuid.uuid7()
                 rows_inserted += grid_store.insert_grid(GridData(
                     variable="humidity", unit="%", timestamp=ts,
-                    lats=t_msg.lats, lons=t_msg.lons, values=rh,
+                    lats=t_lats, lons=t_lons, values=rh,
                     catalog_id=catalog_id_h,
                 ))
                 catalog.insert_curated_data(CuratedDataRecord(
@@ -341,11 +390,12 @@ def transform_ecmwf_data(
                     variable="humidity", unit="%", timestamp=ts,
                 ))
                 curated_keys.append(catalog_id_h)
+                variables_processed.append("humidity")
 
     return dg.MaterializeResult(metadata={
         "run_id": run_id,
         "date": partition_date,
         "curated_keys": [str(k) for k in curated_keys],
-        "variables_processed": ["temperature", "humidity"],
+        "variables_processed": list(set(variables_processed)),
         "inserted_rows": rows_inserted,
     })
