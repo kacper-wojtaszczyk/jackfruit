@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Jackfruit is an environmental data platform that ingests, transforms, and serves gridded environmental data (air quality, weather, hydrology, vegetation) from sources like Copernicus CAMS, GloFAS, and ERA5.
+Jackfruit is an environmental data platform that ingests, transforms, and serves gridded environmental data (air quality, weather, hydrology, vegetation) from sources like Copernicus CAMS, ECMWF Open Data, and GloFAS.
 
 ## Infrastructure Commands
 
@@ -20,10 +20,10 @@ docker-compose up -d              # Start MinIO, Postgres, ClickHouse, Dagster
 Three processing layers with strict boundaries — do not blur them:
 
 ```
-External APIs (Copernicus ADS, etc.)
+External APIs (Copernicus ADS, ECMWF Open Data)
         ↓
   L1: Ingestion (pipeline-python/)
-  Python + cdsapi fetches raw data → MinIO jackfruit-raw bucket
+  Python + cdsapi (CAMS) / ecmwf-opendata (ECMWF) → MinIO jackfruit-raw bucket
         ↓
   L2: Transformation (pipeline-python/)
   Dagster assets: read raw GRIB → decode → extract grids → ClickHouse
@@ -173,13 +173,14 @@ Entry point: `src/pipeline_python/definitions.py` — uses `load_from_defs_folde
 src/pipeline_python/
 ├── definitions.py
 ├── defs/
-│   ├── assets.py           # ingest_cams_data, transform_cams_data
-│   ├── resources.py        # Wires CdsClient, ObjectStore, PostgresCatalogResource, ClickHouseGridStore
-│   ├── schedules.py        # cams_daily_schedule (08:00 UTC daily)
+│   ├── assets.py           # ingest_cams_data, transform_cams_data, ingest_ecmwf_data, transform_ecmwf_data
+│   ├── resources.py        # Wires CdsClient, EcmwfClient, ObjectStore, PostgresCatalogResource, ClickHouseGridStore
+│   ├── schedules.py        # cams_daily_schedule (08:00 UTC), ecmwf_daily_schedule (09:30 UTC)
 │   ├── partitions.py       # Daily partitions (start 2026-01-01, UTC, end_offset=1)
 │   └── models.py           # RawFileRecord, CuratedDataRecord (frozen dataclasses)
 ├── ingestion/
-│   └── cds_client.py       # CdsClient (ConfigurableResource wrapping cdsapi)
+│   ├── cds_client.py       # CdsClient (ConfigurableResource wrapping cdsapi — async job pattern)
+│   └── ecmwf_client.py     # EcmwfClient (ConfigurableResource wrapping ecmwf-opendata — direct download, no API key)
 ├── storage/
 │   ├── grid_store.py       # GridStore ABC + GridData dataclass
 │   ├── clickhouse_grid_store.py  # ClickHouseGridStore implementation
@@ -187,27 +188,37 @@ src/pipeline_python/
 └── grib2/
     ├── reader.py            # GribReader / GribMessage Protocols
     └── adapters/
-        └── cams_adapter.py  # CamsReader + CamsMessage (pygrib-backed)
+        ├── cams_adapter.py  # CamsReader + CamsMessage (pygrib-backed, maps constituent codes)
+        └── ecmwf_adapter.py # EcmwfReader + EcmwfMessage (pygrib-backed, maps shortName: 2t/2d)
 ```
 
 ### Asset Pipeline
 
+Two independent pipelines, both run in-process in the Dagster worker:
+
 ```
-ingest_cams_data (Python)
-  → Generates UUIDv7 run_id
-  → Calls CDS API via CdsClient, uploads to MinIO via ObjectStore
-  → Records metadata in Postgres catalog
-        ↓
-transform_cams_data (Python)
-  → Constructs exact S3 key from upstream metadata (no LIST operations — see root Conventions)
-  → Downloads raw GRIB from MinIO to temp file (pygrib requires local files)
-  → Decodes via CamsReader / pygrib
-  → Writes curated output + lineage to ClickHouse + catalog
+CAMS (08:00 UTC daily)                    ECMWF (09:30 UTC daily)
+──────────────────────                    ───────────────────────
+ingest_cams_data                          ingest_ecmwf_data
+  → UUIDv7 run_id                           → UUIDv7 run_id
+  → CdsClient (async: submit→poll→DL)       → EcmwfClient (direct download, no API key)
+  → MinIO: ads/cams-europe-.../{date}/      → MinIO: ecmwf/ifs-weather-forecast/{date}/
+  → Postgres: catalog.raw_files             → Postgres: catalog.raw_files
+        ↓                                         ↓
+transform_cams_data                       transform_ecmwf_data
+  → S3 key from upstream metadata           → S3 key from upstream metadata
+  → Download GRIB to temp file              → Download GRIB to temp file
+  → CamsReader (constituent codes)          → EcmwfReader (shortName: 2t, 2d)
+  → Stores: pm2p5, pm10 (µg/m³)            → Clips to Europe (0.25° → 30-72°N, -25-45°E)
+  → ClickHouse + catalog                    → K→°C, Magnus formula for RH
+                                            → Stores: temperature (°C), humidity (%)
+                                            → ClickHouse + catalog
 ```
 
 ### Resources
 
-- **CdsClient** — `ConfigurableResource` wrapping `cdsapi`. `retrieve_forecast()` downloads GRIB from Copernicus ADS to a local temp path.
+- **CdsClient** — `ConfigurableResource` wrapping `cdsapi`. `retrieve_forecast()` downloads GRIB from Copernicus ADS to a local temp path (async: submit → poll → download). Requires `ADS_API_KEY`.
+- **EcmwfClient** — `ConfigurableResource` wrapping `ecmwf-opendata`. `retrieve_forecast()` downloads IFS GRIB directly to a local temp path. No API key required.
 - **ObjectStore** — boto3-based S3/MinIO client. `download_raw()` downloads to temp files; `upload_raw()` uploads to the raw bucket.
 - **PostgresCatalogResource** — psycopg3. `insert_raw_file()` uses `ON CONFLICT DO NOTHING`; `insert_curated_data()` uses `ON CONFLICT DO UPDATE`.
 
@@ -245,4 +256,4 @@ Integration tests in `tests/integration/` test against real infrastructure.
 - Dagster resources for all external dependencies (S3, Postgres, ClickHouse, CDS API)
 - Frozen dataclasses for domain models
 - Idempotent ops and no S3 LIST — see root Conventions above
-- Schedule run_keys include date for idempotency (`cams_daily_{partition_key}`)
+- Schedule run_keys include date for idempotency (`cams_daily_{partition_key}`, `ecmwf_daily_{partition_key}`)

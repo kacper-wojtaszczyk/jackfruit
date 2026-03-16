@@ -7,9 +7,12 @@ Fetch raw data from external environmental APIs and store unchanged in the raw b
 | Component | Status |
 |-----------|--------|
 | CDS API client (`cdsapi` via `CdsClient`) | ✅ Done |
+| ECMWF Open Data client (`ecmwf-opendata` via `EcmwfClient`) | ✅ Done |
 | MinIO storage integration (`ObjectStore`) | ✅ Done |
-| CAMS Europe Air Quality datasets | ✅ Done |
-| Dagster orchestration (native Python asset) | ✅ Done |
+| CAMS Europe Air Quality datasets (PM2.5, PM10) | ✅ Done |
+| ECMWF IFS weather forecast dataset (temperature, humidity) | ✅ Done |
+| Dagster orchestration — CAMS (`cams_daily_schedule`, 08:00 UTC) | ✅ Done |
+| Dagster orchestration — ECMWF (`ecmwf_daily_schedule`, 09:30 UTC) | ✅ Done |
 | GloFAS dataset | ⏳ Planned |
 | Retry/rate limiting | ⏳ Planned |
 
@@ -34,16 +37,18 @@ Ingestion was originally implemented as a Go CLI (`ingestion-go/`) invoked from 
 
 ## Technology
 
-**Language:** Python (with `cdsapi` library)
-**Orchestration:** Native Dagster asset (`ingest_cams_data`)
+**Language:** Python (with `cdsapi` and `ecmwf-opendata` libraries)
+**Orchestration:** Native Dagster assets (`ingest_cams_data`, `ingest_ecmwf_data`)
 
 **Key components:**
 - `CdsClient` (`ingestion/cds_client.py`) — `ConfigurableResource` wrapping `cdsapi`. Handles CDS async job pattern (submit → poll → download)
+- `EcmwfClient` (`ingestion/ecmwf_client.py`) — `ConfigurableResource` wrapping `ecmwf-opendata`. Direct download — no async polling, no API key required. Fetches IFS GRIB files (2t + 2d, `levtype=sfc`, steps 0–48 at 3-hour intervals)
 - `ObjectStore` (`storage/object_store.py`) — boto3-based S3/MinIO client. `upload_raw()` puts the downloaded GRIB into MinIO
 
 **Why Python:**
 - Same language as transformation layer — single stack for the entire pipeline
 - `cdsapi` handles the CDS async job pattern natively (no hand-rolled polling)
+- `ecmwf-opendata` provides a simple download interface for ECMWF Open Data (no auth, no polling)
 - No container orchestration overhead (runs in-process in the Dagster worker)
 
 ## Storage Contract
@@ -55,9 +60,10 @@ Ingestion was originally implemented as a Go CLI (`ingestion-go/`) invoked from 
 {source}/{dataset}/{YYYY-MM-DD}/{run_id}.{ext}
 ```
 
-**Example:**
+**Examples:**
 ```
-ads/cams-europe-air-quality-forecast/2025-03-12/01890c24-905b-7122-b170-b60814e6ee06.grib
+ads/cams-europe-air-quality-forecast/2026-03-16/01890c24-905b-7122-b170-b60814e6ee06.grib
+ecmwf/ifs-weather-forecast/2026-03-16/019cf6d7-e1d8-7b2a-8c3f-e1201d8f8a72.grib
 ```
 
 **Rules:**
@@ -88,7 +94,8 @@ ads/cams-europe-air-quality-forecast/2025-03-12/01890c24-905b-7122-b170-b60814e6
 
 | Source | Data Types | API | Status |
 |--------|------------|-----|--------|
-| **Copernicus CAMS** | PM2.5, PM10, O3, NO2, AQI | CDS API | ✅ Done |
+| **Copernicus CAMS** | PM2.5, PM10, O3, NO2, AQI | CDS API (`cdsapi`) | ✅ Done |
+| **ECMWF Open Data** | Temperature (2t), Dewpoint (2d) → temperature + humidity | `ecmwf-opendata` | ✅ Done |
 | **Copernicus GloFAS** | River discharge, floods | CDS API | ⏳ Next |
 | **Copernicus CGLS** | NDVI, LAI, land cover | CDS API | ⏳ Planned |
 
@@ -111,6 +118,16 @@ The Copernicus Data Store API uses an async job pattern:
 4. **Store** to MinIO
 
 This pattern applies to CAMS, GloFAS, and CGLS.
+
+## ECMWF Open Data Pattern
+
+ECMWF Open Data uses a direct download pattern — no job submission, no polling, no API key:
+
+1. **Construct** request (date, steps, parameters: `2t`, `2d`)
+2. **Download** GRIB file directly via `ecmwf-opendata` client
+3. **Store** to MinIO at `ecmwf/ifs-weather-forecast/{date}/{run_id}.grib`
+
+The `ecmwf-opendata` library handles URL construction and streaming download internally. IFS 00Z forecasts are typically available by ~09:00 UTC, hence the 09:30 UTC schedule.
 
 ---
 

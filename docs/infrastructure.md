@@ -4,12 +4,12 @@ Pluggable backend services. Local dev uses Docker containers; production uses ma
 
 ## Components
 
-| Component       | Local (Dev)     | Production          | Purpose                               |
-|-----------------|-----------------|---------------------|---------------------------------------|
-| Object Storage  | MinIO           | S3                  | Raw data files (immutable)            |
-| Metadata DB     | Postgres        | RDS Postgres        | Dataset catalog, lineage, run history |
-| Grid Data Store | ClickHouse      | ClickHouse Cloud    | Curated grid data (query-optimized)   |
-| Orchestration   | Dagster (local) | Dagster Cloud / ECS | Pipeline scheduling and monitoring    |
+| Component       | Local (Dev)     | Production                        | Purpose                               |
+|-----------------|-----------------|-----------------------------------|---------------------------------------|
+| Object Storage  | MinIO           | Scaleway Object Storage (S3-compatible) | Raw data files (immutable)      |
+| Metadata DB     | Postgres        | Scaleway Managed PostgreSQL       | Dataset catalog, lineage, run history |
+| Grid Data Store | ClickHouse      | ClickHouse (self-hosted, Kapsule) | Curated grid data (query-optimized)   |
+| Orchestration   | Dagster (local) | Dagster (self-hosted, Kapsule)    | Pipeline scheduling and monitoring    |
 
 All components expose standard APIs — application code doesn't change between environments.
 
@@ -140,17 +140,19 @@ LIMIT 1
 
 **Job execution model:**
 
-| Layer                   | Execution              | Rationale                                       |
-|-------------------------|------------------------|-------------------------------------------------|
-| Ingestion (Python)      | In Dagster container   | Native `cdsapi` — no Docker socket or sidecar   |
-| Transformation (Python) | In Dagster container   | Same runtime, simpler, faster iteration          |
+| Layer                        | Execution            | Rationale                                                          |
+|------------------------------|----------------------|--------------------------------------------------------------------|
+| CAMS Ingestion (Python)      | In Dagster container | Native `cdsapi` — no Docker socket or sidecar                      |
+| CAMS Transformation (Python) | In Dagster container | Same runtime, simpler, faster iteration                            |
+| ECMWF Ingestion (Python)     | In Dagster container | Native `ecmwf-opendata` — direct download, no API key required     |
+| ECMWF Transformation (Python)| In Dagster container | Magnus formula for humidity, European bounding-box clip (0.25° grid) |
 
-Both layers run in-process in the Dagster worker. See [ADR 003](ADR/003-python-native-ingestion.md) for why the previous Go ingestion container was replaced.
+All layers run in-process in the Dagster worker. See [ADR 003](ADR/003-python-native-ingestion.md) for why the previous Go ingestion container was replaced.
 
 **Future:** If jobs need resource isolation or conflicting dependencies, they can be run as Kubernetes Jobs via `dagster-k8s`.
 
-**Local:** Dagster runs in container via `docker-compose up`  
-**Production:** Dagster Cloud or self-hosted on ECS
+**Local:** Dagster runs in container via `docker-compose up`
+**Production:** Self-hosted on Scaleway Kapsule — see [infra repo](https://github.com/kacper-wojtaszczyk/climacterium-infra) for more details.
 
 Dagster is infrastructure, not a processing layer — it orchestrates Layers 1 and 2.
 
@@ -209,10 +211,7 @@ CLICKHOUSE_DATABASE=jackfruit
 
 ## Production Deployment
 
-**TBD.** Likely:
-- Terraform for AWS resources (S3, RDS, ECS)
-- Same env var interface, different values
-- Dagster Cloud or self-hosted Dagster on ECS
+Scaleway Kapsule (K8s). Terraform for managed services (Object Storage, Managed PostgreSQL). ClickHouse and Dagster self-hosted on the cluster. Same env var interface, different values. See the [infra repo](https://github.com/kacper-wojtaszczyk/climacterium-infra) for more details.
 
 ## Open Questions
 

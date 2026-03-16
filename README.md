@@ -8,14 +8,13 @@ Environmental data platform. Ingests, transforms, and serves weather, air qualit
 
 - [x] Architecture defined (infrastructure + 3 processing layers)
 - [x] Storage strategy decided (MinIO raw bucket + ClickHouse for curated)
-- [x] Python ingestion (CAMS adapter working, via cdsapi)
 - [x] Dagster orchestration setup
-- [x] Ingestion asset (Python-native, CDS API + MinIO)
-- [x] CAMS transformation asset — needs migration to ClickHouse
 - [x] Metadata DB (Postgres)
 - [x] ClickHouse setup
-- [x] Transform to ClickHouse
-- [ ] Serving API — in progress
+- [x] Python-native ingestion — CAMS (cdsapi) + ECMWF Open Data (ecmwf-opendata)
+- [x] Transformation — CAMS (PM2.5, PM10) + ECMWF (temperature, humidity)
+- [x] Serving API (Go, `GET /v1/environmental`)
+- [ ] Serving API - Lineage
 
 ## Quick Start
 
@@ -58,9 +57,9 @@ docker-compose up -d
 | Grid Data Store       | ClickHouse       | ✅ Active            |
 | Orchestration         | Dagster          | ✅ Active            |
 | **Processing Layers** |                  |                     |
-| L1: Ingestion         | Python + cdsapi  | ✅ Active (CAMS)     |
-| L2: Transformation    | Python + Dagster | ✅ Active (CAMS)     |
-| L3: Serving           | Go               | 🚧 In progress      |
+| L1: Ingestion         | Python + cdsapi + ecmwf-opendata | ✅ Active (CAMS + ECMWF) |
+| L2: Transformation    | Python + Dagster | ✅ Active (CAMS + ECMWF) |
+| L3: Serving           | Go               | ✅ Active             |
 
 See `docs/` for details. Key decisions are documented in `docs/ADR/`.
 
@@ -76,11 +75,10 @@ jackfruit/
 
 ## Data Sources (Current Targets)
 
-| Source            | Type        | Status                  |
-|-------------------|-------------|-------------------------|
-| Copernicus CAMS   | Air quality | ✅ Implemented ingestion |
-| Copernicus GloFAS | Hydrology   | ⏳ Next                  |
-| ERA5 (public S3)  | Weather     | ⏳ ETL target            |
+| Source            | Type                        | Status                   |
+|-------------------|-----------------------------|--------------------------|
+| Copernicus CAMS   | Air quality (PM2.5, PM10)   | ✅ Implemented            |
+| ECMWF Open Data   | Weather (temperature, humidity) | ✅ Implemented        |
 
 ## License
 

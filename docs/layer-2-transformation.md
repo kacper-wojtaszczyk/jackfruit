@@ -4,15 +4,19 @@ Read raw data, normalize schemas, compute quality flags, and write to ClickHouse
 
 ## Status
 
-| Component                           | Status              |
-|-------------------------------------|---------------------|
-| Dagster project setup               | ✅ Done              |
-| Dagster asset: Python-native ingestion | ✅ Done              |
-| CAMS transformation asset           | ✅ Done              |
-| Curated storage                     | ✅ Done (ClickHouse) |
-| Error handling                      | ✅ Fail-fast         |
-| Daily schedule (08:00 UTC)          | ✅ Done              |
-| Metadata storage                    | ✅ Postgres catalog  |
+| Component                                | Status              |
+|------------------------------------------|---------------------|
+| Dagster project setup                    | ✅ Done              |
+| Dagster asset: Python-native ingestion   | ✅ Done              |
+| CAMS transformation asset                | ✅ Done              |
+| ECMWF transformation asset               | ✅ Done              |
+| European clipping (`_clip_to_europe`)    | ✅ Done              |
+| Magnus formula for relative humidity     | ✅ Done              |
+| Curated storage                          | ✅ Done (ClickHouse) |
+| Error handling                           | ✅ Fail-fast         |
+| CAMS daily schedule (08:00 UTC)          | ✅ Done              |
+| ECMWF daily schedule (09:30 UTC)         | ✅ Done              |
+| Metadata storage                         | ✅ Postgres catalog  |
 
 ## Responsibilities
 
@@ -42,14 +46,21 @@ Read raw data, normalize schemas, compute quality flags, and write to ClickHouse
 
 ## Ingestion from Dagster
 
-The `ingest_cams_data` Dagster asset handles ingestion natively in Python. See [Layer 1 docs](layer-1-ingestion.md) and [ADR 003](ADR/003-python-native-ingestion.md) for the decision record.
+Two parallel ingestion pipelines run independently. See [Layer 1 docs](layer-1-ingestion.md) and [ADR 003](ADR/003-python-native-ingestion.md) for the decision record.
 
-**Flow:**
+**CAMS flow** (08:00 UTC daily):
 1. Dagster asset generates UUIDv7 for `run_id`
-2. `CdsClient.retrieve_forecast()` downloads GRIB from Copernicus ADS to a temp file
-3. `ObjectStore.upload_raw()` uploads the file to MinIO at `ads/{dataset}/{date}/{run_id}.grib`
+2. `CdsClient.retrieve_forecast()` downloads GRIB from Copernicus ADS (async job pattern) to a temp file
+3. `ObjectStore.upload_raw()` uploads to MinIO at `ads/cams-europe-air-quality-forecast/{date}/{run_id}.grib`
 4. `PostgresCatalogResource.insert_raw_file()` records lineage in Postgres
-5. On success, downstream `transform_cams_data` can materialize
+5. On success, downstream `transform_cams_data` materializes
+
+**ECMWF flow** (09:30 UTC daily):
+1. Dagster asset generates UUIDv7 for `run_id`
+2. `EcmwfClient.retrieve_forecast()` downloads IFS GRIB (direct download, no polling, no API key) to a temp file
+3. `ObjectStore.upload_raw()` uploads to MinIO at `ecmwf/ifs-weather-forecast/{date}/{run_id}.grib`
+4. `PostgresCatalogResource.insert_raw_file()` records lineage in Postgres
+5. On success, downstream `transform_ecmwf_data` materializes
 
 ## Storage
 
@@ -67,9 +78,11 @@ ETL reads raw (or public S3 directly for large datasets), writes to ClickHouse. 
 - Dataset name is deterministic per transform asset (e.g., `cams-europe-air-quality-forecast`)
 
 **Processing:**
-- Multi-variable GRIB files are read with `pygrib` (ecCodes-backed library) via the `CamsReader` adapter
-- Grid data extracted to numpy arrays
-- Each variable/timestamp batch-inserted into ClickHouse
+- Multi-variable GRIB files are read with `pygrib` (ecCodes-backed library) via source-specific adapters
+- `CamsReader`/`CamsMessage` — maps constituent codes (40008→PM10, 40009→PM2.5) from CAMS GRIB
+- `EcmwfReader`/`EcmwfMessage` — maps `shortName` (2t→temperature, 2d→dewpoint) from IFS GRIB
+- ECMWF transform: clips global 0.25° grid to Europe (30–72°N, -25–45°E) via `_clip_to_europe()`, converts K→°C, computes relative humidity from temperature and dewpoint via the Magnus formula
+- Grid data extracted to numpy arrays and batch-inserted into ClickHouse
 
 ### Catalog Integration
 
@@ -170,12 +183,13 @@ See [ADR 001](ADR/001-grid-data-storage.md) for the storage decision record.
 
 Different sources have different temporal resolutions. Each source has a defined granularity.
 
-| Source      | Granularity | Resolution |
-|-------------|-------------|------------|
-| CAMS        | Hourly      | 1 hour     |
-| ERA5        | Hourly      | 1 hour     |
-| GloFAS      | Daily       | 1 day      |
-| CGLS (NDVI) | Weekly      | ISO week   |
+| Source           | Granularity | Resolution | Grid    |
+|------------------|-------------|------------|---------|
+| CAMS             | Hourly      | 1 hour     | 0.1°    |
+| ECMWF Open Data  | 3-hourly    | 3 hours    | 0.25°   |
+| ERA5             | Hourly      | 1 hour     | 0.25°   |
+| GloFAS           | Daily       | 1 day      | 0.1°    |
+| CGLS (NDVI)      | Weekly      | ISO week   | varies  |
 
 **Granularity handling:** Serving layer snaps query timestamps to the correct resolution before querying ClickHouse.
 
@@ -240,21 +254,25 @@ If any variable fails to extract or insert:
 - Avoids inconsistent state in ClickHouse
 - Can refine later if specific failure modes warrant partial success
 
-## Daily Schedule
+## Schedules
 
-**Name:** `cams_daily_schedule`  
-**Cron:** `0 8 * * *` (08:00 UTC every day)  
-**Timezone:** UTC
+### CAMS — `cams_daily_schedule`
 
-The schedule automatically triggers ingestion and transformation each morning:
+**Cron:** `0 8 * * *` (08:00 UTC every day)
 
-1. **Trigger Time:** 08:00 UTC (after CAMS forecast data is typically available ~6 hours after midnight UTC)
-2. **Partition:** Today's date (e.g., if scheduled run is 2026-03-12 08:00, it processes 2026-03-12)
-3. **Execution:**
-   - Dagster creates a `RunRequest` for the specific partition
-   - `ingest_cams_data` asset executes first (fetches from CDS API → raw bucket)
-   - On success, `transform_cams_data` executes (transforms raw → curated)
-4. **Observability:** Each run is tagged with `source=schedule`, `pipeline=cams`, `scheduled_date=YYYY-MM-DD`
+1. **Trigger Time:** 08:00 UTC — CAMS forecast data is typically available ~6 hours after midnight UTC
+2. **Partition:** Today's date
+3. **Execution:** `ingest_cams_data` → `transform_cams_data`
+4. **Observability:** Tagged `source=schedule`, `pipeline=cams`, `scheduled_date=YYYY-MM-DD`
+
+### ECMWF — `ecmwf_daily_schedule`
+
+**Cron:** `30 9 * * *` (09:30 UTC every day)
+
+1. **Trigger Time:** 09:30 UTC — ECMWF IFS 00Z forecasts are typically available by ~09:00 UTC
+2. **Partition:** Today's date
+3. **Execution:** `ingest_ecmwf_data` → `transform_ecmwf_data`
+4. **Observability:** Tagged `source=schedule`, `pipeline=ecmwf`, `scheduled_date=YYYY-MM-DD`
 
 ### Manual Backfills
 
@@ -262,13 +280,9 @@ To materialize data for specific dates (e.g., historical backfill):
 
 ```bash
 # Via Dagster UI
-# 1. Navigate to Assets → transform_cams_data
-# 2. Select date range (e.g., 2025-01-01 to 2025-03-11)
+# 1. Navigate to Assets → transform_cams_data (or transform_ecmwf_data)
+# 2. Select date range (e.g., 2026-01-01 to 2026-03-15)
 # 3. Click "Materialize selected"
-
-# Via Dagster CLI (future)
-# dagster asset materialize --asset-selection 'transform_cams_data' \
-#   --start-partition '2025-01-01' --end-partition '2025-03-11'
 ```
 
 ## Processing Libraries
@@ -283,7 +297,7 @@ To materialize data for specific dates (e.g., historical backfill):
 - `grb.data()` returns `(values_2d, lats_2d, lons_2d)` — matches the `GribMessage` protocol interface cleanly
 - PDT 4.40 and ECMWF constituent codes (40008 PM10, 40009 PM2.5) are in the ecCodes definitions database
 - Bundled wheel — no system library dependencies
-- `assets.py` is decoupled from pygrib via the `GribMessage`/`GribReader` Protocol in `grib2/reader.py`; see [library landscape](guides/grib2-python-library-landscape.md) for the full decision record
+- `assets.py` is decoupled from pygrib via the `GribMessage`/`GribReader` Protocol in `grib2/reader.py`; see [ADR 003](ADR/003-python-native-ingestion.md)for the full decision record
 
 **Why clickhouse-connect:**
 - Official ClickHouse Python driver
