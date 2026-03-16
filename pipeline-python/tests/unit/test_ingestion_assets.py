@@ -16,7 +16,9 @@ import pytest
 from pipeline_python.defs.assets import (
     CamsForecastConfig,
     _AIR_QUALITY_FORECAST,
+    _WEATHER_FORECAST,
     ingest_cams_data,
+    ingest_ecmwf_data,
 )
 from pipeline_python.defs.models import RawFileRecord
 
@@ -26,6 +28,7 @@ from pipeline_python.defs.models import RawFileRecord
 # ---------------------------------------------------------------------------
 
 _mock_cds_calls: list[dict] = []
+_mock_ecmwf_calls: list[dict] = []
 _mock_uploads: list[dict] = []
 _catalog_raw_inserts: list[RawFileRecord] = []
 
@@ -33,6 +36,21 @@ _catalog_raw_inserts: list[RawFileRecord] = []
 # ---------------------------------------------------------------------------
 # Mock resources
 # ---------------------------------------------------------------------------
+
+
+class MockEcmwfClient(dg.ConfigurableResource):
+    """Mock ECMWF Open Data client that creates an empty file instead of downloading."""
+
+    should_fail: bool = False
+
+    def retrieve_forecast(self, forecast_date, variables, target):
+        _mock_ecmwf_calls.append({
+            "forecast_date": forecast_date,
+            "variables": variables,
+        })
+        if self.should_fail:
+            raise Exception("Mock ECMWF API failure")
+        target.touch()
 
 
 class MockCdsClient(dg.ConfigurableResource):
@@ -84,19 +102,25 @@ class MockCatalogResource(dg.ConfigurableResource):
 @pytest.fixture(autouse=True)
 def _reset_mock_state():
     """Reset all module-level mock state before each test."""
-    global _mock_cds_calls, _mock_uploads, _catalog_raw_inserts
+    global _mock_cds_calls, _mock_ecmwf_calls, _mock_uploads, _catalog_raw_inserts
     _mock_cds_calls = []
+    _mock_ecmwf_calls = []
     _mock_uploads = []
     _catalog_raw_inserts = []
 
 
-def _make_resources(*, cds_client=None, object_store=None, catalog=None):
-    """Build resource dict with defaults for all three mocks."""
-    return {
-        "cds_client": cds_client or MockCdsClient(),
-        "object_store": object_store or MockObjectStore(),
-        "catalog": catalog or MockCatalogResource(),
+def _make_resources(**overrides):
+    """Build resource dict for asset tests.
+
+    Shared resources (object_store, catalog) have mock defaults.
+    Pipeline-specific clients must be passed explicitly.
+    """
+    defaults = {
+        "object_store": MockObjectStore(),
+        "catalog": MockCatalogResource(),
     }
+    defaults.update(overrides)
+    return defaults
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +135,7 @@ class TestIngestCamsDataAsset:
         """Core happy path: CDS called with correct args, upload key + catalog record are right."""
         result = dg.materialize(
             assets=[ingest_cams_data],
-            resources=_make_resources(),
+            resources=_make_resources(cds_client=MockCdsClient()),
             partition_key="2026-01-15",
         )
 
@@ -142,7 +166,7 @@ class TestIngestCamsDataAsset:
         """Config horizon_hours plumbed through to CDS client."""
         result = dg.materialize(
             assets=[ingest_cams_data],
-            resources=_make_resources(),
+            resources=_make_resources(cds_client=MockCdsClient()),
             partition_key="2026-01-15",
             run_config={
                 "ops": {
@@ -160,7 +184,7 @@ class TestIngestCamsDataAsset:
         """Contract: transform_cams_data reads run_id, dataset, date, source from upstream metadata."""
         result = dg.materialize(
             assets=[ingest_cams_data],
-            resources=_make_resources(),
+            resources=_make_resources(cds_client=MockCdsClient()),
             partition_key="2026-01-15",
         )
 
@@ -178,12 +202,12 @@ class TestIngestCamsDataAsset:
         """Each materialization must produce a distinct run_id (idempotency safety)."""
         dg.materialize(
             assets=[ingest_cams_data],
-            resources=_make_resources(),
+            resources=_make_resources(cds_client=MockCdsClient()),
             partition_key="2026-01-15",
         )
         dg.materialize(
             assets=[ingest_cams_data],
-            resources=_make_resources(),
+            resources=_make_resources(cds_client=MockCdsClient()),
             partition_key="2026-01-16",
         )
 
@@ -196,7 +220,7 @@ class TestIngestCamsDataAsset:
         """Catalog insert is fatal — asset must fail (licensing requires lineage)."""
         result = dg.materialize(
             assets=[ingest_cams_data],
-            resources=_make_resources(catalog=MockCatalogResource(should_fail=True)),
+            resources=_make_resources(cds_client=MockCdsClient(), catalog=MockCatalogResource(should_fail=True)),
             partition_key="2026-01-15",
             raise_on_error=False,
         )
@@ -240,3 +264,125 @@ class TestAirQualityForecastConstant:
 
     def test_dataset_constant(self):
         assert _AIR_QUALITY_FORECAST == "cams-europe-air-quality-forecast"
+
+
+# ---------------------------------------------------------------------------
+# Tests: IngestEcmwfDataAsset
+# ---------------------------------------------------------------------------
+
+
+class TestIngestEcmwfDataAsset:
+    """Tests for the ingest_ecmwf_data asset."""
+
+    def test_calls_ecmwf_with_domain_args(self):
+        """ECMWF client called with correct date and variable names."""
+        result = dg.materialize(
+            assets=[ingest_ecmwf_data],
+            resources=_make_resources(ecmwf_client=MockEcmwfClient()),
+            partition_key="2026-01-15",
+        )
+
+        assert result.success
+        assert len(_mock_ecmwf_calls) == 1
+        call = _mock_ecmwf_calls[0]
+        assert call["forecast_date"] == date(2026, 1, 15)
+        assert call["variables"] == ["temperature", "dewpoint"]
+
+    def test_uploads_to_correct_s3_path(self):
+        """Upload key must match the expected pattern for the future transform asset."""
+        result = dg.materialize(
+            assets=[ingest_ecmwf_data],
+            resources=_make_resources(ecmwf_client=MockEcmwfClient()),
+            partition_key="2026-01-15",
+        )
+
+        assert result.success
+        assert len(_mock_uploads) == 1
+        key = _mock_uploads[0]["key"]
+        assert re.match(
+            r"ecmwf/ifs-weather-forecast/2026-01-15/[0-9a-f-]+\.grib$",
+            key,
+        )
+
+    def test_records_catalog_entry(self):
+        """Catalog insert must record correct source and dataset for lineage."""
+        result = dg.materialize(
+            assets=[ingest_ecmwf_data],
+            resources=_make_resources(ecmwf_client=MockEcmwfClient()),
+            partition_key="2026-01-15",
+        )
+
+        assert result.success
+        assert len(_catalog_raw_inserts) == 1
+        record = _catalog_raw_inserts[0]
+        assert record.source == "ecmwf"
+        assert record.dataset == _WEATHER_FORECAST
+
+    def test_metadata_contains_keys_for_transform(self):
+        """Contract: future transform_ecmwf_data will read these keys from upstream metadata."""
+        result = dg.materialize(
+            assets=[ingest_ecmwf_data],
+            resources=_make_resources(ecmwf_client=MockEcmwfClient()),
+            partition_key="2026-01-15",
+        )
+
+        events = result.get_asset_materialization_events()
+        assert len(events) == 1
+        metadata = events[0].step_materialization_data.materialization.metadata
+
+        for key in ("run_id", "source", "dataset", "date", "s3_key"):
+            assert key in metadata, f"Missing metadata key: {key}"
+
+        uuid.UUID(metadata["run_id"].value)  # raises if not a valid UUID
+
+    def test_generates_unique_run_ids(self):
+        """Each materialization must produce a distinct run_id (idempotency safety)."""
+        dg.materialize(
+            assets=[ingest_ecmwf_data],
+            resources=_make_resources(ecmwf_client=MockEcmwfClient()),
+            partition_key="2026-01-15",
+        )
+        dg.materialize(
+            assets=[ingest_ecmwf_data],
+            resources=_make_resources(ecmwf_client=MockEcmwfClient()),
+            partition_key="2026-01-16",
+        )
+
+        assert len(_mock_uploads) == 2
+        id1 = _mock_uploads[0]["key"].split("/")[-1].replace(".grib", "")
+        id2 = _mock_uploads[1]["key"].split("/")[-1].replace(".grib", "")
+        assert id1 != id2
+
+    def test_fails_on_catalog_failure(self):
+        """Catalog insert is fatal — asset must fail (licensing requires lineage)."""
+        result = dg.materialize(
+            assets=[ingest_ecmwf_data],
+            resources=_make_resources(ecmwf_client=MockEcmwfClient(), catalog=MockCatalogResource(should_fail=True)),
+            partition_key="2026-01-15",
+            raise_on_error=False,
+        )
+
+        assert not result.success
+
+    def test_propagates_ecmwf_client_failure(self):
+        """ECMWF client failure is fatal — asset must fail."""
+        result = dg.materialize(
+            assets=[ingest_ecmwf_data],
+            resources=_make_resources(ecmwf_client=MockEcmwfClient(should_fail=True)),
+            partition_key="2026-01-15",
+            raise_on_error=False,
+        )
+
+        assert not result.success
+
+
+# ---------------------------------------------------------------------------
+# Tests: _WEATHER_FORECAST constant
+# ---------------------------------------------------------------------------
+
+
+class TestWeatherForecastConstant:
+    """Guard against accidental rename breaking S3 key paths."""
+
+    def test_dataset_constant(self):
+        assert _WEATHER_FORECAST == "ifs-weather-forecast"

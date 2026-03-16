@@ -8,8 +8,6 @@ Dagster execute asset dependencies in order.
 Example: CAMS daily schedule at 08:00 UTC materializes today's data
 (because CAMS data is typically available ~6 hours after midnight UTC).
 """
-from datetime import timedelta
-
 import dagster as dg
 
 from .partitions import daily_partitions
@@ -20,6 +18,7 @@ from .partitions import daily_partitions
         "cams_daily_job",
         partitions_def=daily_partitions,
         tags={"pipeline": "cams"},
+        selection=["ingest_cams_data", "transform_cams_data"],
     ),
     cron_schedule="0 8 * * *",  # 08:00 UTC every day
     execution_timezone="UTC",
@@ -51,6 +50,42 @@ def cams_daily_schedule(context: dg.ScheduleEvaluationContext) -> dg.RunRequest:
         tags={
             "source": "schedule",
             "pipeline": "cams",
+            "scheduled_date": partition_key,
+        },
+    )
+
+
+@dg.schedule(
+    job=dg.define_asset_job(
+        "ecmwf_daily_job",
+        partitions_def=daily_partitions,
+        tags={"pipeline": "ecmwf"},
+        selection=["ingest_ecmwf_data"]
+    ),
+    cron_schedule="30 9 * * *",
+    execution_timezone="UTC",
+)
+def ecmwf_daily_schedule(context: dg.ScheduleEvaluationContext) -> dg.RunRequest:
+    """
+    Daily schedule to materialize ECMWF weather forecast ingestion.
+
+    Runs at 09:30 UTC to process today's data. ECMWF IFS 00Z forecast data is
+    typically available ~09:00 UTC, so a 09:30 run provides sufficient buffer.
+
+    Args:
+        context: Dagster schedule evaluation context
+
+    Returns:
+        RunRequest for today's partition, with tags for observability
+    """
+    scheduled_date = context.scheduled_execution_time.date()
+    partition_key = scheduled_date.strftime("%Y-%m-%d")
+    return dg.RunRequest(
+        run_key=f"ecmwf_daily_{partition_key}",
+        partition_key=partition_key,
+        tags={
+            "source": "schedule",
+            "pipeline": "ecmwf",
             "scheduled_date": partition_key,
         },
     )
