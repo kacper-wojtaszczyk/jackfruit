@@ -174,7 +174,7 @@ def test_transform_metadata_accuracy(s3_client, ch_client, object_store, grid_st
     assert set(result.metadata["variables_processed"]) == {"temperature", "humidity"}
     assert result.metadata["inserted_rows"] == TOTAL_ROWS
 
-    ch_total = ch_client.query("SELECT count() FROM grid_data").result_rows[0][0]
+    ch_total = ch_client.query("SELECT count() FROM grid_data FINAL").result_rows[0][0]
     assert ch_total == result.metadata["inserted_rows"]
 
 
