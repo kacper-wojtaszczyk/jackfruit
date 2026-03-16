@@ -109,22 +109,18 @@ def _reset_mock_state():
     _catalog_raw_inserts = []
 
 
-def _make_resources(*, cds_client=None, object_store=None, catalog=None):
-    """Build resource dict with defaults for all three mocks."""
-    return {
-        "cds_client": cds_client or MockCdsClient(),
-        "object_store": object_store or MockObjectStore(),
-        "catalog": catalog or MockCatalogResource(),
-    }
+def _make_resources(**overrides):
+    """Build resource dict for asset tests.
 
-
-def _make_ecmwf_resources(*, ecmwf_client=None, object_store=None, catalog=None):
-    """Build resource dict with defaults for ECMWF asset mocks."""
-    return {
-        "ecmwf_client": ecmwf_client or MockEcmwfClient(),
-        "object_store": object_store or MockObjectStore(),
-        "catalog": catalog or MockCatalogResource(),
+    Shared resources (object_store, catalog) have mock defaults.
+    Pipeline-specific clients must be passed explicitly.
+    """
+    defaults = {
+        "object_store": MockObjectStore(),
+        "catalog": MockCatalogResource(),
     }
+    defaults.update(overrides)
+    return defaults
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +135,7 @@ class TestIngestCamsDataAsset:
         """Core happy path: CDS called with correct args, upload key + catalog record are right."""
         result = dg.materialize(
             assets=[ingest_cams_data],
-            resources=_make_resources(),
+            resources=_make_resources(cds_client=MockCdsClient()),
             partition_key="2026-01-15",
         )
 
@@ -170,7 +166,7 @@ class TestIngestCamsDataAsset:
         """Config horizon_hours plumbed through to CDS client."""
         result = dg.materialize(
             assets=[ingest_cams_data],
-            resources=_make_resources(),
+            resources=_make_resources(cds_client=MockCdsClient()),
             partition_key="2026-01-15",
             run_config={
                 "ops": {
@@ -188,7 +184,7 @@ class TestIngestCamsDataAsset:
         """Contract: transform_cams_data reads run_id, dataset, date, source from upstream metadata."""
         result = dg.materialize(
             assets=[ingest_cams_data],
-            resources=_make_resources(),
+            resources=_make_resources(cds_client=MockCdsClient()),
             partition_key="2026-01-15",
         )
 
@@ -206,12 +202,12 @@ class TestIngestCamsDataAsset:
         """Each materialization must produce a distinct run_id (idempotency safety)."""
         dg.materialize(
             assets=[ingest_cams_data],
-            resources=_make_resources(),
+            resources=_make_resources(cds_client=MockCdsClient()),
             partition_key="2026-01-15",
         )
         dg.materialize(
             assets=[ingest_cams_data],
-            resources=_make_resources(),
+            resources=_make_resources(cds_client=MockCdsClient()),
             partition_key="2026-01-16",
         )
 
@@ -224,7 +220,7 @@ class TestIngestCamsDataAsset:
         """Catalog insert is fatal — asset must fail (licensing requires lineage)."""
         result = dg.materialize(
             assets=[ingest_cams_data],
-            resources=_make_resources(catalog=MockCatalogResource(should_fail=True)),
+            resources=_make_resources(cds_client=MockCdsClient(), catalog=MockCatalogResource(should_fail=True)),
             partition_key="2026-01-15",
             raise_on_error=False,
         )
@@ -282,7 +278,7 @@ class TestIngestEcmwfDataAsset:
         """ECMWF client called with correct date and variable names."""
         result = dg.materialize(
             assets=[ingest_ecmwf_data],
-            resources=_make_ecmwf_resources(),
+            resources=_make_resources(ecmwf_client=MockEcmwfClient()),
             partition_key="2026-01-15",
         )
 
@@ -296,7 +292,7 @@ class TestIngestEcmwfDataAsset:
         """Upload key must match the expected pattern for the future transform asset."""
         result = dg.materialize(
             assets=[ingest_ecmwf_data],
-            resources=_make_ecmwf_resources(),
+            resources=_make_resources(ecmwf_client=MockEcmwfClient()),
             partition_key="2026-01-15",
         )
 
@@ -312,7 +308,7 @@ class TestIngestEcmwfDataAsset:
         """Catalog insert must record correct source and dataset for lineage."""
         result = dg.materialize(
             assets=[ingest_ecmwf_data],
-            resources=_make_ecmwf_resources(),
+            resources=_make_resources(ecmwf_client=MockEcmwfClient()),
             partition_key="2026-01-15",
         )
 
@@ -326,7 +322,7 @@ class TestIngestEcmwfDataAsset:
         """Contract: future transform_ecmwf_data will read these keys from upstream metadata."""
         result = dg.materialize(
             assets=[ingest_ecmwf_data],
-            resources=_make_ecmwf_resources(),
+            resources=_make_resources(ecmwf_client=MockEcmwfClient()),
             partition_key="2026-01-15",
         )
 
@@ -343,12 +339,12 @@ class TestIngestEcmwfDataAsset:
         """Each materialization must produce a distinct run_id (idempotency safety)."""
         dg.materialize(
             assets=[ingest_ecmwf_data],
-            resources=_make_ecmwf_resources(),
+            resources=_make_resources(ecmwf_client=MockEcmwfClient()),
             partition_key="2026-01-15",
         )
         dg.materialize(
             assets=[ingest_ecmwf_data],
-            resources=_make_ecmwf_resources(),
+            resources=_make_resources(ecmwf_client=MockEcmwfClient()),
             partition_key="2026-01-16",
         )
 
@@ -361,7 +357,7 @@ class TestIngestEcmwfDataAsset:
         """Catalog insert is fatal — asset must fail (licensing requires lineage)."""
         result = dg.materialize(
             assets=[ingest_ecmwf_data],
-            resources=_make_ecmwf_resources(catalog=MockCatalogResource(should_fail=True)),
+            resources=_make_resources(ecmwf_client=MockEcmwfClient(), catalog=MockCatalogResource(should_fail=True)),
             partition_key="2026-01-15",
             raise_on_error=False,
         )
@@ -372,7 +368,7 @@ class TestIngestEcmwfDataAsset:
         """ECMWF client failure is fatal — asset must fail."""
         result = dg.materialize(
             assets=[ingest_ecmwf_data],
-            resources=_make_ecmwf_resources(ecmwf_client=MockEcmwfClient(should_fail=True)),
+            resources=_make_resources(ecmwf_client=MockEcmwfClient(should_fail=True)),
             partition_key="2026-01-15",
             raise_on_error=False,
         )

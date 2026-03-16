@@ -66,6 +66,18 @@ def cams_daily_schedule(context: dg.ScheduleEvaluationContext) -> dg.RunRequest:
     execution_timezone="UTC",
 )
 def ecmwf_daily_schedule(context: dg.ScheduleEvaluationContext) -> dg.RunRequest:
+    """
+    Daily schedule to materialize ECMWF weather forecast ingestion.
+
+    Runs at 09:30 UTC to process today's data. ECMWF IFS 00Z forecast data is
+    typically available ~09:00 UTC, so a 09:30 run provides sufficient buffer.
+
+    Args:
+        context: Dagster schedule evaluation context
+
+    Returns:
+        RunRequest for today's partition, with tags for observability
+    """
     scheduled_date = context.scheduled_execution_time.date()
     partition_key = scheduled_date.strftime("%Y-%m-%d")
     return dg.RunRequest(

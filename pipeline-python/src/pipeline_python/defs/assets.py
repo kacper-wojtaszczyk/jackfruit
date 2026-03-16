@@ -219,7 +219,11 @@ def ingest_ecmwf_data(
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir) / "ecmwf.grib"
-        ecmwf_client.retrieve_forecast(partition_date, ["temperature", "dewpoint"], tmp_path)
+        ecmwf_client.retrieve_forecast(
+            forecast_date=partition_date,
+            variables=["temperature", "dewpoint"],
+            target=tmp_path
+        )
         context.log.info(f"Downloaded ECMWF data ({tmp_path.stat().st_size} bytes)")
         s3_key = f"{_ECMWF_SOURCE}/{_WEATHER_FORECAST}/{partition_date}/{run_id}.grib"
         object_store.upload_raw(s3_key, tmp_path)

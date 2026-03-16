@@ -46,14 +46,14 @@ class TestCamsDailySchedule:
         """Schedule should materialize today's partition."""
         from pipeline_python.defs.schedules import cams_daily_schedule
 
-        # If scheduled_execution_time is 2025-03-12 (Wed),
-        # it should process 2025-03-12 (Tue)
+        # If scheduled_execution_time is 2025-03-12,
+        # it should process 2025-03-12
         scheduled_date = datetime(2025, 3, 12, 8, 0, 0)
         context = _mock_schedule_context(scheduled_date)
 
         request = cams_daily_schedule(context)
 
-        # Expected partition: 2025-03-11 (today)
+        # Expected partition: 2025-03-12
         assert request.partition_key == "2025-03-12"
 
     def test_schedule_partition_format(self):
@@ -243,16 +243,6 @@ class TestScheduleDefinitions:
 
         schedule_names = [s.name for s in definitions.schedules]
         assert "ecmwf_daily_schedule" in schedule_names
-
-    def test_schedule_has_cron_expression(self):
-        """Schedule should have a valid cron expression."""
-        from pipeline_python.defs.schedules import cams_daily_schedule
-
-        # The schedule should be decorated with @dg.schedule
-        # which sets a cron_schedule attribute
-        assert hasattr(cams_daily_schedule, "_schedule_definition") or callable(
-            cams_daily_schedule
-        )
 
     def test_schedule_job_is_defined(self, postgres_env):
         """Schedule should reference a valid job."""
