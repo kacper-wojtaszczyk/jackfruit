@@ -151,7 +151,7 @@ def test_catalog_id_links_ch_and_pg(s3_client, ch_client, object_store, grid_sto
 
     ch_ids = {
         str(r[0])
-        for r in ch_client.query("SELECT DISTINCT catalog_id FROM grid_data").result_rows
+        for r in ch_client.query("SELECT DISTINCT catalog_id FROM grid_data FINAL").result_rows
     }
     pg_ids = {
         r[0]
