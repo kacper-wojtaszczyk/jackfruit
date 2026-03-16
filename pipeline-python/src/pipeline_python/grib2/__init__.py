@@ -15,10 +15,12 @@ Usage:
 """
 
 from pipeline_python.grib2.adapters.cams_adapter import CamsReader
+from pipeline_python.grib2.adapters.ecmwf_adapter import EcmwfReader
 from pipeline_python.grib2.reader import GribMessage, GribReader
 
 __all__ = [
     "GribMessage",
     "GribReader",
     "CamsReader",
+    "EcmwfReader"
 ]

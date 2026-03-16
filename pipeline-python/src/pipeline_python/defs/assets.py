@@ -7,11 +7,12 @@ extracts grids, and writes curated rows to ClickHouse.
 """
 import tempfile
 import uuid
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from uuid import UUID
 
 import dagster as dg
+import numpy as np
 
 from pipeline_python.defs.partitions import daily_partitions
 from pipeline_python.defs.resources import PostgresCatalogResource
@@ -19,7 +20,7 @@ from pipeline_python.ingestion import CdsClient, EcmwfClient
 from pipeline_python.storage import ObjectStore, GridStore
 from pipeline_python.storage.grid_store import GridData
 from pipeline_python.defs.models import RawFileRecord, CuratedDataRecord
-from pipeline_python.grib2 import CamsReader
+from pipeline_python.grib2 import CamsReader, EcmwfReader, GribMessage
 
 _ADS_SOURCE = "ads"
 _ECMWF_SOURCE = "ecmwf"
@@ -248,3 +249,103 @@ def ingest_ecmwf_data(
             "s3_key": s3_key,
         }
     )
+
+
+@dg.asset(
+    partitions_def=daily_partitions,
+    deps=[ingest_ecmwf_data],
+    kinds={"python", "transform"},
+)
+def transform_ecmwf_data(
+    context: dg.AssetExecutionContext,
+    object_store: ObjectStore,
+    catalog: PostgresCatalogResource,
+    grid_store: GridStore,
+) -> dg.MaterializeResult:
+    partition_date = context.partition_key
+    upstream_key = ingest_ecmwf_data.key
+    records = context.instance.get_event_records(
+        event_records_filter=dg.EventRecordsFilter(
+            event_type=dg.DagsterEventType.ASSET_MATERIALIZATION,
+            asset_key=upstream_key,
+            asset_partitions=[partition_date],
+        ),
+        limit=1,
+    )
+    if not records:
+        raise dg.Failure(
+            f"No materialization for {upstream_key} partition {partition_date}"
+        )
+
+    ingest_metadata = records[0].asset_materialization.metadata
+    run_id = ingest_metadata["run_id"].value
+    dataset = ingest_metadata["dataset"].value
+    source = ingest_metadata["source"].value
+    raw_key = f"{source}/{dataset}/{partition_date}/{run_id}.grib"
+
+    curated_keys: list[uuid.UUID] = []
+    rows_inserted = 0
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir) / "raw.grib"
+        try:
+            object_store.download_raw(raw_key, tmp_path)
+        except Exception as e:
+            raise dg.Failure(f"Failed to download {raw_key}: {e}")
+
+        reader = EcmwfReader()
+        groups: dict[datetime, dict[str, GribMessage]] = {}
+
+        with reader.open(tmp_path) as messages:
+            for msg in messages:
+                ts = msg.timestamp
+                if ts not in groups:
+                    groups[ts] = {}
+                groups[ts][msg.variable_name] = msg
+
+            for ts, vars in groups.items():
+                if "temperature" not in vars or "dewpoint" not in vars:
+                    context.log.warning(
+                        f"Skipping {ts}: missing variable(s), got {list(vars)}"
+                    )
+                    continue
+
+                t_msg = vars["temperature"]
+                d_msg = vars["dewpoint"]
+
+                t_c  = t_msg.values - 273.15
+                d_c  = d_msg.values - 273.15
+                rh   = 100 * np.exp(17.625 * d_c / (243.04 + d_c)) \
+                           / np.exp(17.625 * t_c  / (243.04 + t_c))
+
+                catalog_id_t = uuid.uuid7()
+                rows_inserted += grid_store.insert_grid(GridData(
+                    variable="temperature", unit="°C", timestamp=ts,
+                    lats=t_msg.lats, lons=t_msg.lons, values=t_c,
+                    catalog_id=catalog_id_t,
+                ))
+                catalog.insert_curated_data(CuratedDataRecord(
+                    id=catalog_id_t, raw_file_id=uuid.UUID(run_id),
+                    variable="temperature", unit="°C", timestamp=ts,
+                ))
+                curated_keys.append(catalog_id_t)
+
+                catalog_id_h = uuid.uuid7()
+                rows_inserted += grid_store.insert_grid(GridData(
+                    variable="humidity", unit="%", timestamp=ts,
+                    lats=t_msg.lats, lons=t_msg.lons, values=rh,
+                    catalog_id=catalog_id_h,
+                ))
+                catalog.insert_curated_data(CuratedDataRecord(
+                    id=catalog_id_h, raw_file_id=uuid.UUID(run_id),
+                    variable="humidity", unit="%", timestamp=ts,
+                ))
+                curated_keys.append(catalog_id_h)
+
+    return dg.MaterializeResult(metadata={
+        "run_id": run_id,
+        "date": partition_date,
+        "curated_keys": [str(k) for k in curated_keys],
+        "variables_processed": ["temperature", "humidity"],
+        "inserted_rows": rows_inserted,
+    })

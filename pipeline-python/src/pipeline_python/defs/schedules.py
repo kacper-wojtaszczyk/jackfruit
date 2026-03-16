@@ -60,7 +60,7 @@ def cams_daily_schedule(context: dg.ScheduleEvaluationContext) -> dg.RunRequest:
         "ecmwf_daily_job",
         partitions_def=daily_partitions,
         tags={"pipeline": "ecmwf"},
-        selection=["ingest_ecmwf_data"]
+        selection=["ingest_ecmwf_data", "transform_ecmwf_data"]
     ),
     cron_schedule="30 9 * * *",
     execution_timezone="UTC",
