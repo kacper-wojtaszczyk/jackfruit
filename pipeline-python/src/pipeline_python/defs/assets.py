@@ -348,15 +348,15 @@ def transform_ecmwf_data(
                     groups[ts] = {}
                 groups[ts][msg.variable_name] = msg
 
-            for ts, vars in groups.items():
-                if "temperature" not in vars or "dewpoint" not in vars:
+            for ts, variables in groups.items():
+                if "temperature" not in variables or "dewpoint" not in variables:
                     context.log.warning(
-                        f"Skipping {ts}: missing variable(s), got {list(vars)}"
+                        f"Skipping {ts}: missing variable(s), got {list(variables)}"
                     )
                     continue
 
-                t_msg = vars["temperature"]
-                d_msg = vars["dewpoint"]
+                t_msg = variables["temperature"]
+                d_msg = variables["dewpoint"]
 
                 t_vals, t_lats, t_lons = _clip_to_europe(t_msg.values, t_msg.lats, t_msg.lons)
                 d_vals, _, _ = _clip_to_europe(d_msg.values, d_msg.lats, d_msg.lons)
