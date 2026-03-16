@@ -521,6 +521,18 @@ wheels = [
 ]
 
 [[package]]
+name = "ecmwf-opendata"
+version = "0.3.26"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "multiurl" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b6/16/074aee6fd1fa21b6445fb8429a16c50dac91053b66f3c99ada86b09665e2/ecmwf_opendata-0.3.26.tar.gz", hash = "sha256:8b49eed2282c167e50663b38768631a5b6d758fd947c4ea764d37433ac92523a", size = 28873, upload-time = "2025-12-04T15:08:29.677Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/56/74/7795b50a4a74dd0d9b8f8b028912878da0e64969eb4889e64b7a75aeef63/ecmwf_opendata-0.3.26-py3-none-any.whl", hash = "sha256:e158bab54f86908dbc634c1660a527bd1d27dbe26ba4d8484f622cd8565185d6", size = 21818, upload-time = "2025-12-04T15:08:28.531Z" },
+]
+
+[[package]]
 name = "filelock"
 version = "3.20.3"
 source = { registry = "https://pypi.org/simple" }
@@ -973,6 +985,7 @@ dependencies = [
     { name = "clickhouse-connect" },
     { name = "dagster" },
     { name = "dagster-postgres" },
+    { name = "ecmwf-opendata" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pygrib" },
 ]
@@ -994,6 +1007,7 @@ requires-dist = [
     { name = "clickhouse-connect", specifier = ">=0.11.0" },
     { name = "dagster", specifier = "~=1.12" },
     { name = "dagster-postgres", specifier = "~=0.28" },
+    { name = "ecmwf-opendata", specifier = ">=0.3.26" },
     { name = "psycopg", extras = ["binary"], specifier = "~=3.2" },
     { name = "pygrib", specifier = ">=2.1.8" },
 ]
