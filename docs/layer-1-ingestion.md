@@ -10,7 +10,7 @@ Fetch raw data from external environmental APIs and store unchanged in the raw b
 | ECMWF Open Data client (`ecmwf-opendata` via `EcmwfClient`) | ✅ Done |
 | MinIO storage integration (`ObjectStore`) | ✅ Done |
 | CAMS Europe Air Quality datasets (PM2.5, PM10) | ✅ Done |
-| ECMWF IFS weather forecast dataset (temperature, humidity, dewpoint) | ✅ Done |
+| ECMWF IFS weather forecast dataset (temperature, dewpoint; humidity derived in transform) | ✅ Done |
 | Dagster orchestration — CAMS (`cams_daily_schedule`, 08:00 UTC) | ✅ Done |
 | Dagster orchestration — ECMWF (`ecmwf_daily_schedule`, 09:30 UTC) | ✅ Done |
 | GloFAS dataset | ⏳ Planned |
