@@ -29,10 +29,10 @@ RAW_KEY = f"{SOURCE}/{DATASET}/{PARTITION}/{RUN_ID}.grib"
 # 2 timestamps in fixture -> 94,978 per variable
 POINTS_PER_MSG = 169 * 281  # 47,489
 TIMESTAMPS = 2
-VARS = 2
+VARS = 3
 ROWS_PER_VAR = TIMESTAMPS * POINTS_PER_MSG  # 94,978
-TOTAL_ROWS = VARS * ROWS_PER_VAR  # 189,956
-CURATED_COUNT = VARS * TIMESTAMPS  # 4
+TOTAL_ROWS = VARS * ROWS_PER_VAR  # 284,934
+CURATED_COUNT = VARS * TIMESTAMPS  # 6
 
 
 def _report_upstream(instance: dg.DagsterInstance) -> None:
@@ -73,10 +73,12 @@ def test_transform_inserts_grid_data_to_clickhouse(s3_client, ch_client, object_
         "SELECT variable, count() FROM grid_data FINAL GROUP BY variable"
     )
     rows = {r[0]: r[1] for r in result.result_rows}
-    assert len(rows) == 2
+    assert len(rows) == 3
     assert "temperature" in rows
+    assert "dewpoint" in rows
     assert "humidity" in rows
     assert rows["temperature"] == ROWS_PER_VAR
+    assert rows["dewpoint"] == ROWS_PER_VAR
     assert rows["humidity"] == ROWS_PER_VAR
 
 
@@ -123,6 +125,7 @@ def test_transform_is_idempotent(s3_client, ch_client, object_store, grid_store,
     )
     rows = {r[0]: r[1] for r in result.result_rows}
     assert rows["temperature"] == ROWS_PER_VAR
+    assert rows["dewpoint"] == ROWS_PER_VAR
     assert rows["humidity"] == ROWS_PER_VAR
 
 
@@ -139,6 +142,7 @@ def test_curated_lineage_recorded_in_postgres(s3_client, object_store, grid_stor
     variables = [r[0] for r in rows]
     assert len(variables) == CURATED_COUNT
     assert variables.count("temperature") == TIMESTAMPS
+    assert variables.count("dewpoint") == TIMESTAMPS
     assert variables.count("humidity") == TIMESTAMPS
 
 
@@ -171,7 +175,7 @@ def test_transform_metadata_accuracy(s3_client, ch_client, object_store, grid_st
 
     assert result.metadata["run_id"] == RUN_ID
     assert result.metadata["date"] == PARTITION
-    assert set(result.metadata["variables_processed"]) == {"temperature", "humidity"}
+    assert set(result.metadata["variables_processed"]) == {"temperature", "dewpoint", "humidity"}
     assert result.metadata["inserted_rows"] == TOTAL_ROWS
 
     ch_total = ch_client.query("SELECT count() FROM grid_data FINAL").result_rows[0][0]
@@ -190,6 +194,21 @@ def test_temperature_is_celsius(s3_client, ch_client, object_store, grid_store, 
     )
     min_val, max_val = result.result_rows[0]
     # Celsius: roughly -65 to +55; Kelvin would be > 150
+    assert min_val > -80
+    assert max_val < 60
+
+
+def test_dewpoint_is_celsius(s3_client, ch_client, object_store, grid_store, catalog):
+    """Dewpoint values should be in Celsius range, not Kelvin."""
+    _arrange_raw_file(s3_client, catalog)
+    instance = dg.DagsterInstance.ephemeral()
+    _report_upstream(instance)
+    transform_ecmwf_data(_make_context(instance), object_store, catalog, grid_store)
+
+    result = ch_client.query(
+        "SELECT min(value), max(value) FROM grid_data FINAL WHERE variable = 'dewpoint'"
+    )
+    min_val, max_val = result.result_rows[0]
     assert min_val > -80
     assert max_val < 60
 

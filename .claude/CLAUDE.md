@@ -210,8 +210,8 @@ transform_cams_data                       transform_ecmwf_data
   → Download GRIB to temp file              → Download GRIB to temp file
   → CamsReader (constituent codes)          → EcmwfReader (shortName: 2t, 2d)
   → Stores: pm2p5, pm10 (µg/m³)            → Clips to Europe (0.25° → 30-72°N, -25-45°E)
-  → ClickHouse + catalog                    → K→°C, Magnus formula for RH
-                                            → Stores: temperature (°C), humidity (%)
+  → ClickHouse + catalog                    → K→°C, Magnus formula for RH, dewpoint K→°C
+                                            → Stores: temperature (°C), humidity (%), dewpoint (°C)
                                             → ClickHouse + catalog
 ```
 
