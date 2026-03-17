@@ -215,11 +215,12 @@ class TestTransformEcmwfDataUnit:
     def test_dewpoint_converted_to_celsius(self):
         """Dewpoint values should be in Celsius, not Kelvin."""
         self._run()
-        for grid in _grid_inserts:
-            if grid.variable == "dewpoint":
-                assert grid.unit == "°C"
-                assert grid.values.min() > -80
-                assert grid.values.max() < 60
+        dewpoint_grids = [g for g in _grid_inserts if g.variable == "dewpoint"]
+        assert dewpoint_grids, "Expected at least one dewpoint grid to be inserted"
+        for grid in dewpoint_grids:
+            assert grid.unit == "°C"
+            assert grid.values.min() > -80
+            assert grid.values.max() < 60
 
     def test_humidity_computed_as_percentage(self):
         """Humidity values should be percentage (0-~105)."""
