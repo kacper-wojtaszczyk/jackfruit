@@ -81,7 +81,7 @@ ETL reads raw (or public S3 directly for large datasets), writes to ClickHouse. 
 - Multi-variable GRIB files are read with `pygrib` (ecCodes-backed library) via source-specific adapters
 - `CamsReader`/`CamsMessage` — maps constituent codes (40008→PM10, 40009→PM2.5) from CAMS GRIB
 - `EcmwfReader`/`EcmwfMessage` — maps `shortName` (2t→temperature, 2d→dewpoint) from IFS GRIB
-- ECMWF transform: clips global 0.25° grid to Europe (30–72°N, -25–45°E) via `_clip_to_europe()`, converts K→°C, computes relative humidity from temperature and dewpoint via the Magnus formula
+- ECMWF transform: clips global 0.25° grid to Europe (30–72°N, -25–45°E) via `_clip_to_europe()`, converts K→°C, computes relative humidity from temperature and dewpoint via the Magnus formula; stores dewpoint (°C) directly alongside humidity
 - Grid data extracted to numpy arrays and batch-inserted into ClickHouse
 
 ### Catalog Integration

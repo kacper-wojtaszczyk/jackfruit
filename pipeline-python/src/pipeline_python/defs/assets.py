@@ -380,7 +380,7 @@ def transform_ecmwf_data(
                 d_msg = variables["dewpoint"]
 
                 t_vals, t_lats, t_lons = _clip_to_europe(t_msg.values, t_msg.lats, t_msg.lons)
-                d_vals, _, _ = _clip_to_europe(d_msg.values, d_msg.lats, d_msg.lons)
+                d_vals, d_lats, d_lons = _clip_to_europe(d_msg.values, d_msg.lats, d_msg.lons)
 
                 t_c = t_vals - 273.15
                 d_c = d_vals - 273.15
@@ -399,6 +399,19 @@ def transform_ecmwf_data(
                 ))
                 curated_keys.append(catalog_id_t)
                 variables_processed.append("temperature")
+
+                catalog_id_d = uuid.uuid7()
+                rows_inserted += grid_store.insert_grid(GridData(
+                    variable="dewpoint", unit="°C", timestamp=ts,
+                    lats=d_lats, lons=d_lons, values=d_c,
+                    catalog_id=catalog_id_d,
+                ))
+                catalog.insert_curated_data(CuratedDataRecord(
+                    id=catalog_id_d, raw_file_id=uuid.UUID(run_id),
+                    variable="dewpoint", unit="°C", timestamp=ts,
+                ))
+                curated_keys.append(catalog_id_d)
+                variables_processed.append("dewpoint")
 
                 catalog_id_h = uuid.uuid7()
                 rows_inserted += grid_store.insert_grid(GridData(

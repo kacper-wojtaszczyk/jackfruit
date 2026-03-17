@@ -196,11 +196,11 @@ class TestTransformEcmwfDataUnit:
             grid_store or MockGridStore(),
         )
 
-    def test_inserts_temperature_and_humidity(self):
-        """Grid inserts should include both temperature and humidity."""
+    def test_inserts_temperature_dewpoint_and_humidity(self):
+        """Grid inserts should include temperature, dewpoint, and humidity."""
         self._run()
         variables = {g.variable for g in _grid_inserts}
-        assert variables == {"temperature", "humidity"}
+        assert variables == {"temperature", "dewpoint", "humidity"}
 
     def test_temperature_converted_to_celsius(self):
         """Temperature values should be in Celsius, not Kelvin."""
@@ -209,6 +209,15 @@ class TestTransformEcmwfDataUnit:
             if grid.variable == "temperature":
                 assert grid.unit == "°C"
                 # Celsius range: roughly -65 to +55 for Earth
+                assert grid.values.min() > -80
+                assert grid.values.max() < 60
+
+    def test_dewpoint_converted_to_celsius(self):
+        """Dewpoint values should be in Celsius, not Kelvin."""
+        self._run()
+        for grid in _grid_inserts:
+            if grid.variable == "dewpoint":
+                assert grid.unit == "°C"
                 assert grid.values.min() > -80
                 assert grid.values.max() < 60
 
@@ -232,9 +241,9 @@ class TestTransformEcmwfDataUnit:
             assert grid.lons.max() <= _EUROPE_LON_MAX
 
     def test_records_curated_lineage(self):
-        """4 curated inserts expected (2 variables x 2 timestamps)."""
+        """6 curated inserts expected (3 variables x 2 timestamps)."""
         self._run()
-        assert len(_curated_inserts) == 4
+        assert len(_curated_inserts) == 6
 
     def test_inserted_rows_metadata_matches_actual(self):
         """Metadata inserted_rows should match sum of grid row counts."""
