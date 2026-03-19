@@ -132,11 +132,11 @@ class TestPostgresDsnFromEnv:
         """Should construct correct DSN with all environment variables."""
         from pipeline_python.defs.resources import _postgres_dsn_from_env
 
-        monkeypatch.setenv("POSTGRES_USER", "testuser")
-        monkeypatch.setenv("POSTGRES_PASSWORD", "testpass")
-        monkeypatch.setenv("POSTGRES_HOST", "testhost")
-        monkeypatch.setenv("POSTGRES_PORT", "5433")
-        monkeypatch.setenv("POSTGRES_DB", "testdb")
+        monkeypatch.setenv("CATALOG_PG_USER", "testuser")
+        monkeypatch.setenv("CATALOG_PG_PASSWORD", "testpass")
+        monkeypatch.setenv("CATALOG_PG_HOST", "testhost")
+        monkeypatch.setenv("CATALOG_PG_PORT", "5433")
+        monkeypatch.setenv("CATALOG_PG_DB", "testdb")
 
         dsn = _postgres_dsn_from_env()
 
@@ -146,18 +146,18 @@ class TestPostgresDsnFromEnv:
         """Should raise KeyError when POSTGRES_USER is missing."""
         from pipeline_python.defs.resources import _postgres_dsn_from_env
 
-        monkeypatch.delenv("POSTGRES_USER", raising=False)
-        monkeypatch.setenv("POSTGRES_PASSWORD", "testpass")
+        monkeypatch.delenv("CATALOG_PG_USER", raising=False)
+        monkeypatch.setenv("CATALOG_PG_PASSWORD", "testpass")
 
-        with pytest.raises(KeyError, match="POSTGRES_USER"):
+        with pytest.raises(KeyError, match="CATALOG_PG_USER"):
             _postgres_dsn_from_env()
 
     def test_raises_key_error_when_password_missing(self, monkeypatch):
         """Should raise KeyError when POSTGRES_PASSWORD is missing."""
         from pipeline_python.defs.resources import _postgres_dsn_from_env
 
-        monkeypatch.setenv("POSTGRES_USER", "testuser")
-        monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
+        monkeypatch.setenv("CATALOG_PG_USER", "testuser")
+        monkeypatch.delenv("CATALOG_PG_PASSWORD", raising=False)
 
-        with pytest.raises(KeyError, match="POSTGRES_PASSWORD"):
+        with pytest.raises(KeyError, match="CATALOG_PG_PASSWORD"):
             _postgres_dsn_from_env()
