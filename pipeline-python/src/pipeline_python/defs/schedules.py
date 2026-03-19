@@ -22,6 +22,7 @@ from .partitions import daily_partitions
     ),
     cron_schedule="0 8 * * *",  # 08:00 UTC every day
     execution_timezone="UTC",
+    default_status=dg.DefaultScheduleStatus.RUNNING,
 )
 def cams_daily_schedule(context: dg.ScheduleEvaluationContext) -> dg.RunRequest:
     """
@@ -64,6 +65,7 @@ def cams_daily_schedule(context: dg.ScheduleEvaluationContext) -> dg.RunRequest:
     ),
     cron_schedule="30 9 * * *",
     execution_timezone="UTC",
+    default_status=dg.DefaultScheduleStatus.RUNNING,
 )
 def ecmwf_daily_schedule(context: dg.ScheduleEvaluationContext) -> dg.RunRequest:
     """
