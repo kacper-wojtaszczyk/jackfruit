@@ -23,11 +23,11 @@ from pipeline_python.ingestion import CdsClient, EcmwfClient
 # -----------------------------------------------------------------------------
 
 def _postgres_dsn_from_env() -> str:
-    user = os.environ["POSTGRES_USER"]
-    password = os.environ["POSTGRES_PASSWORD"]
-    host = os.environ.get("POSTGRES_HOST", "postgres")
-    port = os.environ.get("POSTGRES_PORT", "5432")
-    db_name = os.environ.get("POSTGRES_DB", "postgres")
+    user = os.environ["CATALOG_PG_USER"]
+    password = os.environ["CATALOG_PG_PASSWORD"]
+    host = os.environ.get("CATALOG_PG_HOST", "postgres")
+    port = os.environ.get("CATALOG_PG_PORT", "5432")
+    db_name = os.environ.get("CATALOG_PG_DB", "jackfruit")
     return f"postgresql://{user}:{password}@{host}:{port}/{db_name}"
 
 
