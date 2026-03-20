@@ -34,8 +34,8 @@ type Service struct {
 	lineage LineageRetriever
 }
 
-func NewService(store GridStore, catalog LineageRetriever) *Service {
-	return &Service{store: store, lineage: catalog}
+func NewService(store GridStore, lineage LineageRetriever) *Service {
+	return &Service{store: store, lineage: lineage}
 }
 
 func (s *Service) GetVariables(
