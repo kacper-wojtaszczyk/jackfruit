@@ -1,11 +1,10 @@
-package clickhouse
+package grid
 
 import (
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -14,51 +13,22 @@ import (
 	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/domain"
 )
 
-type Client struct {
+type Finder struct {
 	conn driver.Conn
 }
 
-type Config struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	Database string
+func NewFinder(conn driver.Conn) *Finder {
+	return &Finder{conn: conn}
 }
 
-func NewClient(cfg Config, logger *slog.Logger) (*Client, error) {
-	conn, err := clickhouse.Open(&clickhouse.Options{
-		Addr: []string{fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)},
-		Auth: clickhouse.Auth{
-			Database: cfg.Database,
-			Username: cfg.User,
-			Password: cfg.Password,
-		},
-		Logger: logger,
-		Settings: clickhouse.Settings{
-			"max_execution_time": 15,
-		},
-	})
-
-	if err != nil {
-		return nil, fmt.Errorf("open clickhouse: %w", err)
-	}
-
-	if err := conn.Ping(context.Background()); err != nil {
-		return nil, fmt.Errorf("ping clickhouse: %w", err)
-	}
-
-	return &Client{conn: conn}, nil
-}
-
-func (c *Client) GetValue(
+func (c *Finder) GetSample(
 	ctx context.Context,
 	variable string,
 	timestamp time.Time,
 	lat float32,
 	lon float32,
-) (*domain.GridValue, error) {
-	var result domain.GridValue
+) (*domain.GridSample, error) {
+	var result domain.GridSample
 	err := c.conn.QueryRow(
 		ctx,
 		`
@@ -79,7 +49,7 @@ func (c *Client) GetValue(
 	).Scan(&result.Value, &result.Unit, &result.Lat, &result.Lon, &result.CatalogID, &result.Timestamp)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, domain.ErrGridValueNotFound
+		return nil, domain.ErrGridSampleNotFound
 	}
 
 	if err != nil {
@@ -87,8 +57,4 @@ func (c *Client) GetValue(
 	}
 
 	return &result, nil
-}
-
-func (c *Client) Close() error {
-	return c.conn.Close()
 }

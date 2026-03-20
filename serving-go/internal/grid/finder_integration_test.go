@@ -1,4 +1,4 @@
-package clickhouse_test
+package grid_test
 
 import (
 	"errors"
@@ -6,10 +6,11 @@ import (
 	"time"
 
 	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/domain"
+	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/grid"
 	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/testutil"
 )
 
-func TestGetValue(t *testing.T) {
+func TestGetSample(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test, requires ClickHouse")
 	}
@@ -27,9 +28,9 @@ func TestGetValue(t *testing.T) {
 
 	catalogID := testutil.InsertGridRow(t, rawConn, variable, value, unit, timestamp, lat, lon)
 
-	client := testutil.NewClient(t)
+	client := grid.NewFinder(rawConn)
 
-	gridValue, err := client.GetValue(ctx, variable, timestamp.Add(30*time.Minute), lat+0.435, lon+0.195)
+	gridValue, err := client.GetSample(ctx, variable, timestamp.Add(30*time.Minute), lat+0.435, lon+0.195)
 	if err != nil {
 		t.Fatalf("error getting value: %v", err)
 	}
@@ -54,13 +55,13 @@ func TestGetValue(t *testing.T) {
 	}
 }
 
-func TestGetValueNotFound(t *testing.T) {
+func TestGetSampleNotFound(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test, requires ClickHouse")
 	}
 
-	_, err := testutil.NewClient(t).GetValue(t.Context(), "nonexistent_variable", time.Now(), 0, 0)
-	if !errors.Is(err, domain.ErrGridValueNotFound) {
-		t.Errorf("expected ErrGridValueNotFound, got %v", err)
+	_, err := grid.NewFinder(testutil.NewRawConn(t)).GetSample(t.Context(), "nonexistent_variable", time.Now(), 0, 0)
+	if !errors.Is(err, domain.ErrGridSampleNotFound) {
+		t.Errorf("expected ErrGridSampleNotFound, got %v", err)
 	}
 }

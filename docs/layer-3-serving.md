@@ -46,24 +46,24 @@ The API contract stays the same regardless of storage backend.
 
 ### Grid Storage Abstraction
 
-The domain service depends on a `GridStore` interface, not ClickHouse directly:
+The domain service depends on a `GridRetriever` interface, not ClickHouse directly:
 
 ```go
-// internal/domain/store.go
-type GridStore interface {
-    GetValue(ctx context.Context, variable string, timestamp time.Time, lat, lon float32) (*GridValue, error)
+// internal/domain/grid.go
+type GridRetriever interface {
+    GetSample(ctx context.Context, variable string, timestamp time.Time, lat, lon float32) (*GridSample, error)
 }
 // Close() is intentionally absent — it's a lifecycle concern, not a query concern.
-// Call Close() on the concrete *clickhouse.Client directly in main().
+// Call Close() on the driver.Conn directly in main().
 
 // Service uses the interface
 type Service struct {
-    store GridStore  // Could be ClickHouse, in-memory, etc.
+    grid GridRetriever  // Could be ClickHouse, in-memory, etc.
 }
 ```
 
 This abstraction enables:
-- Unit testing with mock `GridStore` (no ClickHouse needed)
+- Unit testing with mock `GridRetriever` (no ClickHouse needed)
 - Future storage backend swaps without changing domain logic
 
 See [ADR 001](ADR/001-grid-data-storage.md) for the storage decision record and [Task 07](guides/tasks/07-clickhouse-go-client.md) for implementation.

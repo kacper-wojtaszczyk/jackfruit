@@ -3,7 +3,6 @@ package testutil
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"testing"
 	"time"
 
@@ -11,29 +10,8 @@ import (
 	chdriver "github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
 
-	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/clickhouse"
 	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/config"
 )
-
-func NewClient(t *testing.T) *clickhouse.Client {
-	t.Helper()
-
-	cfg := config.Load()
-	client, err := clickhouse.NewClient(clickhouse.Config{
-		Host:     cfg.ClickHouseHost,
-		Port:     cfg.ClickHousePort,
-		User:     cfg.ClickHouseUser,
-		Password: cfg.ClickHousePassword,
-		Database: cfg.ClickHouseDatabase,
-	}, slog.New(slog.DiscardHandler))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Cleanup(func() { _ = client.Close() })
-
-	return client
-}
 
 func NewRawConn(t *testing.T) chdriver.Conn {
 	t.Helper()

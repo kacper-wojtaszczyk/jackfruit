@@ -10,23 +10,23 @@ import (
 	"github.com/google/uuid"
 )
 
-type mockGridStore struct {
-	values map[string]*GridValue
+type mockGridRetriever struct {
+	samples map[string]*GridSample
 }
 
-func (m *mockGridStore) GetValue(
+func (m *mockGridRetriever) GetSample(
 	ctx context.Context,
 	variable string,
 	timestamp time.Time,
 	lat float32,
 	lon float32,
-) (*GridValue, error) {
-	value := m.values[variable]
-	if value == nil {
-		return nil, ErrGridValueNotFound
+) (*GridSample, error) {
+	sample := m.samples[variable]
+	if sample == nil {
+		return nil, ErrGridSampleNotFound
 	}
 
-	return value, nil
+	return sample, nil
 }
 
 type mockLineageRetriever struct {
@@ -74,8 +74,8 @@ func TestService_GetVariables(t *testing.T) {
 	catalogIDs := [2]uuid.UUID{catalogID0, catalogID1}
 	rawFileIDs := [2]uuid.UUID{rawFileID0, rawFileID1}
 
-	service := NewService(&mockGridStore{
-		values: map[string]*GridValue{
+	service := NewService(&mockGridRetriever{
+		samples: map[string]*GridSample{
 			variableNames[0]: {Value: values[0], Unit: units[0], Lat: lats[0], Lon: lons[0], Timestamp: timestamps[0], CatalogID: catalogIDs[0]},
 			variableNames[1]: {Value: values[1], Unit: units[1], Lat: lats[1], Lon: lons[1], Timestamp: timestamps[1], CatalogID: catalogIDs[1]},
 		},
@@ -137,7 +137,7 @@ func TestService_GetVariables_NotFound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(&mockGridStore{values: map[string]*GridValue{
+	service := NewService(&mockGridRetriever{samples: map[string]*GridSample{
 		existingVariable: {Value: 1.0, Unit: "µg/m³", Lat: 75.05, Lon: 106.25, Timestamp: time.Date(2026, 2, 27, 4, 0, 0, 0, time.UTC), CatalogID: existingCatalogID},
 	}}, &mockLineageRetriever{lineages: map[uuid.UUID]*Lineage{}})
 
@@ -164,8 +164,8 @@ func TestService_GetVariables_WithLineage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	service := NewService(&mockGridStore{
-		values: map[string]*GridValue{
+	service := NewService(&mockGridRetriever{
+		samples: map[string]*GridSample{
 			"temperature": {Value: 22.5, Unit: "°C", Lat: 52.5, Lon: 13.4, Timestamp: time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC), CatalogID: catalogID},
 		},
 	}, &mockLineageRetriever{
@@ -200,8 +200,8 @@ func TestService_GetVariables_LineageNotFound(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	service := NewService(&mockGridStore{
-		values: map[string]*GridValue{
+	service := NewService(&mockGridRetriever{
+		samples: map[string]*GridSample{
 			"pm2p5": {Value: 12.5, Unit: "µg/m³", Lat: 52.5, Lon: 13.4, Timestamp: time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC), CatalogID: catalogID},
 		},
 	}, &mockLineageRetriever{lineages: map[uuid.UUID]*Lineage{}})
@@ -222,8 +222,8 @@ func TestService_GetVariables_LineageFails(t *testing.T) {
 	}
 	pgErr := errors.New("postgres down")
 
-	service := NewService(&mockGridStore{
-		values: map[string]*GridValue{
+	service := NewService(&mockGridRetriever{
+		samples: map[string]*GridSample{
 			"pm2p5": {Value: 12.5, Unit: "µg/m³", Lat: 52.5, Lon: 13.4, Timestamp: time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC), CatalogID: catalogID},
 		},
 	}, &mockLineageRetriever{err: pgErr})
