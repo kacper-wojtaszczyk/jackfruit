@@ -72,6 +72,11 @@ func (h *Handler) handleEnvironmental(w http.ResponseWriter, r *http.Request) {
 			RefTimestamp: varResult.RefTimestamp,
 			ActualLat:    varResult.ActualLat,
 			ActualLon:    varResult.ActualLon,
+			Lineage: LineageResponse{
+				Source:    varResult.Lineage.Source,
+				Dataset:   varResult.Lineage.Dataset,
+				RawFileID: varResult.Lineage.RawFileID,
+			},
 		}
 	}
 

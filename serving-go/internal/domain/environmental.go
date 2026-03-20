@@ -26,14 +26,16 @@ type VariableResult struct {
 	ActualLat    float32
 	ActualLon    float32
 	CatalogID    uuid.UUID
+	Lineage      Lineage
 }
 
 type Service struct {
-	store GridStore
+	store   GridStore
+	lineage LineageRetriever
 }
 
-func NewService(store GridStore) *Service {
-	return &Service{store: store}
+func NewService(store GridStore, catalog LineageRetriever) *Service {
+	return &Service{store: store, lineage: catalog}
 }
 
 func (s *Service) GetVariables(
@@ -78,6 +80,11 @@ func (s *Service) getVariable(
 		return nil, fmt.Errorf("getting variable %q: %w", variable, err)
 	}
 
+	lineage, err := s.lineage.GetLineage(ctx, gridValue.CatalogID)
+	if err != nil {
+		return nil, fmt.Errorf("lineage for variable %q (catalog_id %s): %w", variable, gridValue.CatalogID, err)
+	}
+
 	return &VariableResult{
 		Name:         variable,
 		Value:        gridValue.Value,
@@ -86,5 +93,6 @@ func (s *Service) getVariable(
 		ActualLat:    gridValue.Lat,
 		ActualLon:    gridValue.Lon,
 		CatalogID:    gridValue.CatalogID,
+		Lineage:      *lineage,
 	}, nil
 }

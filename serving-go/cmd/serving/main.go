@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,10 +12,13 @@ import (
 	"syscall"
 	"time"
 
+	_ "github.com/lib/pq"
+
 	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/api"
 	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/clickhouse"
 	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/config"
 	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/domain"
+	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/lineage"
 )
 
 type app struct {
@@ -22,6 +26,7 @@ type app struct {
 	logger *slog.Logger
 	ch     *clickhouse.Client
 	server *http.Server
+	pgDB   *sql.DB
 }
 
 func newApp() (*app, error) {
@@ -42,8 +47,21 @@ func newApp() (*app, error) {
 		return nil, fmt.Errorf("failed to connect to clickhouse: %w", err)
 	}
 
-	var store domain.GridStore = chClient
-	service := domain.NewService(store)
+	dsn := fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		cfg.PostgresHost, cfg.PostgresPort, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresDB,
+	)
+	pgDB, err := sql.Open("postgres", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: %w", err)
+	}
+	if err := pgDB.PingContext(context.Background()); err != nil {
+		return nil, fmt.Errorf("ping postgres: %w", err)
+	}
+
+	catalogRepo := lineage.NewFinder(pgDB)
+
+	service := domain.NewService(chClient, catalogRepo)
 
 	mux := http.NewServeMux()
 	api.NewHandler(service, logger.With("component", "api")).RegisterRoutes(mux)
@@ -56,7 +74,7 @@ func newApp() (*app, error) {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	return &app{cfg: cfg, logger: logger, ch: chClient, server: server}, nil
+	return &app{cfg: cfg, logger: logger, ch: chClient, server: server, pgDB: pgDB}, nil
 }
 
 func (a *app) run() {
@@ -86,6 +104,9 @@ func (a *app) shutdown(ctx context.Context) {
 	}
 	if err := a.ch.Close(); err != nil {
 		a.logger.Error("clickhouse close error", "error", err)
+	}
+	if err := a.pgDB.Close(); err != nil {
+		a.logger.Error("postgres close error", "error", err)
 	}
 	a.logger.Info("server stopped")
 }

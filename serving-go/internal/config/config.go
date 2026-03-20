@@ -12,6 +12,11 @@ type Config struct {
 	ClickHouseUser     string
 	ClickHousePassword string
 	ClickHouseDatabase string
+	PostgresHost       string
+	PostgresPort       string
+	PostgresUser       string
+	PostgresPassword   string
+	PostgresDB         string
 }
 
 func getEnv(key, fallback string) string {
@@ -30,5 +35,10 @@ func Load() *Config {
 		ClickHouseUser:     getEnv("CLICKHOUSE_USER", "jackfruit"),
 		ClickHousePassword: getEnv("CLICKHOUSE_PASSWORD", "jackfruit"),
 		ClickHouseDatabase: getEnv("CLICKHOUSE_DATABASE", "jackfruit"),
+		PostgresHost:       getEnv("POSTGRES_HOST", "localhost"),
+		PostgresPort:       getEnv("POSTGRES_PORT", "5432"),
+		PostgresUser:       getEnv("POSTGRES_USER", "jackfruit"),
+		PostgresPassword:   getEnv("POSTGRES_PASSWORD", "jackfruit"),
+		PostgresDB:         getEnv("POSTGRES_DB", "jackfruit"),
 	}
 }
