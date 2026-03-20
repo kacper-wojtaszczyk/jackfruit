@@ -18,7 +18,7 @@ from .partitions import daily_partitions
         "cams_daily_job",
         partitions_def=daily_partitions,
         tags={"pipeline": "cams"},
-        selection=["ingest_cams_data", "transform_cams_data"],
+        selection=["ingest_cams_data", "transform_cams_data", "optimize_cams_data"],
     ),
     cron_schedule="0 8 * * *",  # 08:00 UTC every day
     execution_timezone="UTC",
@@ -61,7 +61,7 @@ def cams_daily_schedule(context: dg.ScheduleEvaluationContext) -> dg.RunRequest:
         "ecmwf_daily_job",
         partitions_def=daily_partitions,
         tags={"pipeline": "ecmwf"},
-        selection=["ingest_ecmwf_data", "transform_ecmwf_data"]
+        selection=["ingest_ecmwf_data", "transform_ecmwf_data", "optimize_ecmwf_data"],
     ),
     cron_schedule="30 9 * * *",
     execution_timezone="UTC",
