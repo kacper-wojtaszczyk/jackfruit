@@ -50,7 +50,7 @@ func TestHealthHandler(t *testing.T) {
 
 func TestEnvironmentalHandler(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping integration test, requires ClickHouse")
+		t.Skip("skipping integration test, requires infrastructure running")
 	}
 
 	mux, pgDB := setupStack(t)

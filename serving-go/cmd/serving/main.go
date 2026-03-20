@@ -55,7 +55,9 @@ func newApp() (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("postgres: %w", err)
 	}
-	if err := pgDB.PingContext(context.Background()); err != nil {
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer pingCancel()
+	if err := pgDB.PingContext(pingCtx); err != nil {
 		return nil, fmt.Errorf("ping postgres: %w", err)
 	}
 
