@@ -32,7 +32,7 @@ func TestGetSample(t *testing.T) {
 
 	gridSample, err := client.GetSample(ctx, variable, timestamp.Add(30*time.Minute), lat+0.435, lon+0.195)
 	if err != nil {
-		t.Fatalf("error getting value: %v", err)
+		t.Fatalf("GetSample returned error: %v", err)
 	}
 
 	if gridSample.Value != value {
