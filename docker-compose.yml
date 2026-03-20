@@ -77,7 +77,7 @@ services:
       jackfruit:
 
   clickhouse:
-    image: clickhouse/clickhouse-server:26.1
+    image: clickhouse/clickhouse-server:26.2
     ports:
       - "8123:8123"
       - "9097:9000"
