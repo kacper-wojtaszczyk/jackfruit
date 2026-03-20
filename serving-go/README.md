@@ -7,9 +7,9 @@ Go HTTP service for querying environmental data from the Jackfruit platform.
 | Component | Status |
 |-----------|--------|
 | Health endpoint (`/health`) | ✅ Done |
-| ClickHouse client + GridStore | ✅ Done |
+| Grid retriever (ClickHouse-backed) | ✅ Done |
 | Environmental endpoint (`/v1/environmental`) | ✅ Done |
-| Postgres catalog integration | ⏳ Planned |
+| Lineage retriever (Postgres-backed) | ✅ Done |
 
 ## Running
 

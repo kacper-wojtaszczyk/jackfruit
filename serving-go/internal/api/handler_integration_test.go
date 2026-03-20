@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/api"
 	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/domain"
+	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/grid"
 	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/lineage"
 	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/testutil"
 )
@@ -22,8 +23,8 @@ func setupStack(t *testing.T) (*http.ServeMux, *sql.DB) {
 	t.Helper()
 
 	pgDB := testutil.NewPostgresDB(t)
-	chClient := testutil.NewClient(t)
-	service := domain.NewService(chClient, lineage.NewFinder(pgDB))
+	chConn := testutil.NewRawConn(t)
+	service := domain.NewService(grid.NewFinder(chConn), lineage.NewFinder(pgDB))
 	logger := slog.New(slog.DiscardHandler)
 	mux := http.NewServeMux()
 	api.NewHandler(service, logger).RegisterRoutes(mux)

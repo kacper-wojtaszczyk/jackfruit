@@ -30,12 +30,12 @@ type VariableResult struct {
 }
 
 type Service struct {
-	store   GridStore
+	grid    GridRetriever
 	lineage LineageRetriever
 }
 
-func NewService(store GridStore, lineage LineageRetriever) *Service {
-	return &Service{store: store, lineage: lineage}
+func NewService(grid GridRetriever, lineage LineageRetriever) *Service {
+	return &Service{grid: grid, lineage: lineage}
 }
 
 func (s *Service) GetVariables(
@@ -72,27 +72,27 @@ func (s *Service) getVariable(
 	ts time.Time,
 	lat, lon float32,
 ) (*VariableResult, error) {
-	gridValue, err := s.store.GetValue(ctx, variable, ts, lat, lon)
-	if errors.Is(err, ErrGridValueNotFound) {
+	gridSample, err := s.grid.GetSample(ctx, variable, ts, lat, lon)
+	if errors.Is(err, ErrGridSampleNotFound) {
 		return nil, &ErrVariableNotFound{Variable: variable}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("getting variable %q: %w", variable, err)
 	}
 
-	lineage, err := s.lineage.GetLineage(ctx, gridValue.CatalogID)
+	lineage, err := s.lineage.GetLineage(ctx, gridSample.CatalogID)
 	if err != nil {
-		return nil, fmt.Errorf("lineage for variable %q (catalog_id %s): %w", variable, gridValue.CatalogID, err)
+		return nil, fmt.Errorf("lineage for variable %q (catalog_id %s): %w", variable, gridSample.CatalogID, err)
 	}
 
 	return &VariableResult{
 		Name:         variable,
-		Value:        gridValue.Value,
-		Unit:         gridValue.Unit,
-		RefTimestamp: gridValue.Timestamp,
-		ActualLat:    gridValue.Lat,
-		ActualLon:    gridValue.Lon,
-		CatalogID:    gridValue.CatalogID,
+		Value:        gridSample.Value,
+		Unit:         gridSample.Unit,
+		RefTimestamp: gridSample.Timestamp,
+		ActualLat:    gridSample.Lat,
+		ActualLon:    gridSample.Lon,
+		CatalogID:    gridSample.CatalogID,
 		Lineage:      *lineage,
 	}, nil
 }

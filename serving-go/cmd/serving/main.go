@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -12,21 +13,21 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	_ "github.com/lib/pq"
 
 	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/api"
-	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/clickhouse"
 	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/config"
 	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/domain"
+	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/grid"
 	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/lineage"
 )
 
 type app struct {
-	cfg    *config.Config
-	logger *slog.Logger
-	ch     *clickhouse.Client
-	server *http.Server
-	pgDB   *sql.DB
+	cfg     *config.Config
+	logger  *slog.Logger
+	server  *http.Server
+	closers []io.Closer
 }
 
 func newApp() (*app, error) {
@@ -36,16 +37,29 @@ func newApp() (*app, error) {
 	slog.SetDefault(logger)
 	cfg := config.Load()
 
-	chClient, err := clickhouse.NewClient(clickhouse.Config{
-		Host:     cfg.ClickHouseHost,
-		Port:     cfg.ClickHousePort,
-		User:     cfg.ClickHouseUser,
-		Password: cfg.ClickHousePassword,
-		Database: cfg.ClickHouseDatabase,
-	}, logger.With("component", "clickhouse"))
+	chConn, err := clickhouse.Open(&clickhouse.Options{
+		Addr: []string{fmt.Sprintf("%s:%s", cfg.ClickHouseHost, cfg.ClickHousePort)},
+		Auth: clickhouse.Auth{
+			Database: cfg.ClickHouseDatabase,
+			Username: cfg.ClickHouseUser,
+			Password: cfg.ClickHousePassword,
+		},
+		Logger: logger.With("component", "clickhouse"),
+		Settings: clickhouse.Settings{
+			"max_execution_time": 15,
+		},
+	})
+
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to clickhouse: %w", err)
+		return nil, fmt.Errorf("open clickhouse: %w", err)
 	}
+
+	chPingCtx, chPingCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer chPingCancel()
+	if err := chConn.Ping(chPingCtx); err != nil {
+		return nil, fmt.Errorf("ping clickhouse: %w", err)
+	}
+	chFinder := grid.NewFinder(chConn)
 
 	dsn := fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s",
@@ -61,9 +75,9 @@ func newApp() (*app, error) {
 		return nil, fmt.Errorf("ping postgres: %w", err)
 	}
 
-	catalogRepo := lineage.NewFinder(pgDB)
+	lineageFinder := lineage.NewFinder(pgDB)
 
-	service := domain.NewService(chClient, catalogRepo)
+	service := domain.NewService(chFinder, lineageFinder)
 
 	mux := http.NewServeMux()
 	api.NewHandler(service, logger.With("component", "api")).RegisterRoutes(mux)
@@ -75,8 +89,7 @@ func newApp() (*app, error) {
 		WriteTimeout: 20 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
-
-	return &app{cfg: cfg, logger: logger, ch: chClient, server: server, pgDB: pgDB}, nil
+	return &app{cfg: cfg, logger: logger, server: server, closers: []io.Closer{pgDB, chConn}}, nil
 }
 
 func (a *app) run() {
@@ -104,11 +117,10 @@ func (a *app) shutdown(ctx context.Context) {
 	if err := a.server.Shutdown(ctx); err != nil {
 		a.logger.Error("server shutdown error", "error", err)
 	}
-	if err := a.ch.Close(); err != nil {
-		a.logger.Error("clickhouse close error", "error", err)
-	}
-	if err := a.pgDB.Close(); err != nil {
-		a.logger.Error("postgres close error", "error", err)
+	for _, closer := range a.closers {
+		if err := closer.Close(); err != nil {
+			a.logger.Error("close error", "error", err)
+		}
 	}
 	a.logger.Info("server stopped")
 }
