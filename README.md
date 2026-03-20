@@ -14,7 +14,7 @@ Environmental data platform. Ingests, transforms, and serves weather, air qualit
 - [x] Python-native ingestion — CAMS (cdsapi) + ECMWF Open Data (ecmwf-opendata)
 - [x] Transformation — CAMS (PM2.5, PM10) + ECMWF (temperature, humidity)
 - [x] Serving API (Go, `GET /v1/environmental`)
-- [ ] Serving API - Lineage
+- [x] Serving API - Lineage
 
 ## Quick Start
 
