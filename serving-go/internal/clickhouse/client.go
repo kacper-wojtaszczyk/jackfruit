@@ -36,7 +36,7 @@ func NewClient(cfg Config, logger *slog.Logger) (*Client, error) {
 		},
 		Logger: logger,
 		Settings: clickhouse.Settings{
-			"max_execution_time": 15, // innermost timeout — ClickHouse aborts query after this
+			"max_execution_time": 15,
 		},
 	})
 
