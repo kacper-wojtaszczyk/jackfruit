@@ -80,4 +80,4 @@ The operational overhead is acceptable given:
 
 - Python abstraction: `src/pipeline_python/storage/grid_store.py` (GridStore abstract base class)
 - Python implementation: `src/pipeline_python/storage/clickhouse_grid_store.py` (ClickHouseGridStore)
-- Go abstraction: `internal/domain/store.go` (GridStore interface)
+- Go abstraction: `internal/domain/grid.go` (GridRetriever interface)

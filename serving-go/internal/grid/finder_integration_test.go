@@ -30,28 +30,28 @@ func TestGetSample(t *testing.T) {
 
 	client := grid.NewFinder(rawConn)
 
-	gridValue, err := client.GetSample(ctx, variable, timestamp.Add(30*time.Minute), lat+0.435, lon+0.195)
+	gridSample, err := client.GetSample(ctx, variable, timestamp.Add(30*time.Minute), lat+0.435, lon+0.195)
 	if err != nil {
 		t.Fatalf("error getting value: %v", err)
 	}
 
-	if gridValue.Value != value {
-		t.Errorf("expected value %v, got %v", value, gridValue.Value)
+	if gridSample.Value != value {
+		t.Errorf("expected value %v, got %v", value, gridSample.Value)
 	}
-	if gridValue.Unit != unit {
-		t.Errorf("expected unit %v, got %v", unit, gridValue.Unit)
+	if gridSample.Unit != unit {
+		t.Errorf("expected unit %v, got %v", unit, gridSample.Unit)
 	}
-	if gridValue.Lat != lat {
-		t.Errorf("expected latitude %v, got %v", lat, gridValue.Lat)
+	if gridSample.Lat != lat {
+		t.Errorf("expected latitude %v, got %v", lat, gridSample.Lat)
 	}
-	if gridValue.Lon != lon {
-		t.Errorf("expected longitude %v, got %v", lon, gridValue.Lon)
+	if gridSample.Lon != lon {
+		t.Errorf("expected longitude %v, got %v", lon, gridSample.Lon)
 	}
-	if !gridValue.Timestamp.Equal(timestamp) {
-		t.Errorf("expected timestamp %v, got %v", timestamp, gridValue.Timestamp)
+	if !gridSample.Timestamp.Equal(timestamp) {
+		t.Errorf("expected timestamp %v, got %v", timestamp, gridSample.Timestamp)
 	}
-	if gridValue.CatalogID != catalogID {
-		t.Errorf("expected catalogID %v, got %v", catalogID, gridValue.CatalogID)
+	if gridSample.CatalogID != catalogID {
+		t.Errorf("expected catalogID %v, got %v", catalogID, gridSample.CatalogID)
 	}
 }
 
