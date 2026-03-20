@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var ErrGridSampleNotFound = errors.New("grid value not found")
+var ErrGridSampleNotFound = errors.New("grid sample not found")
 
 type GridSample struct {
 	Value     float32
