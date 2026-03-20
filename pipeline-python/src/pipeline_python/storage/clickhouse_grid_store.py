@@ -67,6 +67,10 @@ class ClickHouseGridStore(GridStore):
             ],
         ).written_rows
 
+    def compact(self) -> None:
+        """Run OPTIMIZE TABLE to materialize ReplacingMergeTree dedup."""
+        self._get_client().command("OPTIMIZE TABLE grid_data FINAL")
+
     def teardown_after_execution(self, context: InitResourceContext) -> None:
         """Close the ClickHouse client. Called by Dagster at end of each asset execution."""
         if self._client is not None:

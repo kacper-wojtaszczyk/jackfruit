@@ -64,3 +64,7 @@ class GridStore(dg.ConfigurableResource, ABC):
             Number of rows inserted
         """
         ...
+
+    def compact(self) -> None:
+        """Post-write maintenance hook — run compaction/dedup if the backend needs it."""
+        pass

@@ -280,3 +280,13 @@ class TestScheduleJobDependencies:
         # Check that transform_cams_data has ingest_cams_data as a dependency
         dep_keys = transform_cams_data.dependency_keys
         assert ingest_cams_data.key in dep_keys
+
+    def test_optimization_depends_on_transformation(self):
+        """Optimize assets should depend on their respective transform assets."""
+        from pipeline_python.defs.assets import (
+            optimize_cams_data, transform_cams_data,
+            optimize_ecmwf_data, transform_ecmwf_data,
+        )
+
+        assert transform_cams_data.key in optimize_cams_data.dependency_keys
+        assert transform_ecmwf_data.key in optimize_ecmwf_data.dependency_keys
