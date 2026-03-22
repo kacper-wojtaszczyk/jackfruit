@@ -1,35 +1,6 @@
 # Jackfruit
 
-Environmental data platform. Ingests, transforms, and serves weather, air quality, hydrology, and vegetation data.
-
-## Status
-
-**Early development:**
-
-- [x] Architecture defined (infrastructure + 3 processing layers)
-- [x] Storage strategy decided (MinIO raw bucket + ClickHouse for curated)
-- [x] Dagster orchestration setup
-- [x] Metadata DB (Postgres)
-- [x] ClickHouse setup
-- [x] Python-native ingestion — CAMS (cdsapi) + ECMWF Open Data (ecmwf-opendata)
-- [x] Transformation — CAMS (PM2.5, PM10) + ECMWF (temperature, humidity)
-- [x] Serving API (Go, `GET /v1/environmental`)
-- [x] Serving API - Lineage
-
-## Quick Start
-
-```bash
-# Copy and configure secrets (first time)
-cp .env.example .env
-# Edit .env with your API keys and credentials (ask kacper)
-
-# Start infrastructure (MinIO, Postgres, ClickHouse, Dagster)
-docker-compose up -d
-
-# MinIO console: http://localhost:9098 (minioadmin / minioadmin)
-# Create bucket (first time): jackfruit-raw (or let it auto-create)
-# Dagster UI: http://localhost:3099
-```
+Environmental data platform. Ingests, transforms, and serves gridded weather and air quality data from public meteorological datasets.
 
 ## Architecture
 
@@ -49,38 +20,59 @@ docker-compose up -d
 └──────────────┘     └──────────────┘     └──────────────┘
 ```
 
-| Component             | Tech             | Status              |
-|-----------------------|------------------|---------------------|
-| **Infrastructure**    |                  |                     |
-| Object Storage        | MinIO / S3       | ✅ Active (raw only) |
-| Metadata DB           | Postgres         | ✅ Active            |
-| Grid Data Store       | ClickHouse       | ✅ Active            |
-| Orchestration         | Dagster          | ✅ Active            |
-| **Processing Layers** |                  |                     |
-| L1: Ingestion         | Python + cdsapi + ecmwf-opendata | ✅ Active (CAMS + ECMWF) |
-| L2: Transformation    | Python + Dagster | ✅ Active (CAMS + ECMWF) |
-| L3: Serving           | Go               | ✅ Active             |
+| Component             | Tech                                  |
+|-----------------------|---------------------------------------|
+| **Infrastructure**    |                                       |
+| Object Storage        | MinIO / S3                            |
+| Metadata DB           | Postgres                              |
+| Grid Data Store       | ClickHouse                            |
+| Orchestration         | Dagster                               |
+| **Processing Layers** |                                       |
+| L1: Ingestion         | Python + cdsapi + ecmwf-opendata      |
+| L2: Transformation    | Python + Dagster                      |
+| L3: Serving           | Go                                    |
 
-See `docs/` for details. Key decisions are documented in `docs/ADR/`.
+## Data Sources
+
+| Source            | Type                              |
+|-------------------|-----------------------------------|
+| Copernicus CAMS   | Air quality (PM2.5, PM10)         |
+| ECMWF Open Data   | Weather (temperature, humidity)  |
 
 ## Project Structure
 
 ```
 jackfruit/
 ├── pipeline-python/    # Dagster orchestration — ingestion + ETL assets
-├── serving-go/         # Go HTTP api serving the data from CH
-├── docs/               # Architecture docs
-└── docker-compose.yml  # MinIO, Postgres, Dagster
+│   └── migrations/     # Postgres + ClickHouse schema
+├── serving-go/         # Go HTTP API serving grid data
+├── docs/               # Architecture docs + ADRs
+└── docker-compose.yml  # Local development stack
 ```
 
-## Data Sources (Current Targets)
+## Quick Start
 
-| Source            | Type                        | Status                   |
-|-------------------|-----------------------------|--------------------------|
-| Copernicus CAMS   | Air quality (PM2.5, PM10)   | ✅ Implemented            |
-| ECMWF Open Data   | Weather (temperature, humidity) | ✅ Implemented        |
+```bash
+# Copy and configure secrets
+cp .env.example .env
 
-## License
+# Start local development stack
+docker-compose up -d
 
-TBD
+# Dagster UI: http://localhost:3099
+# MinIO console: http://localhost:9098 (minioadmin / minioadmin)
+```
 
+## Documentation
+
+See `docs/` for layer-by-layer architecture docs and `docs/ADR/` for architectural decision records.
+
+## Related Repos
+
+Part of the [Climacterium](https://github.com/kacper-wojtaszczyk?tab=repositories) ecosystem:
+
+| Repo | Description |
+|------|-------------|
+| [buttprint-api](https://github.com/kacper-wojtaszczyk/buttprint-api) | Atmospheric scoring API + SVG butt generation (Go) |
+| [buttprint-fe](https://github.com/kacper-wojtaszczyk/buttprint-fe) | Display layer (SvelteKit) |
+| [climacterium-infra](https://github.com/kacper-wojtaszczyk/climacterium-infra) | Terraform + Kubernetes deployment (Scaleway) |
