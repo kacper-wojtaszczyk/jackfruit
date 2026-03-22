@@ -457,5 +457,5 @@ def make_optimize_asset(
     return _asset
 
 
-optimize_cams_data  = make_optimize_asset("cams",  transform_cams_data)
+optimize_cams_data = make_optimize_asset("cams",  transform_cams_data)
 optimize_ecmwf_data = make_optimize_asset("ecmwf", transform_ecmwf_data)
