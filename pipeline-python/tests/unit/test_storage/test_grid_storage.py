@@ -7,7 +7,7 @@ from uuid import uuid7
 import numpy as np
 import pytest
 
-from pipeline_python.storage.grid_store import GridData
+from pipeline_python.storage.grid_store import GridData, GridStore
 
 
 def _make_grid(**overrides) -> GridData:
@@ -56,3 +56,28 @@ class TestGridData:
     def test_rejects_1d_lats_with_2d_values(self):
         with pytest.raises(ValueError, match="All arrays must have the same shape"):
             _make_grid(lats=np.ones(18, dtype=np.float32))
+
+
+class TestGridStoreCompact:
+    """Tests for the GridStore.compact() no-op default."""
+
+    def test_compact_is_not_abstract(self):
+        """compact() should have a default no-op — subclasses that only implement
+        insert_grid() should instantiate and call compact() without error."""
+
+        class MinimalStore(GridStore):
+            def insert_grid(self, grid: GridData) -> int:
+                return 0
+
+        store = MinimalStore()
+        # Should not raise — the no-op default does nothing
+        store.compact()
+
+    def test_compact_default_returns_none(self):
+        """The default compact() should return None."""
+
+        class MinimalStore(GridStore):
+            def insert_grid(self, grid: GridData) -> int:
+                return 0
+
+        assert MinimalStore().compact() is None

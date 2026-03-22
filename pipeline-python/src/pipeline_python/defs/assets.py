@@ -433,3 +433,29 @@ def transform_ecmwf_data(
         "variables_processed": sorted(set(variables_processed)),
         "inserted_rows": rows_inserted,
     })
+
+
+def make_optimize_asset(
+    source: str,
+    upstream: dg.AssetsDefinition,
+) -> dg.AssetsDefinition:
+    @dg.asset(
+        name=f"optimize_{source}_data",
+        partitions_def=daily_partitions,
+        deps=[upstream],
+        kinds={"python", "optimize"},
+    )
+    def _asset(
+        context: dg.AssetExecutionContext,
+        grid_store: GridStore,
+    ) -> dg.MaterializeResult:
+        context.log.info(f"Running post-{source.upper()} compaction")
+        grid_store.compact()
+        context.log.info("Compaction complete")
+        return dg.MaterializeResult(metadata={"table": "grid_data"})
+
+    return _asset
+
+
+optimize_cams_data = make_optimize_asset("cams",  transform_cams_data)
+optimize_ecmwf_data = make_optimize_asset("ecmwf", transform_ecmwf_data)

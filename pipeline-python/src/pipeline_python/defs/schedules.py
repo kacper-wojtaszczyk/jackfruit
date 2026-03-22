@@ -18,7 +18,7 @@ from .partitions import daily_partitions
         "cams_daily_job",
         partitions_def=daily_partitions,
         tags={"pipeline": "cams"},
-        selection=["ingest_cams_data", "transform_cams_data"],
+        selection=["ingest_cams_data", "transform_cams_data", "optimize_cams_data"],
     ),
     cron_schedule="0 8 * * *",  # 08:00 UTC every day
     execution_timezone="UTC",
@@ -26,14 +26,15 @@ from .partitions import daily_partitions
 )
 def cams_daily_schedule(context: dg.ScheduleEvaluationContext) -> dg.RunRequest:
     """
-    Daily schedule to materialize CAMS ingestion and transformation.
+    Daily schedule to materialize CAMS ingestion, transformation, and optimization.
 
     Runs at 08:00 UTC to process today's data. CAMS forecast data is
     typically available ~6 hours after midnight UTC, so an 8am run provides
     sufficient buffer.
 
-    The job depends on both ingest_cams_data and transform_cams_data assets.
-    Dagster executes them in dependency order (ingestion first, then transformation).
+    The job depends on ingest_cams_data, transform_cams_data, and optimize_cams_data
+    assets. Dagster executes them in dependency order (ingestion → transformation →
+    optimization).
 
     Args:
         context: Dagster schedule evaluation context
@@ -61,7 +62,7 @@ def cams_daily_schedule(context: dg.ScheduleEvaluationContext) -> dg.RunRequest:
         "ecmwf_daily_job",
         partitions_def=daily_partitions,
         tags={"pipeline": "ecmwf"},
-        selection=["ingest_ecmwf_data", "transform_ecmwf_data"]
+        selection=["ingest_ecmwf_data", "transform_ecmwf_data", "optimize_ecmwf_data"],
     ),
     cron_schedule="30 9 * * *",
     execution_timezone="UTC",
@@ -69,7 +70,8 @@ def cams_daily_schedule(context: dg.ScheduleEvaluationContext) -> dg.RunRequest:
 )
 def ecmwf_daily_schedule(context: dg.ScheduleEvaluationContext) -> dg.RunRequest:
     """
-    Daily schedule to materialize ECMWF weather forecast ingestion.
+    Daily schedule to materialize ECMWF weather forecast ingestion, transformation,
+    and optimization.
 
     Runs at 09:30 UTC to process today's data. ECMWF IFS 00Z forecast data is
     typically available ~09:00 UTC, so a 09:30 run provides sufficient buffer.
