@@ -50,6 +50,7 @@ services:
       CLICKHOUSE_HOST: ${CLICKHOUSE_HOST}
     volumes:
       - ./pipeline-python:/app
+      - ./pipeline-python/dagster.yaml:/opt/dagster/dagster_home/dagster.yaml
     ports:
       - "3099:3000"
     networks:
