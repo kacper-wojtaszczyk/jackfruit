@@ -28,6 +28,10 @@ run_retries:
   max_retries: 3
   retry_on_asset_or_op_failure: true
 
+compute_logs:
+  module: dagster.core.storage.noop_compute_log_manager
+  class: NoOpComputeLogManager
+
 python_logs:
   python_log_level: INFO
   dagster_handler_config:
