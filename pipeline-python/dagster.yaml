@@ -1,5 +1,5 @@
 local_artifact_storage:
-  module: dagster.core.storage.root
+  module: dagster._core.storage.root
   class: LocalArtifactStorage
   config:
     base_dir: data/artifacts
@@ -29,7 +29,7 @@ run_retries:
   retry_on_asset_or_op_failure: true
 
 compute_logs:
-  module: dagster.core.storage.noop_compute_log_manager
+  module: dagster._core.storage.noop_compute_log_manager
   class: NoOpComputeLogManager
 
 python_logs:
