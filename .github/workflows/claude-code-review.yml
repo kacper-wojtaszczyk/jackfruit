@@ -3,42 +3,152 @@ name: Claude Code Review
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
-
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
       issues: read
       id-token: write
+      actions: read
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: serving-go/go.mod
+
+      - name: Download Go dependencies
+        run: cd serving-go && go mod download
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libeccodes-dev
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v8.1.0
+
+      - name: Install Python dependencies
+        run: cd pipeline-python && uv sync
 
       - name: Run Claude Code Review
         id: claude-review
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
-          plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
+          classify_inline_comments: 'true'
+          include_fix_links: 'true'
+          prompt: |
+            Review PR #${{ github.event.pull_request.number }} in this multi-language monorepo.
+            Two sub-projects:
+            - **serving-go/**: Go 1.26 HTTP API (net/http, no framework, no CGO)
+            - **pipeline-python/**: Python Dagster data pipeline (uv, pytest)
 
+            ## How to start
+
+            You are already on the PR merge ref. Dependencies are pre-installed
+            (go mod download in serving-go/, uv sync in pipeline-python/).
+            Do NOT run git checkout, install commands, or switch branches.
+
+            1. Run `gh pr diff ${{ github.event.pull_request.number }}` to get the full diff.
+            2. Read all changed files in parallel (use multiple Read tool calls in one message).
+            3. Determine which sub-project(s) are affected — only run relevant checks.
+            4. Run verification commands in parallel (see Verification below).
+            5. Post inline comments, then a summary comment.
+
+            Maximize parallel tool calls throughout.
+
+            ## What to check
+
+            ### Go (serving-go/) — if changed
+
+            **Correctness**
+            - Logic errors, broken edge cases, subtle regressions
+            - Error handling: every error must be checked; wrap with `%w` and context
+            - Context propagation: handlers must pass `r.Context()` down the call chain
+            - Domain error mapping: `ErrVariableNotFound` → 404, upstream → 502,
+              `context.DeadlineExceeded` → 504
+            - RFC 3339 timestamps: use `time.RFC3339` constant, never hand-rolled formats
+            - Nil safety on nullable `*Lineage` pointers throughout the response chain
+
+            **Go idioms**
+            - `internal/` packages must not be exported or circumvented
+            - Unexported interface types for dependency injection — new dependencies
+              should follow the `GridStore` interface pattern (domain/store.go)
+            - Table-driven tests with `t.Helper()` for assertion helpers
+            - Explicit constructors (`NewService`, `NewHandler`) — no `init()` functions
+            - Receiver naming: short, consistent (s for Service, h for Handler, c for Client)
+
+            **Concurrency & resources**
+            - HTTP response bodies must be closed (`defer resp.Body.Close()`)
+            - Graceful shutdown: signal handling, context cancellation, resource cleanup
+            - No goroutine leaks — ensure goroutines have exit conditions
+
+            **Security**
+            - Input validation: lat ∈ [-90, 90], lon ∈ [-180, 180], valid RFC 3339 timestamp
+            - No secrets, internal URLs, or credentials in source
+
+            **API contract**
+            - Response struct changes must be backward-compatible (additive only)
+            - Lineage is nullable per-variable — don't flatten or assume present
+            - HTTP status codes: 200, 204 (health), 400, 404, 500
+
+            ### Python (pipeline-python/) — if changed
+
+            **Correctness**
+            - Logic errors, broken edge cases, subtle regressions
+            - Dagster patterns: `ConfigurableResource` for external deps,
+              partitioned daily assets with correct partition key usage
+            - GridStore ABC usage: transform code depends on abstract `GridStore`,
+              not `ClickHouseGridStore` directly
+            - GRIB reader protocol adherence: `GribReader` / `GribMessage` protocols
+              in `grib2/reader.py` — adapters must conform
+            - Idempotent operations: assets succeed completely or fail completely,
+              no partial ClickHouse inserts
+            - No S3 LIST operations — direct GET by constructed key
+
+            **Python idioms**
+            - Type hints for all public functions
+            - Pure functions for transforms; I/O isolated to resources
+            - Frozen dataclasses for domain models (not mutable classes)
+            - Dagster resources for all external dependencies
+
+            **Security**
+            - No secrets, API keys, or internal URLs in source
+            - Credentials only via environment variables
+
+            **Data contract**
+            - Raw key pattern: `{source}/{dataset}/{YYYY-MM-DD}/{run_id}.{ext}`
+            - No `source` column in grid_data — source lives in Postgres catalog only
+            - Catalog writes are fail-fast (licensing compliance requires lineage)
+
+            ## What NOT to check
+            - Formatting (gofmt and linters handle this)
+            - Import ordering
+            - Struct field alignment (Go)
+            - Pre-existing tech debt unrelated to this PR's changes
+
+            ## Verification
+            Run only the commands relevant to the changed sub-project(s):
+
+            **Go (serving-go/):**
+            - `cd serving-go && make check` — gofmt + vet + tests
+
+            **Python (pipeline-python/):**
+            - `cd pipeline-python && make test-unit` — unit tests
+
+            ## Output format
+            - Post specific issues as inline comments on the relevant diff lines.
+              Tag severity: 🔴 bug/must-fix, 🟡 nit/suggestion, 🟣 pre-existing.
+            - Post a single summary comment on the PR with: what the PR does well,
+              overall assessment, and a count of findings by severity.
+          claude_args: |
+            --model claude-opus-4-6
+            --max-turns 22
+            --allowedTools "Read,Grep,Glob,Bash(git:*),Bash(go:*),Bash(gofmt:*),Bash(make:*),Bash(uv:*),Bash(python:*),Bash(gh pr:*),mcp__github_inline_comment__create_inline_comment"
