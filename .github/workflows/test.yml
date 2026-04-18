@@ -1,0 +1,45 @@
+name: Test
+
+on:
+  workflow_call:
+
+jobs:
+  test-serving-go:
+    runs-on: ubuntu-24.04-arm
+    defaults:
+      run:
+        working-directory: serving-go
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: serving-go/go.mod
+          cache: true
+
+      - name: Check formatting
+        run: gofmt -l . | grep . && exit 1 || true
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test (unit)
+        run: go test -short ./...
+
+  test-pipeline-python:
+    runs-on: ubuntu-24.04-arm
+    defaults:
+      run:
+        working-directory: pipeline-python
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Test (unit)
+        run: uv run pytest -m unit
