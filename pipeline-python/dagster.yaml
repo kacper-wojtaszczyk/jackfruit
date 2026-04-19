@@ -1,5 +1,5 @@
 local_artifact_storage:
-  module: dagster.core.storage.root
+  module: dagster._core.storage.root
   class: LocalArtifactStorage
   config:
     base_dir: data/artifacts
@@ -27,3 +27,21 @@ run_retries:
   enabled: true
   max_retries: 3
   retry_on_asset_or_op_failure: true
+
+compute_logs:
+  module: dagster._core.storage.noop_compute_log_manager
+  class: NoOpComputeLogManager
+
+python_logs:
+  python_log_level: INFO
+  dagster_handler_config:
+    handlers:
+      console:
+        class: logging.StreamHandler
+        level: INFO
+        stream: ext://sys.stdout
+        formatter: json
+    formatters:
+      json:
+        "()": pythonjsonlogger.json.JsonFormatter
+        format: "%(asctime)s %(name)s %(levelname)s %(message)s"
