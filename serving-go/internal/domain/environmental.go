@@ -2,7 +2,6 @@ package domain
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -10,12 +9,23 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type ErrVariableNotFound struct {
-	Variable string
+const maxTemporalGap = 24 * time.Hour
+
+type ErrDataTooStale struct {
+	Variable    string
+	RequestedAt time.Time
+	AvailableAt time.Time
+	Gap         time.Duration
 }
 
-func (e *ErrVariableNotFound) Error() string {
-	return fmt.Sprintf("variable %q not found", e.Variable)
+func (e *ErrDataTooStale) Error() string {
+	return fmt.Sprintf(
+		"variable %q: nearest data is %s old (requested %s, available %s)",
+		e.Variable,
+		e.Gap.Truncate(time.Minute),
+		e.RequestedAt.Format(time.RFC3339),
+		e.AvailableAt.Format(time.RFC3339),
+	)
 }
 
 type VariableResult struct {
@@ -73,11 +83,17 @@ func (s *Service) getVariable(
 	lat, lon float32,
 ) (*VariableResult, error) {
 	gridSample, err := s.grid.GetSample(ctx, variable, ts, lat, lon)
-	if errors.Is(err, ErrGridSampleNotFound) {
-		return nil, &ErrVariableNotFound{Variable: variable}
-	}
 	if err != nil {
 		return nil, fmt.Errorf("getting variable %q: %w", variable, err)
+	}
+
+	if gap := ts.Sub(gridSample.Timestamp); gap > maxTemporalGap {
+		return nil, &ErrDataTooStale{
+			Variable:    variable,
+			RequestedAt: ts,
+			AvailableAt: gridSample.Timestamp,
+			Gap:         gap,
+		}
 	}
 
 	lineage, err := s.lineage.GetLineage(ctx, gridSample.CatalogID)

@@ -46,8 +46,12 @@ func (h *Handler) handleEnvironmental(w http.ResponseWriter, r *http.Request) {
 		envReq.Variables,
 	)
 	if err != nil {
-		if notFound, ok := errors.AsType[*domain.ErrVariableNotFound](err); ok {
-			writeError(w, http.StatusNotFound, notFound.Error())
+		if stale, ok := errors.AsType[*domain.ErrDataTooStale](err); ok {
+			writeError(w, http.StatusNotFound, stale.Error())
+		} else if miss, ok := errors.AsType[*domain.ErrTemporalMiss](err); ok {
+			writeError(w, http.StatusNotFound, miss.Error())
+		} else if miss, ok := errors.AsType[*domain.ErrSpatialMiss](err); ok {
+			writeError(w, http.StatusNotFound, miss.Error())
 		} else if ctx.Err() != nil {
 			h.logger.Error("variableProvider.GetVariables timed out", "error", err)
 			writeError(w, http.StatusGatewayTimeout, "query timed out")
