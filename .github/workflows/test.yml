@@ -2,9 +2,17 @@ name: Test
 
 on:
   workflow_call:
+    inputs:
+      run-serving:
+        type: boolean
+        default: true
+      run-pipeline:
+        type: boolean
+        default: true
 
 jobs:
   test-serving-go:
+    if: ${{ inputs.run-serving }}
     runs-on: ubuntu-24.04-arm
     defaults:
       run:
@@ -15,7 +23,6 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: serving-go/go.mod
-          cache: true
 
       - name: Check formatting
         run: gofmt -l . | grep . && exit 1 || true
@@ -27,6 +34,7 @@ jobs:
         run: go test -short ./...
 
   test-pipeline-python:
+    if: ${{ inputs.run-pipeline }}
     runs-on: ubuntu-24.04-arm
     defaults:
       run:

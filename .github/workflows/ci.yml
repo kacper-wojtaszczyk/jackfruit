@@ -5,5 +5,27 @@ on:
     branches: [main]
 
 jobs:
+  detect:
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      serving: ${{ steps.filter.outputs.serving }}
+      pipeline: ${{ steps.filter.outputs.pipeline }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            serving:
+              - 'serving-go/**'
+              - '.github/workflows/**'
+            pipeline:
+              - 'pipeline-python/**'
+              - '.github/workflows/**'
+
   test:
+    needs: detect
     uses: ./.github/workflows/test.yml
+    with:
+      run-serving: ${{ needs.detect.outputs.serving == 'true' }}
+      run-pipeline: ${{ needs.detect.outputs.pipeline == 'true' }}

@@ -61,9 +61,6 @@ jobs:
           cache-from: type=gha,scope=pipeline-python
           cache-to: type=gha,scope=pipeline-python,mode=max
 
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v5
-
       - name: Configure kubeconfig
         env:
           KUBECONFIG_CONTENT: ${{ secrets.KUBECONFIG }}
@@ -74,22 +71,23 @@ jobs:
 
       - name: Deploy to Kapsule
         id: deploy
-        env:
-          SHA: ${{ steps.vars.outputs.sha_short }}
         run: |
           kubectl set image deployment/jackfruit-api \
-            jackfruit-api=${REGISTRY}/jackfruit-api:${SHA}
+            jackfruit-api=${{ env.REGISTRY }}/jackfruit-api:${{ steps.vars.outputs.sha_short }}
           kubectl set image deployment/dagster-daemon \
-            dagster-daemon=${REGISTRY}/pipeline-python:${SHA}
+            dagster-daemon=${{ env.REGISTRY }}/pipeline-python:${{ steps.vars.outputs.sha_short }}
           kubectl set image deployment/dagster-webserver \
-            dagster-webserver=${REGISTRY}/pipeline-python:${SHA}
+            dagster-webserver=${{ env.REGISTRY }}/pipeline-python:${{ steps.vars.outputs.sha_short }}
 
       - name: Wait for rollout
         run: |
           kubectl rollout status deployment/jackfruit-api     --timeout=120s
-          kubectl rollout status deployment/dagster-daemon    --timeout=180s || true
-          kubectl rollout status deployment/dagster-webserver --timeout=180s || true
+          kubectl rollout status deployment/dagster-daemon    --timeout=300s
+          kubectl rollout status deployment/dagster-webserver --timeout=300s
 
       - name: Rollback on failure
         if: failure() && steps.deploy.outcome != 'skipped'
-        run: kubectl rollout undo deployment/jackfruit-api
+        run: |
+          kubectl rollout undo deployment/jackfruit-api
+          kubectl rollout undo deployment/dagster-daemon
+          kubectl rollout undo deployment/dagster-webserver
