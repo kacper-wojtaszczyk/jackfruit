@@ -88,6 +88,6 @@ jobs:
       - name: Rollback on failure
         if: failure() && steps.deploy.outcome != 'skipped'
         run: |
-          kubectl rollout undo deployment/jackfruit-api
-          kubectl rollout undo deployment/dagster-daemon
-          kubectl rollout undo deployment/dagster-webserver
+          kubectl rollout undo deployment/jackfruit-api || true
+          kubectl rollout undo deployment/dagster-daemon || true
+          kubectl rollout undo deployment/dagster-webserver || true
