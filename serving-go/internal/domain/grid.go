@@ -8,7 +8,10 @@ import (
 	"github.com/google/uuid"
 )
 
-var ErrGridSampleNotFound = errors.New("grid sample not found")
+var (
+	ErrTemporalMiss = errors.New("no data at or before requested timestamp")
+	ErrSpatialMiss  = errors.New("no grid point within spatial bounds")
+)
 
 type GridSample struct {
 	Value     float32

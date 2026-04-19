@@ -158,7 +158,7 @@ func TestEnvironmentalHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("variable not found", func(t *testing.T) {
+	t.Run("variable with no data is a temporal miss", func(t *testing.T) {
 		ts := time.Now().UTC().Truncate(time.Second)
 		url := fmt.Sprintf("/v1/environmental?lat=52.5&lon=13.4&timestamp=%s&variables=nonexistent_var",
 			ts.Format(time.RFC3339))
@@ -174,8 +174,8 @@ func TestEnvironmentalHandler(t *testing.T) {
 		if err := json.NewDecoder(w.Body).Decode(&errResp); err != nil {
 			t.Fatalf("decode error response: %v", err)
 		}
-		if !strings.Contains(errResp.Error, "nonexistent_var") {
-			t.Errorf("expected error to mention variable name, got %q", errResp.Error)
+		if !strings.Contains(errResp.Error, "no data available") {
+			t.Errorf("expected temporal-miss error message, got %q", errResp.Error)
 		}
 	})
 

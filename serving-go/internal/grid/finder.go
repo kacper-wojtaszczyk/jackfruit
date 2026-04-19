@@ -13,6 +13,8 @@ import (
 	"github.com/kacper-wojtaszczyk/jackfruit/serving-go/internal/domain"
 )
 
+const spatialBoxDeg = 0.3
+
 type Finder struct {
 	conn driver.Conn
 }
@@ -28,32 +30,51 @@ func (c *Finder) GetSample(
 	lat float32,
 	lon float32,
 ) (*domain.GridSample, error) {
-	var result domain.GridSample
+	const resolveTimestampQuery = `
+        SELECT maxOrNull(timestamp)
+        FROM grid_data FINAL
+        WHERE variable = @variable AND timestamp <= @timestamp
+    `
+	var resolvedTS *time.Time
 	err := c.conn.QueryRow(
 		ctx,
-		`
+		resolveTimestampQuery,
+		clickhouse.Named("variable", variable),
+		clickhouse.Named("timestamp", timestamp),
+	).Scan(&resolvedTS)
+	if err != nil {
+		return nil, fmt.Errorf("resolve timestamp: %w", err)
+	}
+	if resolvedTS == nil {
+		return nil, domain.ErrTemporalMiss
+	}
+
+	const spatialLookupQuery = `
         SELECT value, unit, lat, lon, catalog_id, timestamp
         FROM grid_data FINAL
         WHERE variable = @variable
-          AND timestamp = (
-            SELECT max(timestamp) FROM grid_data FINAL
-            WHERE variable = @variable AND timestamp <= @timestamp
-          )
+          AND timestamp = @timestamp
+          AND lat BETWEEN @lat - @tol AND @lat + @tol
+          AND lon BETWEEN @lon - @tol AND @lon + @tol
         ORDER BY (lat - @lat) * (lat - @lat) + (lon - @lon) * (lon - @lon)
         LIMIT 1
-        `,
+    `
+	var result domain.GridSample
+	err = c.conn.QueryRow(
+		ctx,
+		spatialLookupQuery,
 		clickhouse.Named("variable", variable),
-		clickhouse.Named("timestamp", timestamp),
+		clickhouse.Named("timestamp", *resolvedTS),
 		clickhouse.Named("lat", lat),
 		clickhouse.Named("lon", lon),
+		clickhouse.Named("tol", float32(spatialBoxDeg)),
 	).Scan(&result.Value, &result.Unit, &result.Lat, &result.Lon, &result.CatalogID, &result.Timestamp)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, domain.ErrGridSampleNotFound
+		return nil, domain.ErrSpatialMiss
 	}
-
 	if err != nil {
-		return nil, fmt.Errorf("query clickhouse: %w", err)
+		return nil, fmt.Errorf("spatial lookup: %w", err)
 	}
 
 	return &result, nil

@@ -30,7 +30,7 @@ func TestGetSample(t *testing.T) {
 
 	client := grid.NewFinder(rawConn)
 
-	gridSample, err := client.GetSample(ctx, variable, timestamp.Add(30*time.Minute), lat+0.435, lon+0.195)
+	gridSample, err := client.GetSample(ctx, variable, timestamp.Add(30*time.Minute), lat+0.2, lon+0.1)
 	if err != nil {
 		t.Fatalf("GetSample returned error: %v", err)
 	}
@@ -55,13 +55,31 @@ func TestGetSample(t *testing.T) {
 	}
 }
 
-func TestGetSampleNotFound(t *testing.T) {
+func TestGetSample_TemporalMiss(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test, requires ClickHouse")
 	}
 
-	_, err := grid.NewFinder(testutil.NewRawConn(t)).GetSample(t.Context(), "nonexistent_variable", time.Now(), 0, 0)
-	if !errors.Is(err, domain.ErrGridSampleNotFound) {
-		t.Errorf("expected ErrGridSampleNotFound, got %v", err)
+	_, err := grid.NewFinder(testutil.NewRawConn(t)).GetSample(t.Context(), "nonexistent_variable", time.Now().UTC().Truncate(time.Second), 0, 0)
+	if !errors.Is(err, domain.ErrTemporalMiss) {
+		t.Errorf("expected ErrTemporalMiss, got %v", err)
+	}
+}
+
+func TestGetSample_SpatialMiss(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test, requires ClickHouse")
+	}
+
+	ctx := t.Context()
+	rawConn := testutil.NewRawConn(t)
+
+	variable := "pm2p5_spatial_miss"
+	timestamp := time.Now().UTC().Truncate(time.Second)
+	testutil.InsertGridRow(t, rawConn, variable, float32(1.0), "µg/m³", timestamp, float32(50.0), float32(10.0))
+
+	_, err := grid.NewFinder(rawConn).GetSample(ctx, variable, timestamp, float32(0.0), float32(0.0))
+	if !errors.Is(err, domain.ErrSpatialMiss) {
+		t.Errorf("expected ErrSpatialMiss, got %v", err)
 	}
 }
