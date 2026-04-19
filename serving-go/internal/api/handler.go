@@ -48,10 +48,10 @@ func (h *Handler) handleEnvironmental(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if stale, ok := errors.AsType[*domain.ErrDataTooStale](err); ok {
 			writeError(w, http.StatusNotFound, stale.Error())
-		} else if errors.Is(err, domain.ErrTemporalMiss) {
-			writeError(w, http.StatusNotFound, "no data available at or before requested timestamp")
-		} else if errors.Is(err, domain.ErrSpatialMiss) {
-			writeError(w, http.StatusNotFound, "requested coordinates are outside data coverage")
+		} else if miss, ok := errors.AsType[*domain.ErrTemporalMiss](err); ok {
+			writeError(w, http.StatusNotFound, miss.Error())
+		} else if miss, ok := errors.AsType[*domain.ErrSpatialMiss](err); ok {
+			writeError(w, http.StatusNotFound, miss.Error())
 		} else if ctx.Err() != nil {
 			h.logger.Error("variableProvider.GetVariables timed out", "error", err)
 			writeError(w, http.StatusGatewayTimeout, "query timed out")

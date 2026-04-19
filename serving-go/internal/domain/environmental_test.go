@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,7 +28,7 @@ func (m *mockGridRetriever) GetSample(
 	}
 	sample := m.samples[variable]
 	if sample == nil {
-		return nil, ErrTemporalMiss
+		return nil, &ErrTemporalMiss{Variable: variable}
 	}
 
 	return sample, nil
@@ -36,11 +37,11 @@ func (m *mockGridRetriever) GetSample(
 type mockLineageRetriever struct {
 	lineages map[uuid.UUID]*Lineage
 	err      error
-	calls    int
+	calls    atomic.Int64
 }
 
 func (m *mockLineageRetriever) GetLineage(ctx context.Context, catalogID uuid.UUID) (*Lineage, error) {
-	m.calls++
+	m.calls.Add(1)
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -134,33 +135,41 @@ func TestService_GetVariables(t *testing.T) {
 func TestService_GetVariables_TemporalMiss(t *testing.T) {
 	lineageMock := &mockLineageRetriever{lineages: map[uuid.UUID]*Lineage{}}
 	service := NewService(&mockGridRetriever{
-		errs: map[string]error{"pm2p5": ErrTemporalMiss},
+		errs: map[string]error{"pm2p5": &ErrTemporalMiss{Variable: "pm2p5"}},
 	}, lineageMock)
 
 	_, err := service.GetVariables(t.Context(), time.Date(2026, 2, 27, 4, 0, 0, 0, time.UTC), 75.08, 106.29, []string{"pm2p5"})
-	if !errors.Is(err, ErrTemporalMiss) {
-		t.Errorf("expected error wrapping ErrTemporalMiss, got: %v", err)
+	miss, ok := errors.AsType[*ErrTemporalMiss](err)
+	if !ok {
+		t.Fatalf("expected *ErrTemporalMiss, got: %v", err)
+	}
+	if miss.Variable != "pm2p5" {
+		t.Errorf("expected Variable=pm2p5, got %q", miss.Variable)
 	}
 	if !strings.Contains(err.Error(), "pm2p5") {
-		t.Errorf("expected wrapped error to mention variable name, got: %q", err.Error())
+		t.Errorf("expected error message to mention variable name, got: %q", err.Error())
 	}
-	if lineageMock.calls != 0 {
-		t.Errorf("lineage must not be fetched on temporal miss, got %d calls", lineageMock.calls)
+	if got := lineageMock.calls.Load(); got != 0 {
+		t.Errorf("lineage must not be fetched on temporal miss, got %d calls", got)
 	}
 }
 
 func TestService_GetVariables_SpatialMiss(t *testing.T) {
 	lineageMock := &mockLineageRetriever{lineages: map[uuid.UUID]*Lineage{}}
 	service := NewService(&mockGridRetriever{
-		errs: map[string]error{"pm2p5": ErrSpatialMiss},
+		errs: map[string]error{"pm2p5": &ErrSpatialMiss{Variable: "pm2p5"}},
 	}, lineageMock)
 
 	_, err := service.GetVariables(t.Context(), time.Date(2026, 2, 27, 4, 0, 0, 0, time.UTC), 75.08, 106.29, []string{"pm2p5"})
-	if !errors.Is(err, ErrSpatialMiss) {
-		t.Errorf("expected error wrapping ErrSpatialMiss, got: %v", err)
+	miss, ok := errors.AsType[*ErrSpatialMiss](err)
+	if !ok {
+		t.Fatalf("expected *ErrSpatialMiss, got: %v", err)
 	}
-	if lineageMock.calls != 0 {
-		t.Errorf("lineage must not be fetched on spatial miss, got %d calls", lineageMock.calls)
+	if miss.Variable != "pm2p5" {
+		t.Errorf("expected Variable=pm2p5, got %q", miss.Variable)
+	}
+	if got := lineageMock.calls.Load(); got != 0 {
+		t.Errorf("lineage must not be fetched on spatial miss, got %d calls", got)
 	}
 }
 
@@ -196,8 +205,8 @@ func TestService_GetVariables_DataTooStale(t *testing.T) {
 	if stale.Gap != maxTemporalGap+time.Minute {
 		t.Errorf("expected Gap=%v, got %v", maxTemporalGap+time.Minute, stale.Gap)
 	}
-	if lineageMock.calls != 0 {
-		t.Errorf("lineage must not be fetched when data is stale, got %d calls", lineageMock.calls)
+	if got := lineageMock.calls.Load(); got != 0 {
+		t.Errorf("lineage must not be fetched when data is stale, got %d calls", got)
 	}
 }
 

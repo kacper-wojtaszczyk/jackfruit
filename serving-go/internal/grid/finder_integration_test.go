@@ -61,8 +61,12 @@ func TestGetSample_TemporalMiss(t *testing.T) {
 	}
 
 	_, err := grid.NewFinder(testutil.NewRawConn(t)).GetSample(t.Context(), "nonexistent_variable", time.Now().UTC().Truncate(time.Second), 0, 0)
-	if !errors.Is(err, domain.ErrTemporalMiss) {
-		t.Errorf("expected ErrTemporalMiss, got %v", err)
+	miss, ok := errors.AsType[*domain.ErrTemporalMiss](err)
+	if !ok {
+		t.Fatalf("expected *ErrTemporalMiss, got %v", err)
+	}
+	if miss.Variable != "nonexistent_variable" {
+		t.Errorf("expected Variable=nonexistent_variable, got %q", miss.Variable)
 	}
 }
 
@@ -79,7 +83,11 @@ func TestGetSample_SpatialMiss(t *testing.T) {
 	testutil.InsertGridRow(t, rawConn, variable, float32(1.0), "µg/m³", timestamp, float32(50.0), float32(10.0))
 
 	_, err := grid.NewFinder(rawConn).GetSample(ctx, variable, timestamp, float32(0.0), float32(0.0))
-	if !errors.Is(err, domain.ErrSpatialMiss) {
-		t.Errorf("expected ErrSpatialMiss, got %v", err)
+	miss, ok := errors.AsType[*domain.ErrSpatialMiss](err)
+	if !ok {
+		t.Fatalf("expected *ErrSpatialMiss, got %v", err)
+	}
+	if miss.Variable != variable {
+		t.Errorf("expected Variable=%q, got %q", variable, miss.Variable)
 	}
 }

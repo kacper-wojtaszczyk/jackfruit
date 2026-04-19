@@ -2,16 +2,27 @@ package domain
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-var (
-	ErrTemporalMiss = errors.New("no data at or before requested timestamp")
-	ErrSpatialMiss  = errors.New("no grid point within spatial bounds")
-)
+type ErrTemporalMiss struct {
+	Variable string
+}
+
+func (e *ErrTemporalMiss) Error() string {
+	return fmt.Sprintf("variable %q: no data available at or before requested timestamp", e.Variable)
+}
+
+type ErrSpatialMiss struct {
+	Variable string
+}
+
+func (e *ErrSpatialMiss) Error() string {
+	return fmt.Sprintf("variable %q: requested coordinates are outside data coverage", e.Variable)
+}
 
 type GridSample struct {
 	Value     float32
