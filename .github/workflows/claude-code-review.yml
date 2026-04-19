@@ -149,6 +149,6 @@ jobs:
             - Post a single summary comment on the PR with: what the PR does well,
               overall assessment, and a count of findings by severity.
           claude_args: |
-            --model claude-opus-4-6
+            --model claude-opus-4-7
             --max-turns 22
             --allowedTools "Read,Grep,Glob,Bash(git:*),Bash(go:*),Bash(gofmt:*),Bash(make:*),Bash(uv:*),Bash(python:*),Bash(gh pr:*),mcp__github_inline_comment__create_inline_comment"
