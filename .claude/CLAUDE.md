@@ -134,7 +134,7 @@ One query per variable, fetched in parallel. `grid_data` has no `source` column 
 
 Env vars: `PORT`, `CLICKHOUSE_HOST`, `CLICKHOUSE_NATIVE_PORT`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, `CLICKHOUSE_DATABASE`, `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`.
 
-Server timeouts: read 5s, write 10s, idle 60s. Graceful shutdown on SIGINT/SIGTERM (5s timeout).
+Server timeouts: read 5s, write 20s, idle 60s. The handler enforces an 18s inner deadline via `context.WithTimeout`; the 20s `WriteTimeout` leaves ~2s slack for serializing the 504 body. Graceful shutdown on SIGINT/SIGTERM (5s timeout).
 
 ### Conventions
 
