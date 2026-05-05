@@ -36,7 +36,7 @@ func RecoveryMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 						"error", err,
 						"stack", string(debug.Stack()),
 						"method", r.Method,
-						"path", r.URL.Path,
+						"path", r.URL.RequestURI(),
 					)
 					if !rec.written {
 						writeError(w, http.StatusInternalServerError, "internal server error")
@@ -98,7 +98,7 @@ func LoggingMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 			// already defaults to 200 on bare Write([]byte) calls.
 			logger.Info("request",
 				"method", r.Method,
-				"path", r.URL.Path,
+				"path", r.URL.RequestURI(),
 				"status", wrapped.status,
 				"duration", time.Since(start),
 				"client", client,

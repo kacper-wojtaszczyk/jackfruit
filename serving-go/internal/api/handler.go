@@ -46,14 +46,16 @@ func (h *Handler) handleEnvironmental(w http.ResponseWriter, r *http.Request) {
 		envReq.Variables,
 	)
 	if err != nil {
-		if notFound, ok := errors.AsType[*domain.ErrVariableNotFound](err); ok {
+		notFound, isNotFound := errors.AsType[*domain.ErrVariableNotFound](err)
+		switch {
+		case isNotFound:
 			writeError(w, http.StatusNotFound, notFound.Error())
-		} else if errors.Is(err, context.DeadlineExceeded) {
+		case errors.Is(err, context.DeadlineExceeded):
 			h.logger.Error("variableProvider.GetVariables timed out", "error", err)
 			writeError(w, http.StatusGatewayTimeout, "query timed out")
-		} else if errors.Is(err, context.Canceled) {
+		case errors.Is(err, context.Canceled):
 			h.logger.Info("client gone", "error", err)
-		} else {
+		default:
 			h.logger.Error("variableProvider.GetVariables failed", "error", err)
 			writeError(w, http.StatusInternalServerError, "internal server error")
 		}
