@@ -39,7 +39,7 @@ func RecoveryMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 						"path", r.URL.RequestURI(),
 					)
 					if !rec.written {
-						writeError(w, http.StatusInternalServerError, "internal server error")
+						writeError(rec, http.StatusInternalServerError, "internal server error")
 					}
 					// If headers were already sent, the response is
 					// already in-flight — log and let the connection
