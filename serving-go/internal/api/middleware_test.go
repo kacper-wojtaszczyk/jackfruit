@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -48,10 +47,6 @@ func (h *capturingHandler) snapshot() []slog.Record {
 	out := make([]slog.Record, len(h.records))
 	copy(out, h.records)
 	return out
-}
-
-func discardLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
 func capturingLogger() (*slog.Logger, *capturingHandler) {
@@ -142,7 +137,7 @@ func TestRecoveryMiddleware_NoPanicPassthrough(t *testing.T) {
 		w.WriteHeader(http.StatusCreated)
 		w.Write([]byte("ok"))
 	})
-	wrapped := RecoveryMiddleware(discardLogger())(okHandler)
+	wrapped := RecoveryMiddleware(slog.New(slog.DiscardHandler))(okHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
@@ -162,7 +157,7 @@ func TestRecoveryMiddleware_PanicAfterPartialWrite(t *testing.T) {
 		w.Write([]byte("partial body"))
 		panic("mid-write kaboom")
 	})
-	wrapped := RecoveryMiddleware(discardLogger())(handler)
+	wrapped := RecoveryMiddleware(slog.New(slog.DiscardHandler))(handler)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()

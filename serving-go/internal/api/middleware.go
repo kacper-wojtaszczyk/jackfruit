@@ -36,7 +36,7 @@ func RecoveryMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 						"error", err,
 						"stack", string(debug.Stack()),
 						"method", r.Method,
-						"path", r.URL.RequestURI(),
+						"path", r.URL.Path,
 					)
 					if !rec.written {
 						writeError(w, http.StatusInternalServerError, "internal server error")
@@ -87,20 +87,19 @@ func LoggingMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 				return
 			}
 
-			status := wrapped.status
-			if status == 0 {
-				status = http.StatusOK
-			}
-
 			client := r.UserAgent()
 			if client == "" {
 				client = "unknown"
 			}
 
+			// status stays 0 if the handler returned without writing
+			// anything (e.g. client-disconnect path). Logging 0 keeps
+			// disconnects distinguishable from real 200s; statusRecorder
+			// already defaults to 200 on bare Write([]byte) calls.
 			logger.Info("request",
 				"method", r.Method,
-				"path", r.URL.RequestURI(),
-				"status", status,
+				"path", r.URL.Path,
+				"status", wrapped.status,
 				"duration", time.Since(start),
 				"client", client,
 			)
