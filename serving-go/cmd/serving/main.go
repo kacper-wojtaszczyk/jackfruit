@@ -80,11 +80,16 @@ func newApp() (*app, error) {
 	service := domain.NewService(chFinder, lineageFinder)
 
 	mux := http.NewServeMux()
+
+	var h http.Handler = mux
+	h = api.LoggingMiddleware(logger.With("component", "http"))(h)
+	h = api.RecoveryMiddleware(logger.With("component", "http"))(h)
+
 	api.NewHandler(service, logger.With("component", "api")).RegisterRoutes(mux)
 
 	server := &http.Server{
 		Addr:         ":" + cfg.Port,
-		Handler:      mux,
+		Handler:      h,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 20 * time.Second,
 		IdleTimeout:  60 * time.Second,
