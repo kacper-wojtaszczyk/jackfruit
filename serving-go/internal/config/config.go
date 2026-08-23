@@ -17,6 +17,7 @@ type Config struct {
 	PostgresUser       string
 	PostgresPassword   string
 	PostgresDB         string
+	PostgresSSLMode    string
 }
 
 func getEnv(key, fallback string) string {
@@ -40,5 +41,6 @@ func Load() *Config {
 		PostgresUser:       getEnv("POSTGRES_USER", "jackfruit"),
 		PostgresPassword:   getEnv("POSTGRES_PASSWORD", "jackfruit"),
 		PostgresDB:         getEnv("POSTGRES_DB", "jackfruit"),
+		PostgresSSLMode:    getEnv("POSTGRES_SSLMODE", "disable"), // in-cluster PG and local compose are both plaintext
 	}
 }

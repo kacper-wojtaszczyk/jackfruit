@@ -62,8 +62,8 @@ func newApp() (*app, error) {
 	chFinder := grid.NewFinder(chConn)
 
 	dsn := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s",
-		cfg.PostgresHost, cfg.PostgresPort, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresDB,
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		cfg.PostgresHost, cfg.PostgresPort, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresDB, cfg.PostgresSSLMode,
 	)
 	pgDB, err := sql.Open("postgres", dsn)
 	if err != nil {
