@@ -11,7 +11,7 @@ import (
 var ErrGridSampleNotFound = errors.New("grid sample not found")
 
 type GridSample struct {
-	Value     float32
+	Value     float64
 	Unit      string
 	Lat       float32
 	Lon       float32

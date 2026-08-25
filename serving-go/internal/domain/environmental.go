@@ -20,7 +20,7 @@ func (e *ErrVariableNotFound) Error() string {
 
 type VariableResult struct {
 	Name         string
-	Value        float32
+	Value        float64
 	Unit         string
 	RefTimestamp time.Time
 	ActualLat    float32
