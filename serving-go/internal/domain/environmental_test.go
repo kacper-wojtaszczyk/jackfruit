@@ -47,7 +47,7 @@ func (m *mockLineageRetriever) GetLineage(ctx context.Context, catalogID uuid.UU
 
 func TestService_GetVariables(t *testing.T) {
 	variableNames := [2]string{"pm2p5", "pm10"}
-	values := [2]float32{1.0, 0.001}
+	values := [2]float64{1.0, 0.001}
 	units := [2]string{"µg/m³", "ng/m³"}
 	lats := [2]float32{75.05, 75.1}
 	lons := [2]float32{106.25, 106.2}

@@ -61,7 +61,7 @@ class ClickHouseGridStore(GridStore):
                 np.full(grid.row_count, grid.timestamp, dtype=object),
                 grid.lats.ravel().astype(np.float32),
                 grid.lons.ravel().astype(np.float32),
-                grid.values.ravel().astype(np.float32),
+                grid.values.ravel().astype(np.float64),
                 np.full(grid.row_count, grid.unit, dtype=object),
                 np.full(grid.row_count, grid.catalog_id, dtype=object),
             ],

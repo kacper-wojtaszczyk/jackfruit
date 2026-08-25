@@ -73,7 +73,7 @@ func (h *Handler) handleEnvironmental(w http.ResponseWriter, r *http.Request) {
 	for i, varResult := range varResults {
 		response.Variables[i] = VariableResponse{
 			Name:         varResult.Name,
-			Value:        float64(varResult.Value),
+			Value:        varResult.Value,
 			Unit:         varResult.Unit,
 			RefTimestamp: varResult.RefTimestamp,
 			ActualLat:    varResult.ActualLat,

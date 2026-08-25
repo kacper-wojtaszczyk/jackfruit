@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS jackfruit.grid_data (
     timestamp    DateTime,
     lat          Float32,
     lon          Float32,
-    value        Float32,
+    value        Float64,
     unit         LowCardinality(String),
     catalog_id   UUID,
     inserted_at  DateTime64(3) DEFAULT now64(3)
