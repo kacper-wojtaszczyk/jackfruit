@@ -62,7 +62,7 @@ func TestEnvironmentalHandler(t *testing.T) {
 		lat := float32(52.5)
 		lon := float32(13.4)
 
-		catalogID := testutil.InsertGridRow(t, rawConn, "pm2p5", float32(12.5), "µg/m³", ts, lat, lon)
+		catalogID := testutil.InsertGridRow(t, rawConn, "pm2p5", 12.5, "µg/m³", ts, lat, lon)
 		rawFileID := testutil.SeedLineage(t, pgDB, catalogID, "ads", "cams-europe-air-quality-forecast", "pm2p5", "µg/m³")
 
 		url := fmt.Sprintf("/v1/environmental?lat=%v&lon=%v&timestamp=%s&variables=pm2p5",
@@ -87,7 +87,7 @@ func TestEnvironmentalHandler(t *testing.T) {
 		if v.Name != "pm2p5" {
 			t.Errorf("expected name pm2p5, got %q", v.Name)
 		}
-		if float32(v.Value) != float32(12.5) {
+		if v.Value != 12.5 {
 			t.Errorf("expected value 12.5, got %v", v.Value)
 		}
 		if v.Unit != "µg/m³" {
@@ -110,8 +110,8 @@ func TestEnvironmentalHandler(t *testing.T) {
 		lat := float32(48.1)
 		lon := float32(11.6)
 
-		catID1 := testutil.InsertGridRow(t, rawConn, "pm2p5_multi", float32(8.1), "µg/m³", ts, lat, lon)
-		catID2 := testutil.InsertGridRow(t, rawConn, "no2_multi", float32(20.3), "µg/m³", ts, lat, lon)
+		catID1 := testutil.InsertGridRow(t, rawConn, "pm2p5_multi", 8.1, "µg/m³", ts, lat, lon)
+		catID2 := testutil.InsertGridRow(t, rawConn, "no2_multi", 20.3, "µg/m³", ts, lat, lon)
 		rawFileID1 := testutil.SeedLineage(t, pgDB, catID1, "ads", "cams-europe-air-quality-forecast", "pm2p5_multi", "µg/m³")
 		rawFileID2 := testutil.SeedLineage(t, pgDB, catID2, "ads", "cams-europe-air-quality-forecast", "no2_multi", "µg/m³")
 
@@ -142,7 +142,7 @@ func TestEnvironmentalHandler(t *testing.T) {
 		if v, ok := byName["pm2p5_multi"]; !ok {
 			t.Error("expected pm2p5_multi in response")
 		} else {
-			if float32(v.Value) != float32(8.1) {
+			if v.Value != 8.1 {
 				t.Errorf("expected pm2p5_multi value 8.1, got %v", v.Value)
 			}
 			assertLineage(t, v.Lineage, "ads", "cams-europe-air-quality-forecast", rawFileID1)
@@ -151,7 +151,7 @@ func TestEnvironmentalHandler(t *testing.T) {
 		if v, ok := byName["no2_multi"]; !ok {
 			t.Error("expected no2_multi in response")
 		} else {
-			if float32(v.Value) != float32(20.3) {
+			if v.Value != 20.3 {
 				t.Errorf("expected no2_multi value 20.3, got %v", v.Value)
 			}
 			assertLineage(t, v.Lineage, "ads", "cams-europe-air-quality-forecast", rawFileID2)
@@ -184,7 +184,7 @@ func TestEnvironmentalHandler(t *testing.T) {
 		gridLat := float32(52.5)
 		gridLon := float32(13.4)
 
-		catalogID := testutil.InsertGridRow(t, rawConn, "pm2p5_nn", float32(9.9), "µg/m³", ts, gridLat, gridLon)
+		catalogID := testutil.InsertGridRow(t, rawConn, "pm2p5_nn", 9.9, "µg/m³", ts, gridLat, gridLon)
 		rawFileID := testutil.SeedLineage(t, pgDB, catalogID, "ads", "cams-europe-air-quality-forecast", "pm2p5_nn", "µg/m³")
 
 		// Request at slightly different coords — should snap to the nearest grid point.

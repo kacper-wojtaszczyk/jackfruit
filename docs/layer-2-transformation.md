@@ -129,12 +129,14 @@ client.insert(
         np.full(grid.row_count, grid.timestamp, dtype=object),
         grid.lats.ravel().astype(np.float32),
         grid.lons.ravel().astype(np.float32),
-        grid.values.ravel().astype(np.float32),
+        grid.values.ravel().astype(np.float64),
         np.full(grid.row_count, grid.unit, dtype=object),
         np.full(grid.row_count, grid.catalog_id, dtype=object),
     ],
 )
 ```
+
+**Note:** `value` is `Float64` in ClickHouse and the pipeline writes `float64`. If your local docker-compose ClickHouse volume predates this change, re-create it (or run `ALTER TABLE grid_data MODIFY COLUMN value Float64`) — the serving-go driver refuses to scan across float widths, so a stale `Float32` column breaks integration tests.
 
 **Schema:** `inserted_at` is auto-filled by `DEFAULT now64(3)`.
 

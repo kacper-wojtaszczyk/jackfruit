@@ -19,7 +19,7 @@ func TestGetSample(t *testing.T) {
 	rawConn := testutil.NewRawConn(t)
 
 	variable := "pm2p5"
-	value := float32(3.05)
+	value := float64(3.05)
 	unit := "µg/m³"
 	// Truncate to seconds: ClickHouse DateTime has second precision.
 	timestamp := time.Now().UTC().Truncate(time.Second)

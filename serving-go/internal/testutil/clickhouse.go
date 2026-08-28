@@ -36,7 +36,7 @@ func NewRawConn(t *testing.T) chdriver.Conn {
 
 // InsertGridRow inserts a single row into grid_data and registers cleanup.
 // It generates and returns the catalog_id so callers can assert on it.
-func InsertGridRow(t *testing.T, conn chdriver.Conn, variable string, value float32, unit string,
+func InsertGridRow(t *testing.T, conn chdriver.Conn, variable string, value float64, unit string,
 	timestamp time.Time, lat, lon float32) uuid.UUID {
 	t.Helper()
 
