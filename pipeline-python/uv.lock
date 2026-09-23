@@ -1301,7 +1301,7 @@ requires-dist = [
     { name = "dagster-postgres", specifier = "~=0.28" },
     { name = "dagster-webserver", specifier = "~=1.12" },
     { name = "ecmwf-opendata", specifier = ">=0.3.26" },
-    { name = "psycopg", extras = ["binary"], specifier = "~=3.2" },
+    { name = "psycopg", extras = ["binary"], specifier = "~=3.3" },
     { name = "pygrib", specifier = ">=2.1.8" },
     { name = "python-json-logger", specifier = ">=4.1.0" },
 ]
